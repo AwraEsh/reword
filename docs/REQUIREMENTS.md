@@ -53,7 +53,7 @@ Approved by the user on 2026-10-15. This file is the durable requirements source
 - Linux AppImage preferred for simple launch; .deb also supplied. Explain unavoidable host integration for Wayland/tray.
 - Disciplined Git, meaningful commits with tests/docs; private GitHub repository in authenticated user's account.
 - Repository prepared for later public visibility: no credentials, private content, runtime database, host paths or downloaded dependencies.
-- Do not make repository public without a separate user instruction.
+- User explicitly requested PUBLIC visibility after initial private creation. Public source must remain free of private/runtime data.
 
 ## Evidence and handoff
 - Test policies, retry cycle, language independence, ambiguous words, stale edits/Undo, history limits, pause and security boundaries.

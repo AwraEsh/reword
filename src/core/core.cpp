@@ -1,7 +1,171 @@
 #include "core.h"
+#include <QRegularExpression>
+#include <QFileInfo>
+#include <QDir>
+#include <QCoreApplication>
+#include <QElapsedTimer>
+#include <hunspell/hunspell.hxx>
+#include <algorithm>
+
 namespace reword {
-bool safe(const Field &,const Access &,const Options &){return true;}
-bool sameTarget(const Field &,const Field &){return true;}
-bool RetryCycle::shouldCorrect(const QString &,int,const QString &,qint64){return true;}
-void RetryCycle::reset(){}
+bool safe(const Field &f,const Access &a,const Options &o) {
+ return a.allowed && !a.paused && (!a.browser || o.browsers) && f.known && !f.password
+  && f.editable && f.focused && !f.locked && f.plain && !f.app.isEmpty() && !f.id.isEmpty();
+}
+bool sameTarget(const Field &a,const Field &b) {
+ return a.app==b.app && a.id==b.id && a.text==b.text && a.caret==b.caret
+  && a.selectionStart==b.selectionStart && a.selectionEnd==b.selectionEnd
+  && a.revision==b.revision && b.known && !b.password && b.editable && b.focused && !b.locked && b.plain;
+}
+bool RetryCycle::shouldCorrect(const QString &field,int location,const QString &word,qint64 now) {
+ if(field_!=field || location_!=location || word_!=word || now-time_>30000 || now<time_) {
+  field_=field; location_=location; word_=word; attempts_=0;
+ }
+ time_=now; return (++attempts_%2)==1;
+}
+void RetryCycle::reset(){field_.clear();word_.clear();location_=-1;attempts_=0;time_=0;}
+
+static QString dictionary(const QString &name,const QString &dir) {
+ QStringList locations;
+ if(!dir.isEmpty())locations<<dir;
+ locations<<QCoreApplication::applicationDirPath()+"/dictionaries";
+ locations<<QCoreApplication::applicationDirPath()+"/../share/reword/dictionaries";
+ locations<<"/usr/share/hunspell"<<"/usr/share/myspell/dicts";
+ for(const auto &p:locations) if(QFileInfo::exists(p+"/"+name+".aff") && QFileInfo::exists(p+"/"+name+".dic"))return p+"/"+name;
+ return {};
+}
+static bool persian(const QString &w) {
+ for(auto c:w)if(c.unicode()>=0x600 && c.unicode()<=0x6ff)return true;
+ return false;
+}
+static bool protectedToken(const QString &w) {
+ static const QRegularExpression risky(R"([@/\\_:=<>`#\d]|https?\.|www\.|\w\.\w)");
+ return risky.match(w).hasMatch() || w.size()>64;
+}
+static int distance(const QString &a,const QString &b) {
+ QVector<int> prev(b.size()+1), curr(b.size()+1), before;
+ for(int j=0;j<=b.size();++j)prev[j]=j;
+ for(int i=1;i<=a.size();++i){
+  curr[0]=i;
+  for(int j=1;j<=b.size();++j){
+   curr[j]=std::min({prev[j]+1,curr[j-1]+1,prev[j-1]+int(a[i-1]!=b[j-1])});
+   if(i>1 && j>1 && a[i-1]==b[j-2] && a[i-2]==b[j-1])curr[j]=std::min(curr[j],before[j-2]+1);
+  }
+  before=prev;prev=curr;
+ }
+ return prev[b.size()];
+}
+static QString preserveCase(const QString &from,QString to) {
+ if(from==from.toUpper())return to.toUpper();
+ if(!from.isEmpty() && from[0].isUpper())to[0]=to[0].toUpper();
+ return to;
+}
+struct Engine::Impl {
+ std::unique_ptr<Hunspell> en,fa;
+ QSet<QString> personal;
+ QHash<QString,QString> replacements;
+ // Auditable common-error exceptions. Each candidate is still dictionary-validated.
+ QHash<QString,QString> common{{"teh","the"},{"recieve","receive"},{"recieved","received"},
+  {"seperate","separate"},{"definately","definitely"},{"occured","occurred"},
+  {"adress","address"},{"becuase","because"},{"wierd","weird"},{"thier","their"},
+  {"langauge","language"},{"tommorow","tomorrow"},{"suport","support"},{"alot","a lot"}};
+ QSet<QString> frequent=QSet<QString>{"the","and","that","with","have","this","from","they","would","there","their","what","about","which","when","make","like","time","just","know","people","into","year","your","good","some","could","them","other","than","then","only","come","over","think","also","back","after","work","first","well","even","want","because","these","give","most","hello","world","please","thank","thanks","receive","separate","definitely","address","language","support","tomorrow","occurred","weird"};
+};
+Engine::Engine(const QString &enDir,const QString &faDir):impl_(std::make_unique<Impl>()) {
+ auto load=[](QString path)->std::unique_ptr<Hunspell>{
+  if(path.isEmpty())return {};
+  return std::make_unique<Hunspell>((path+".aff").toUtf8().constData(),(path+".dic").toUtf8().constData());
+ };
+ impl_->en=load(dictionary("en_US",enDir));impl_->fa=load(dictionary("fa_IR",faDir));
+ if(!impl_->fa)impl_->fa=load(dictionary("fa",faDir));
+}
+Engine::~Engine()=default;
+bool Engine::englishAvailable()const{return bool(impl_->en);}
+bool Engine::persianAvailable()const{return bool(impl_->fa);}
+void Engine::setPersonal(const QSet<QString>&words,const QHash<QString,QString>&replacements){impl_->personal=words;impl_->replacements=replacements;}
+QString Engine::word(const QString &w,const Options &o) {
+ bool fa=persian(w); if(w.isEmpty() || (fa?!o.persian:!o.english) || protectedToken(w))return w;
+ const auto lower=w.toLower();
+ if(impl_->personal.contains(lower))return w;
+ if(impl_->replacements.contains(lower))return preserveCase(w,impl_->replacements.value(lower));
+ if(!o.spelling)return w;
+ auto *hun=fa?impl_->fa.get():impl_->en.get(); if(!hun)return w;
+ if(hun->spell(w.toUtf8().toStdString()) || hun->spell(lower.toUtf8().toStdString()))return w;
+ // Interior capitals are often proper nouns or product identifiers.
+ for(int i=1;i<w.size();++i)if(w[i].isUpper() && w!=w.toUpper())return w;
+ if(!fa && impl_->common.contains(lower)){
+  auto candidate=impl_->common.value(lower);
+  if(!candidate.contains(' ') && hun->spell(candidate.toStdString()))return preserveCase(w,candidate);
+ }
+ auto suggestions=hun->suggest(lower.toUtf8().toStdString());
+ struct Candidate{QString value;int score;}; QVector<Candidate> candidates;
+ for(size_t i=0;i<std::min(size_t(16),suggestions.size());++i){
+  auto s=QString::fromUtf8(suggestions[i]);
+  if(s.contains(' ') || s.contains('-') || s.size()>64)continue;
+  int d=distance(lower,s.toLower()); if(d>1)continue;
+  int score=100-d*30+(impl_->frequent.contains(s.toLower())?20:0);
+  // Small preference for a neighboring QWERTY key; never sufficient alone.
+  const QString keyboard="qwertyuiop asdfghjkl zxcvbnm";
+  if(s.size()==lower.size())for(int j=0;j<s.size();++j)
+   if(s[j]!=lower[j] && keyboard.contains(s[j]) && std::abs(keyboard.indexOf(s[j])-keyboard.indexOf(lower[j]))==1)score+=3;
+  if(std::none_of(candidates.begin(),candidates.end(),[&](const Candidate&c){return c.value==s;}))candidates.push_back({s,score});
+ }
+ std::sort(candidates.begin(),candidates.end(),[](const auto&a,const auto&b){return a.score>b.score;});
+ int margin=o.sensitivity==0?18:10;
+ if(!candidates.isEmpty() && candidates[0].score>=90 && (candidates.size()==1 || candidates[0].score-candidates[1].score>=margin))
+  return preserveCase(w,candidates[0].value);
+ return w;
+}
+Change Engine::text(const QString &input,const Options&o,const std::atomic_bool*cancel,qint64 timeoutMs) {
+ Change out{input,input,false,{}};
+ if(input.toUcs4().size()>std::clamp(o.maxCharacters,1,100000)){out.error="Text exceeds the operation limit. Nothing was changed.";return out;}
+ QElapsedTimer timer;timer.start();
+ auto expired=[&]{return (cancel && cancel->load()) || timer.elapsed()>=timeoutMs;};
+ if(expired()){out.error="Operation cancelled or timed out.";return out;}
+ static const QRegularExpression chunks(R"(\S+)");
+ static const QRegularExpression words(R"([\p{L}\x{200C}]+(?:['’][\p{L}]+)*)");
+ QString result;qsizetype last=0;
+ auto iterator=chunks.globalMatch(input);
+ while(iterator.hasNext()){
+  if(expired()){out.error="Operation cancelled or timed out.";return out;}
+  auto m=iterator.next();result+=input.mid(last,m.capturedStart()-last);
+  auto chunk=m.captured();
+  if(!protectedToken(chunk)){
+   QString replaced;qsizetype p=0;auto wi=words.globalMatch(chunk);
+   while(wi.hasNext()){
+    if(expired()){out.error="Operation cancelled or timed out.";return out;}
+    auto wm=wi.next();replaced+=chunk.mid(p,wm.capturedStart()-p);auto token=wm.captured();
+    if(o.persian && persian(token)){
+     if(o.normalizePersian)token.replace(QChar(0x064a),QChar(0x06cc)).replace(QChar(0x0643),QChar(0x06a9));
+    }
+    if(o.english && o.abbreviations && token.compare("im",Qt::CaseInsensitive)==0)token="I am";
+    else token=word(token,o);
+    replaced+=token;p=wm.capturedEnd();
+   }
+   chunk=replaced+chunk.mid(p);
+  }
+  result+=chunk;last=m.capturedEnd();
+ }
+ result+=input.mid(last);
+ if(o.persian && o.halfSpace){
+  result.replace(QRegularExpression(QString::fromUtf8("\\b(ن?می) +([\\x{600}-\\x{6ff}]+)")),QString::fromUtf8("\\1‌\\2"));
+ }
+ if(o.english && o.capitalization){
+  bool beginning=true;
+  for(qsizetype i=0;i<result.size();++i){
+   auto c=result[i];if(beginning && c.isLetter()){if(c.unicode()<128)result[i]=c.toUpper();beginning=false;}
+   if(c=='.'||c=='!'||c=='?'||c=='\n')beginning=true;
+  }
+ }
+ if(o.spacing){
+  if(o.periods)result.replace(QRegularExpression(R"( +([.!?]))"),"\\1");
+  if(o.commas)result.replace(QRegularExpression(QString::fromUtf8(" +([,،])")),"\\1");
+ }
+ // Punctuation insertion is deliberately limited to duplicate punctuation.
+ if(o.periods)result.replace(QRegularExpression(R"((?<!\.)\.{2}(?!\.))"),".");
+ if(o.commas)result.replace(QRegularExpression(QString::fromUtf8("([,،])\\1+")),"\\1");
+ if(expired()){out.error="Operation cancelled or timed out.";return out;}
+ if(result.toUcs4().size()>std::clamp(o.maxCharacters,1,100000)){out.error="Corrected text exceeds the operation limit.";return out;}
+ out.corrected=result;out.changed=result!=input;return out;
+}
 }
