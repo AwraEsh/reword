@@ -19,7 +19,8 @@ public:
  QVariantList applications() const;
  void history(const QString &original, const QString &corrected, const Options &, qint64 now=QDateTime::currentSecsSinceEpoch());
  void prune(const Options &, qint64 now=QDateTime::currentSecsSinceEpoch());
- QVariantList histories() const;
+ QVariantList histories(bool full=true) const;
+ QVariantMap historyDetail(qint64 id) const;
  void deleteHistory(qint64 id);
  void clearHistory();
  void count(const QString &,const QString &,const Options &);

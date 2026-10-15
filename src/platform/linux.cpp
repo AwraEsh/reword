@@ -1,0 +1,128 @@
+#include "adapter.h"
+#include <QFileInfo>
+#include <QDir>
+#include <QGuiApplication>
+#include <QKeySequence>
+#include <QDBusInterface>
+#include <QDBusReply>
+#include <QElapsedTimer>
+#undef signals
+#include <atspi/atspi.h>
+#include <X11/Xlib.h>
+#include <X11/keysym.h>
+#include <unistd.h>
+namespace reword {
+class LinuxAdapter final:public Adapter {
+ AtspiAccessible *focus_=nullptr; AtspiEventListener *listener_=nullptr;
+ static inline Display *trapped_=nullptr;
+ static inline int trapError_=0;
+ static inline XErrorHandler previousHandler_=nullptr;
+ static int errorHandler(Display*d,XErrorEvent*e){if(d==trapped_){trapError_=e->error_code;return 0;}return previousHandler_?previousHandler_(d,e):0;}
+ Display *display_=nullptr; QHash<int,QString> keys_; bool wayland_=false;
+ static void event(AtspiEvent *e,void *data){
+  auto self=static_cast<LinuxAdapter*>(data);
+  if(QString::fromUtf8(e->type).startsWith("object:state-changed:focused") && e->detail1){
+   if(self->focus_)g_object_unref(self->focus_);
+   self->focus_=ATSPI_ACCESSIBLE(g_object_ref(e->source));
+  }
+ }
+ bool unlocked(){
+  // A missing lock service is uncertainty, not permission to read text.
+  QDBusInterface lock("org.gnome.ScreenSaver","/org/gnome/ScreenSaver","org.gnome.ScreenSaver",QDBusConnection::sessionBus());
+  lock.setTimeout(100);QDBusReply<bool> r=lock.call("GetActive");
+  if(r.isValid())return !r.value();
+  QDBusInterface other("org.freedesktop.ScreenSaver","/ScreenSaver","org.freedesktop.ScreenSaver",QDBusConnection::sessionBus());
+  other.setTimeout(100);QDBusReply<bool> s=other.call("GetActive");return s.isValid() && !s.value();
+ }
+public:
+ LinuxAdapter(){
+  wayland_=qEnvironmentVariable("XDG_SESSION_TYPE")=="wayland";
+  atspi_init();atspi_set_timeout(80,100);
+  listener_=atspi_event_listener_new(event,this,nullptr);
+  atspi_event_listener_register(listener_,"object:state-changed:focused",nullptr);
+  if(!wayland_)display_=XOpenDisplay(nullptr);
+ }
+ ~LinuxAdapter()override{
+  if(listener_){atspi_event_listener_deregister(listener_,"object:state-changed:focused",nullptr);g_object_unref(listener_);}
+  if(focus_)g_object_unref(focus_);if(display_)XCloseDisplay(display_);
+  atspi_exit();
+ }
+ QString description()const override{return wayland_?"Wayland · Fcitx5 integration required for live correction":"X11 · accessible plain text fields";}
+ Field inspect(bool includeText)override {
+  for(int i=0;i<32 && g_main_context_pending(nullptr);++i)g_main_context_iteration(nullptr,false);
+  Field f;if(!focus_)return f;
+  GError *error=nullptr;
+  auto pid=atspi_accessible_get_process_id(focus_,&error);
+  if(error){g_error_free(error);return f;}
+  f.app=QFileInfo(QString("/proc/%1/exe").arg(pid)).symLinkTarget();
+  if(f.app.isEmpty()||pid==getpid())return Field{};
+  auto obj=ATSPI_OBJECT(focus_);
+  f.id=QString::fromUtf8(obj->app->bus_name)+QString::fromUtf8(obj->path);
+  auto role=atspi_accessible_get_role(focus_,&error);
+  if(error){g_error_free(error);return f;}
+  f.password=role==ATSPI_ROLE_PASSWORD_TEXT;
+  auto states=atspi_accessible_get_state_set(focus_);
+  if(!states)return f;
+  f.focused=atspi_state_set_contains(states,ATSPI_STATE_FOCUSED);
+  f.editable=atspi_state_set_contains(states,ATSPI_STATE_EDITABLE);
+  bool sensitive=atspi_state_set_contains(states,ATSPI_STATE_SENSITIVE);
+  g_object_unref(states);
+  f.known=role==ATSPI_ROLE_ENTRY || f.password;
+  f.plain=role==ATSPI_ROLE_ENTRY;
+  // The Fcitx addon owns Wayland live edits; never double-correct via AT-SPI.
+  f.locked=!unlocked();
+  if(!includeText || f.password || !f.known || !f.editable || !f.focused || f.locked || !sensitive)return f;
+  auto text=atspi_accessible_get_text_iface(focus_);
+  auto editable=atspi_accessible_get_editable_text_iface(focus_);
+  if(!text||!editable){f.known=false;return f;}
+  int count=atspi_text_get_character_count(text,&error);
+  if(error || count<0 || count>50000){if(error)g_error_free(error);f.known=false;return f;}
+  gchar *content=atspi_text_get_text(text,0,count,&error);
+  if(error || !content){if(error)g_error_free(error);g_free(content);f.known=false;return f;}
+  f.text=QString::fromUtf8(content);g_free(content);
+  auto chars=f.text.toUcs4();auto utf16offset=[&](int n){return QString::fromUcs4(reinterpret_cast<const char32_t*>(chars.constData()),std::clamp(n,0,int(chars.size()))).size();};
+  f.caret=utf16offset(atspi_text_get_caret_offset(text,&error));
+  if(!error && atspi_text_get_n_selections(text,&error)>0){
+   AtspiRange *r=atspi_text_get_selection(text,0,&error);
+   if(r){f.selectionStart=utf16offset(r->start_offset);f.selectionEnd=utf16offset(r->end_offset);g_free(r);}
+  }
+  if(error){g_error_free(error);f.known=false;f.text.clear();}
+  return f;
+ }
+ bool replace(const Field &expected,const QString &newText,int caret)override{
+  auto current=inspect(true);if(!sameTarget(expected,current))return false;
+  auto editable=atspi_accessible_get_editable_text_iface(focus_);auto text=atspi_accessible_get_text_iface(focus_);
+  if(!editable||!text)return false;
+  GError *error=nullptr;
+  bool ok=atspi_editable_text_set_text_contents(editable,newText.toUtf8().constData(),&error);
+  if(error){g_error_free(error);return false;}
+  if(!ok)return false;
+  atspi_text_set_caret_offset(text,newText.left(caret).toUcs4().size(),nullptr);
+  // A single set-contents call avoids delete/insert windows in supported plain fields.
+  auto after=inspect(true);return after.id==expected.id && after.text==newText;
+ }
+ bool shortcuts(const QString &fix,const QString &undo,const QString &pause)override{
+  if(!display_)return false;
+  XSync(display_,False);trapped_=display_;trapError_=0;previousHandler_=XSetErrorHandler(errorHandler);
+  XUngrabKey(display_,AnyKey,AnyModifier,DefaultRootWindow(display_));keys_.clear();
+  auto grab=[&](QString sequence,QString action){
+   QKeySequence seq(sequence);if(seq.count()!=1)return false;
+   auto key=seq[0];int qt=key.key();if(qt<Qt::Key_A||qt>Qt::Key_Z)return false;
+   unsigned mods=0;auto m=key.keyboardModifiers();if(m&Qt::ControlModifier)mods|=ControlMask;if(m&Qt::AltModifier)mods|=Mod1Mask;if(m&Qt::ShiftModifier)mods|=ShiftMask;if(m&Qt::MetaModifier)mods|=Mod4Mask;
+   int code=XKeysymToKeycode(display_,XK_a+(qt-Qt::Key_A));int id=(code<<16)|int(mods);
+   if(!code||keys_.contains(id))return false;
+   for(unsigned extra:{0u,unsigned(LockMask),unsigned(Mod2Mask),unsigned(LockMask|Mod2Mask)})XGrabKey(display_,code,mods|extra,DefaultRootWindow(display_),False,GrabModeAsync,GrabModeAsync);
+   keys_[id]=action;return true;
+  };
+  bool ok=grab(fix,"fix")&&grab(undo,"undo")&&grab(pause,"pause");XSync(display_,False);ok=ok && trapError_==0;
+  if(!ok){XUngrabKey(display_,AnyKey,AnyModifier,DefaultRootWindow(display_));keys_.clear();XSync(display_,False);}
+  XSetErrorHandler(previousHandler_);trapped_=nullptr;return ok;
+ }
+ QString takeAction()override{
+  if(!display_)return {};
+  while(XPending(display_)){XEvent e;XNextEvent(display_,&e);if(e.type==KeyPress){auto mods=e.xkey.state&~(LockMask|Mod2Mask);return keys_.value((e.xkey.keycode<<16)|mods);}}
+  return {};
+ }
+};
+std::unique_ptr<Adapter> createAdapter(){return std::make_unique<LinuxAdapter>();}
+}

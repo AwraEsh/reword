@@ -91,9 +91,13 @@ void Store::prune(const Options&o,qint64 now) {
   exec("DELETE FROM history WHERE id=(SELECT id FROM history ORDER BY created,id LIMIT 1)");
  }
 }
-QVariantList Store::histories()const {
- QVariantList rows;QSqlQuery q("SELECT id,created,original,corrected,bytes FROM history ORDER BY created DESC,id DESC",db_);
+QVariantList Store::histories(bool full)const {
+ QVariantList rows;QSqlQuery q(full?"SELECT id,created,original,corrected,bytes FROM history ORDER BY created DESC,id DESC":"SELECT id,created,substr(original,1,180),substr(corrected,1,180),bytes FROM history ORDER BY created DESC,id DESC",db_);
  while(q.next())rows<<QVariantMap{{"id",q.value(0)},{"time",QDateTime::fromSecsSinceEpoch(q.value(1).toLongLong()).toString("MMM d, yyyy · HH:mm")},{"original",q.value(2)},{"corrected",q.value(3)},{"bytes",q.value(4)}};return rows;
+}
+QVariantMap Store::historyDetail(qint64 id)const {
+ QSqlQuery q(db_);q.prepare("SELECT original,corrected FROM history WHERE id=?");q.addBindValue(id);checked(q);
+ if(!q.next())return {};return {{"id",id},{"original",q.value(0)},{"corrected",q.value(1)}};
 }
 void Store::deleteHistory(qint64 id){QSqlQuery q(db_);q.prepare("DELETE FROM history WHERE id=?");q.addBindValue(id);checked(q);}
 void Store::clearHistory(){exec("DELETE FROM history");exec("VACUUM");}

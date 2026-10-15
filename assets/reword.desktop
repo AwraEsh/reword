@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Reword
+Comment=Offline spelling correction
+Exec=reword
+Icon=reword
+Categories=Utility;Accessibility;
+Terminal=false
+StartupWMClass=Reword

@@ -10,6 +10,7 @@ private slots:
   QVERIFY(e.englishAvailable()); QVERIFY(e.persianAvailable());
   QCOMPARE(e.word("teh",o),QString("the"));
   QCOMPARE(e.word("TEH",o),QString("THE"));
+  QCOMPARE(e.word(QString::fromUtf8("سلاام"),o),QString::fromUtf8("سلام"));
   QCOMPARE(e.word("Teh",o),QString("The"));
   QCOMPARE(e.word("user@teh.com",o),QString("user@teh.com"));
   o.english=false; QCOMPARE(e.word("teh",o),QString("teh"));

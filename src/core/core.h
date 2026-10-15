@@ -36,7 +36,7 @@ class Engine {
 public:
  Engine(const QString &englishDir={}, const QString &persianDir={});
  ~Engine();
- QString word(const QString &, const Options &);
+ QString word(const QString &, const Options &, const QString &context={});
  Change text(const QString &, const Options &, const std::atomic_bool *cancel=nullptr,
              qint64 timeoutMs=10000);
  void setPersonal(const QSet<QString> &words, const QHash<QString,QString> &replacements);
