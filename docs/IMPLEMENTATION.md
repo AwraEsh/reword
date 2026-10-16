@@ -121,3 +121,14 @@ Remaining acceptance: Windows build/installer CI, real Windows field/hotkey test
   1120x780. No overlapping content was observed in those captures. Switch contrast,
   smaller/scaled windows, populated lists, dialogs and Windows rendering still
   need closer review.
+
+
+## 2026-10-16: settings visual review
+
+- Replaced ambiguous gray switch indicators with clear checked-state accent,
+  contrast in both themes and a keyboard focus ring. Changes are immediate.
+- Replaced repeated generic page captions with descriptions of the page's task.
+- Fresh build and all four local CTest suites passed (14.57 seconds). Captured
+  every page at the 880x620 minimum logical size and 150% scale; the compact
+  capture test passed. Reviewed overview, language and privacy captures without
+  overlapping content. Scrollable settings continue below the viewport.

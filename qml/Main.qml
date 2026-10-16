@@ -18,6 +18,7 @@ ApplicationWindow {
     property color line: Backend.dark ? "#2c3440" : "#dce2e9"
     property color accent: Backend.dark ? "#85d4bc" : "#176d58"
     property var titles: ["Overview", "Correction", "Languages", "Applications", "History", "Insights", "Privacy"]
+    property var subtitles: ["Offline spelling assistance.", "Choose the rules for spelling and punctuation.", "Choose languages and add personal words.", "You decide where Reword can work.", "Copy originals and manage saved corrections.", "Review words you often mistype.", "Control saved data and desktop shortcuts."]
     property string undoOriginal: ""
     property string undoResult: ""
     property var selectedHistory: ({})
@@ -196,7 +197,7 @@ ApplicationWindow {
                     }
                     Label {
                         textFormat: Text.PlainText
-                        text: root.page === 0 ? "Offline spelling assistance." : root.page === 3 ? "You decide where Reword can work." : root.page === 4 ? "Keep the original within reach." : "Make Reword work the way you write."
+                        text: root.subtitles[root.page]
                         color: root.muted
                         font.pixelSize: 13
                     }
