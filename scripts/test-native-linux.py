@@ -32,6 +32,20 @@ with tempfile.TemporaryDirectory(prefix='reword-native-') as directory:
    if xserver.poll() is not None:raise RuntimeError('Private X server failed to start.')
    if time.monotonic()>deadline:raise RuntimeError('Private X server did not become ready.')
    time.sleep(.05)
+  # GTK active-window state needs a window manager, just as on a desktop.
+  # A bare Xvfb server does not provide that state to the AT-SPI focus scan.
+  manager=shutil.which('openbox')
+  if not manager:raise RuntimeError('Install Openbox to run the controlled desktop probes.')
+  config=folder/'openbox.xml'
+  config.write_text('<openbox_config xmlns="http://openbox.org/3.4/rc"><focus><focusNew>yes</focusNew></focus><keyboard/><mouse/></openbox_config>')
+  wm=subprocess.Popen([manager,'--sm-disable','--config-file',str(config)],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);children.append(wm)
+  deadline=time.monotonic()+5
+  while True:
+   if wm.poll() is not None:raise RuntimeError('Private window manager exited during startup.')
+   check=subprocess.run(['xprop','-root','_NET_SUPPORTING_WM_CHECK'],env=env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
+   if check.returncode==0 and 'window id #' in check.stdout:break
+   if time.monotonic()>deadline:raise RuntimeError('Private window manager did not become ready.')
+   time.sleep(.05)
   bus.call_sync('org.a11y.Bus','/org/a11y/bus','org.freedesktop.DBus.Properties','Set',GLib.Variant('(ssv)',('org.a11y.Status','IsEnabled',GLib.Variant('b',True))),None,Gio.DBusCallFlags.NONE,3000,None)
   lock=subprocess.Popen([sys.executable,str(root/'tests/test_lock_service.py')],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);children.append(lock)
   for _ in range(40):

@@ -40,6 +40,7 @@ class RewordAddon final : public fcitx::AddonInstance {
     std::atomic_bool cancel_{false};
     struct Edit {
         fcitx::TrackableObjectReference<fcitx::InputContext> context;
+        reword::RetryCycle retryAfter;
         QString app, before, after, original, corrected;
         unsigned cursor = 0, anchorBefore = 0, cursorBefore = 0;
         int start = 0;
@@ -72,9 +73,9 @@ class RewordAddon final : public fcitx::AddonInstance {
     }
     bool hotkey(const fcitx::Key &key, QString setting, QString fallback) {
         auto s = store_->value(setting, fallback).toString().replace("Ctrl+", "Control+");
-        if (!s.isEmpty())
-            s[s.size() - 1] = s.back().toLower();
-        return key.check(fcitx::Key(s.toStdString()));
+        // Fcitx normalizes Control+letter events to uppercase key symbols.
+        // Compare canonical keys on both sides, including user-defined shortcuts.
+        return key.normalize().check(fcitx::Key(s.toStdString()).normalize());
     }
     void observe(fcitx::InputContext *ic) {
         if (!pending_.valid || pending_.context.get() != ic)
@@ -90,8 +91,10 @@ class RewordAddon final : public fcitx::AddonInstance {
                 auto o = store_->options();
                 if (pending_.passage)
                     store_->history(pending_.original, pending_.corrected, o);
-                else
+                else {
+                    retry_ = pending_.retryAfter;
                     store_->count(pending_.original, pending_.corrected, o);
+                }
                 pending_.confirmed = true;
                 if (o.notifications && !pending_.passage) {
                     QDBusInterface n(
@@ -254,13 +257,21 @@ class RewordAddon final : public fcitx::AddonInstance {
             }
             auto before = QString::fromUcs4(reinterpret_cast<const char32_t *>(points.constData()),
                                             st.cursor());
-            static const QRegularExpression end(R"(([^\s.,!?،؛؟]+)$)");
-            auto m = end.match(before);
-            if (!m.hasMatch()) {
-                retry_.reset();
+            char32_t delimiter = code;
+            auto mark = QString::fromUcs4(&delimiter, 1);
+            reword::Field snapshot;
+            snapshot.app = id;
+            snapshot.id = current;
+            snapshot.text = text;
+            snapshot.caret = before.size();
+            auto typed = snapshot;
+            typed.text.insert(typed.caret, mark);
+            typed.caret += mark.size();
+            const auto words = reword::completedWords(snapshot, typed);
+            if (words.isEmpty())
                 return;
-            }
-            auto token = m.captured(), prefix = before.left(m.capturedStart());
+            const auto &word = words.back();
+            auto token = word.token, prefix = before.left(word.start);
             if (prefix != prefix_) {
                 retry_.reset();
                 prefix_ = prefix;
@@ -271,15 +282,17 @@ class RewordAddon final : public fcitx::AddonInstance {
             auto corrected = engine_->word(token, options, prefix.right(128));
             if (corrected == token)
                 return;
-            if (!retry_.shouldCorrect(current, m.capturedStart(), token,
-                                      QDateTime::currentMSecsSinceEpoch()))
+            auto tentativeRetry = retry_;
+            if (!tentativeRetry.shouldCorrect(current, word.start, token,
+                                              QDateTime::currentMSecsSinceEpoch())) {
+                retry_ = tentativeRetry;
                 return;
+            }
             auto suffix = QString::fromUcs4(
                 reinterpret_cast<const char32_t *>(points.constData() + st.cursor()),
                 points.size() - st.cursor());
-            char32_t delimiter = code;
-            auto mark = QString::fromUcs4(&delimiter, 1);
             pending_ = {};
+            pending_.retryAfter = tentativeRetry;
             pending_.context = ic->watch();
             pending_.app = id;
             pending_.before = text;

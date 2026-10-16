@@ -156,6 +156,32 @@ class UiTest : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 12000);
         QCOMPARE(editor->property("text").toString(), QString("my newer text"));
         QCOMPARE(controller.history().size(), 1);
+        // Optional synthetic-only captures for visual review; never production data.
+        const auto captureDirectory = qEnvironmentVariable("REWORD_UI_CAPTURE_DIR");
+        if (!captureDirectory.isEmpty()) {
+            QVERIFY(QDir().mkpath(captureDirectory));
+            auto window = qobject_cast<QQuickWindow *>(root);
+            QVERIFY(window);
+            if (qEnvironmentVariableIsSet("REWORD_UI_CAPTURE_COMPACT")) {
+                window->setWidth(880);
+                window->setHeight(620);
+            }
+            editor->setProperty(
+                "text",
+                QString::fromUtf8("A short English paragraph.\nیک متن فارسی برای بررسی نمایش."));
+            for (bool dark : {true, false}) {
+                controller.set("dark", dark);
+                for (int page = 0; page < 7; ++page) {
+                    root->setProperty("page", page);
+                    QTest::qWait(100);
+                    auto image = window->grabWindow();
+                    QVERIFY(!image.isNull());
+                    QVERIFY(
+                        image.save(captureDirectory +
+                                   QString("/%1-%2.png").arg(dark ? "dark" : "light").arg(page)));
+                }
+            }
+        }
         // Every page must instantiate and render without losing its navigation state.
         for (int page = 0; page < 7; ++page) {
             root->setProperty("page", page);

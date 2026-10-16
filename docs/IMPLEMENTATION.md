@@ -1,6 +1,8 @@
 # Reword implementation ledger
 
 Authority: the approved implementation plan in this conversation (2026-10-15).
+This ledger is chronological; see [current handoff](CURRENT_HANDOFF.md) for the
+latest status and remaining acceptance work.
 
 - [ ] Native adapter feasibility and build toolchain.
 - [ ] Safety policy, retry cycle, bounded offline correction, persistent data.
@@ -82,3 +84,40 @@ Remaining acceptance: Windows build/installer CI, real Windows field/hotkey test
   GTK Fcitx5 module corrected `teh ` to `the `. The module loaded, discovered the
   synthetic application and wrote its heartbeat. Broader Wayland acceptance is
   still pending; the first successful word is not a full acceptance result.
+
+
+## 2026-10-16: real Wayland probes and independent review
+
+- Added a repeatable private GNOME Wayland/Fcitx test using real virtual keyboard
+  input, owned synthetic GTK/Qt fixtures and private storage. The remote-input
+  D-Bus owner PID must match the compositor launched by the test.
+- The real probe exposed canonical-key mismatch for Ctrl+Alt letter shortcuts;
+  normalization on both sides fixed live Undo and Pause.
+- Independent review found code-span protection and unconfirmed-write retry
+  gaps in the Fcitx live path. Both were reproduced in real Qt input tests before
+  fixing. Fcitx now shares full-context completed-word protection and commits a
+  successful retry decision only after observing the expected edit.
+- Qt probe passed rejected-write retry, first/second/third, live Undo, code-span
+  protection, pause/resume, selected correction/history/Undo and password exclusion.
+  The rejection fixture confirms that an actual IME event was refused.
+- GTK3 probe passed its supported live cases. Selection remains unavailable in
+  this input module, and no history is recorded for the unsupported operation.
+- Local CTest suites passed again after the changes (18.27 seconds). Optional
+  synthetic UI captures exercise all seven pages in light/dark modes.
+- Linux CI now starts a private Openbox window manager because the adapter's
+  focus scan requires active-window state, which bare Xvfb does not provide.
+  Remote evidence for that updated harness is pending.
+- Windows installer acceptance now installs per user into a path containing
+  spaces, removes developer paths, loads the native Windows Qt platform, and
+  tests uninstall preserving a user-added file. It is CI-only; execution pending.
+
+
+- The detached baseline idle run completed 7,202.09 seconds and 1,430 samples;
+  report state is passed and both runner/application processes exited. Maximum
+  app RSS 96,960 KiB, helper RSS 25,072 KiB, app CPU 118.9 seconds. This describes
+  the recorded older binary and resident memory only, not a final active-workload
+  or total-memory acceptance result.
+- Reviewed rendered synthetic captures of all seven pages in light/dark modes at
+  1120x780. No overlapping content was observed in those captures. Switch contrast,
+  smaller/scaled windows, populated lists, dialogs and Windows rendering still
+  need closer review.

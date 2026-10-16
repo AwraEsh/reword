@@ -47,6 +47,8 @@ int main(int argc, char **argv) {
     gtk_container_add(GTK_CONTAINER(window), entry);
     gtk_entry_set_text(GTK_ENTRY(entry), "teh ");
     gtk_editable_set_position(GTK_EDITABLE(entry), 4);
+    if (g_getenv("REWORD_FIXTURE_MAXIMIZE"))
+        gtk_window_maximize(GTK_WINDOW(window));
     gtk_widget_show_all(window);
     gtk_window_present(GTK_WINDOW(window));
     gtk_widget_grab_focus(entry);

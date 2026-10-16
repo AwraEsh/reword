@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+"""Exercise real Fcitx input in a private headless GNOME Wayland session.
+
+Requires GNOME Shell, Fcitx5, Python GI, and the matching GTK/Qt Fcitx5 modules.
+Only the compositor launched here receives injected keys. No host display,
+clipboard, application text, or desktop settings are used.
+"""
+import argparse
+import base64
+from contextlib import nullcontext
+import os
+from pathlib import Path
+import selectors
+import shutil
+import sqlite3
+import subprocess
+import sys
+import sysconfig
+import tempfile
+import time
+
+ROOT = Path(__file__).resolve().parents[1]
+SERVICE = "org.gnome.Mutter.RemoteDesktop"
+MANAGER = "/org/gnome/Mutter/RemoteDesktop"
+SESSION = SERVICE + ".Session"
+
+
+def wait_for(predicate, description, seconds=5):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(.05)
+    raise RuntimeError(description)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--inside", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--fixture", choices=("qt", "gtk"), default="qt")
+    parser.add_argument("--directory", help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    if not args.inside:
+        with tempfile.TemporaryDirectory(prefix="reword-wayland-") as temporary:
+            result = subprocess.run([
+                "dbus-run-session", "--", sys.executable, str(Path(__file__).resolve()),
+                "--inside", "--fixture", args.fixture, "--directory", temporary,
+            ])
+            # Portals may leave private FUSE mounts after their D-Bus session ends.
+            # Detach only mountpoints inside the directory created by this caller.
+            for relative in ("runtime/doc", "runtime/gvfs"):
+                mount = Path(temporary) / relative
+                if os.path.ismount(mount):
+                    tool = shutil.which("fusermount3") or shutil.which("fusermount")
+                    if not tool:
+                        raise RuntimeError("Cannot detach the private test FUSE mount.")
+                    subprocess.run([tool, "-uz", str(mount)], check=True,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return result.returncode
+    if not args.directory:
+        raise RuntimeError("The private session needs its caller-owned temporary directory.")
+
+    from gi.repository import Gio, GLib
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+
+    def call(destination, path, interface, method, signature=None, values=()):
+        parameters = GLib.Variant(signature, values) if signature else None
+        result = bus.call_sync(destination, path, interface, method, parameters, None,
+                               Gio.DBusCallFlags.NONE, 3000, None)
+        return result.unpack() if result else ()
+
+    def owned():
+        return call("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                    "org.freedesktop.DBus", "NameHasOwner", "(s)", (SERVICE,))[0]
+
+    with nullcontext(args.directory) as temporary:
+        folder = Path(temporary)
+        for name in ("runtime", "config", "cache", "data"):
+            (folder / name).mkdir(mode=0o700)
+        env = dict(os.environ)
+        env.update({
+            "XDG_RUNTIME_DIR": str(folder / "runtime"),
+            "XDG_CONFIG_HOME": str(folder / "config"),
+            "XDG_CACHE_HOME": str(folder / "cache"),
+            "XDG_DATA_HOME": str(folder / "data"),
+            "XDG_SESSION_TYPE": "wayland", "DISPLAY": "",
+            "WAYLAND_DISPLAY": "reword-wayland", "GDK_BACKEND": "wayland",
+            "GSETTINGS_BACKEND": "memory", "LIBGL_ALWAYS_SOFTWARE": "1",
+            "GIO_USE_VFS": "local", "GIO_USE_VOLUME_MONITOR": "unix",
+            "GVFS_DISABLE_FUSE": "1",
+            "QT_QPA_PLATFORM": "wayland", "QT_QUICK_BACKEND": "software",
+            "QT_QPA_PLATFORMTHEME": "", "QT_NO_XDG_DESKTOP_PORTAL": "1",
+            "GTK_USE_PORTAL": "0", "GTK_IM_MODULE": "fcitx5", "QT_IM_MODULE": "fcitx",
+            "REWORD_DATA_DIR": str(folder / "reword"),
+            "REWORD_DICTIONARY_DIR": str(ROOT / "assets/dictionaries"),
+            "REWORD_FIXTURE_MAXIMIZE": "1",
+        })
+        env.pop("AT_SPI_BUS_ADDRESS", None)
+        activation = {key: env[key] for key in (
+            "DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME",
+            "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_SESSION_TYPE", "GDK_BACKEND",
+            "GSETTINGS_BACKEND", "GIO_USE_VFS", "GIO_USE_VOLUME_MONITOR", "GVFS_DISABLE_FUSE",
+        )}
+        call("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+             "UpdateActivationEnvironment", "(a{ss})", (activation,))
+        children, logs = [], []
+
+        def spawn(command, name, stdin=None, stdout=None):
+            log = (folder / (name + ".log")).open("wb")
+            logs.append(log)
+            process = subprocess.Popen(command, cwd=ROOT, env=env, stdin=stdin,
+                                       stdout=stdout if stdout is not None else log, stderr=log)
+            children.append(process)
+            return process
+
+        try:
+            shell = spawn([
+                "gnome-shell", "--headless", "--wayland", "--no-x11",
+                "--virtual-monitor", "1280x800", "--wayland-display", "reword-wayland",
+                "--sm-disable",
+            ], "gnome")
+            wait_for(lambda: (folder / "runtime/reword-wayland").exists() and owned(),
+                     "Private Wayland compositor did not become ready.", 20)
+            owner_pid = call("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                             "org.freedesktop.DBus", "GetConnectionUnixProcessID",
+                             "(s)", (SERVICE,))[0]
+            if owner_pid != shell.pid:
+                raise RuntimeError("Refusing input: remote-desktop owner is not our compositor.")
+            session = call(SERVICE, MANAGER, SERVICE, "CreateSession")[0]
+            smoke = subprocess.run([str(ROOT / "scripts/env.sh"), str(ROOT / "build/reword"),
+                                    "--smoke-test"], cwd=ROOT, env=env,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+            if smoke.returncode:
+                raise RuntimeError("Qt application failed to launch on private Wayland.")
+            print("PASS: Qt application launch on GNOME Wayland.", flush=True)
+
+            config = folder / "config/fcitx5"
+            config.mkdir(parents=True)
+            (config / "profile").write_text(
+                "[Groups/0]\nName=Default\nDefault Layout=us\nDefaultIM=keyboard-us\n\n"
+                "[Groups/0/Items/0]\nName=keyboard-us\nLayout=\n\n[GroupOrder]\n0=Default\n")
+            addon = folder / "data/fcitx5/addon"
+            addon.mkdir(parents=True)
+            shutil.copyfile(ROOT / "packaging/reword-fcitx.conf", addon / "reword.conf")
+            libdir = Path("/usr/lib") / sysconfig.get_config_var("MULTIARCH")
+            env["FCITX_ADDON_DIRS"] = str(ROOT / "build") + ":" + str(libdir / "fcitx5")
+            fixture_name = "reword_qt_fixture" if args.fixture == "qt" else "reword_fixture"
+            database = sqlite3.connect(folder / "reword/reword.sqlite")
+            with database:
+                database.execute(
+                    "INSERT OR REPLACE INTO applications(id,name,decision,remind) "
+                    "VALUES(?,?,?,NULL)", ("fcitx:" + fixture_name, "Synthetic fixture", "allow"))
+            spawn([str(ROOT / "scripts/env.sh"), "fcitx5", "--disable=all",
+                   "--enable=keyboard,dbus,dbusfrontend,reword,wayland"], "fcitx")
+            wait_for(lambda: call("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                                  "org.freedesktop.DBus", "NameHasOwner", "(s)",
+                                  ("org.fcitx.Fcitx5",))[0], "Private Fcitx did not start.")
+            plugins = str(ROOT / ".deps/usr/lib/x86_64-linux-gnu/qt6/plugins") + ":" + str(libdir / "qt6/plugins")
+            fixture = spawn([str(ROOT / "scripts/env.sh"), "env", "QT_PLUGIN_PATH=" + plugins,
+                             str(ROOT / "build" / fixture_name)], "fixture",
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+            time.sleep(2)
+            call(SERVICE, session, SESSION, "Start")
+
+            def key_state(symbol, pressed):
+                call(SERVICE, session, SESSION, "NotifyKeyboardKeysym", "(ub)", (symbol, pressed))
+
+            def key(symbol):
+                key_state(symbol, True)
+                key_state(symbol, False)
+                time.sleep(.08)
+
+            # Close this compositor's startup overview and focus our maximized fixture.
+            key(0xff1b)
+            time.sleep(.7)
+            for dx, dy in ((-10000.0, -10000.0), (600.0, 400.0)):
+                call(SERVICE, session, SESSION, "NotifyPointerMotionRelative", "(dd)", (dx, dy))
+            for pressed in (True, False):
+                call(SERVICE, session, SESSION, "NotifyPointerButton", "(ib)", (272, pressed))
+            time.sleep(1)
+            selector = selectors.DefaultSelector()
+            selector.register(fixture.stdout, selectors.EVENT_READ)
+
+            def command(value):
+                fixture.stdin.write(value.encode() + b"\n")
+                fixture.stdin.flush()
+                time.sleep(.2)
+
+            def snapshot():
+                fixture.stdin.write(b"snapshot\n")
+                fixture.stdin.flush()
+                if not selector.select(3):
+                    raise RuntimeError("No synthetic fixture snapshot received.")
+                line = fixture.stdout.readline()
+                if not line.startswith(b"DATA:"):
+                    raise RuntimeError("Invalid synthetic fixture response.")
+                return base64.b64decode(line[5:].strip(), validate=True).decode()
+
+            def expect(value):
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    actual = snapshot()
+                    if actual == value:
+                        return
+                    time.sleep(.05)
+                raise RuntimeError(f"Synthetic fixture mismatch: {actual[:128]!r} != {value[:128]!r}")
+
+            def type_word():
+                command("text:")
+                for char in "teh ":
+                    key(ord(char))
+                time.sleep(.3)
+
+            def chord(letter):
+                for symbol in (0xffe3, 0xffe9):
+                    key_state(symbol, True)
+                key(ord(letter))
+                for symbol in (0xffe9, 0xffe3):
+                    key_state(symbol, False)
+
+            if args.fixture == "qt":
+                command("reject-native"); type_word(); expect("teh ")
+                fixture.stdin.write(b"rejected-events\n"); fixture.stdin.flush()
+                if not selector.select(3):
+                    raise RuntimeError("No rejected-event confirmation.")
+                rejected = fixture.stdout.readline().decode().strip()
+                if not rejected.startswith("REJECTED:") or int(rejected[9:]) < 1:
+                    raise RuntimeError("Fixture did not reject an actual IME write.")
+                command("accept-native")
+            type_word(); expect("the ")
+            if args.fixture == "qt":
+                print("PASS: rejected native write does not consume the correction attempt.", flush=True)
+            type_word(); expect("teh ")
+            type_word(); expect("the ")
+            print("PASS: first/second/third correction.", flush=True)
+            chord("z"); expect("teh ")
+            print("PASS: live Undo.", flush=True)
+            command("text:`foo teh")
+            key(ord(" ")); expect("`foo teh ")
+            print("PASS: code-span protection.", flush=True)
+            chord("p"); type_word(); expect("teh "); chord("p")
+            print("PASS: pause and resume.", flush=True)
+            original = "im here with teh book"
+            command("text:" + original); command("select-all"); chord("r")
+            if args.fixture == "qt":
+                expect("I am here with the book")
+                wait_for(lambda: database.execute("SELECT count(*) FROM history").fetchone()[0] == 1,
+                         "Confirmed passage history was not saved.")
+                chord("z"); expect(original)
+                print("PASS: selected correction, confirmed history and selected Undo.", flush=True)
+            else:
+                expect(original)
+                if database.execute("SELECT count(*) FROM history").fetchone()[0]:
+                    raise RuntimeError("Unsupported GTK selection was recorded.")
+                print("LIMIT: GTK3 does not expose the selection anchor to this input method.", flush=True)
+            history_count = database.execute("SELECT count(*) FROM history").fetchone()[0]
+            command("password"); type_word(); expect("teh ")
+            chord("r")
+            if database.execute("SELECT count(*) FROM history").fetchone()[0] != history_count:
+                raise RuntimeError("Protected operation was recorded.")
+            print("PASS: password exclusion.", flush=True)
+            database.close()
+            selector.close()
+        finally:
+            for process in reversed(children):
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+            for log in logs:
+                log.close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
