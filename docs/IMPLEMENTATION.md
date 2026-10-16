@@ -142,3 +142,22 @@ Remaining acceptance: Windows build/installer CI, real Windows field/hotkey test
   section, verifies installed-file hashes and refuses leftover shipped files.
   Cleanup failure no longer hides the original acceptance result. Fresh Windows
   execution of these stronger assertions is required.
+
+
+## 2026-10-16: installer and controlled desktop gates pass
+
+- Workflow run [38913418616](https://github.com/AwraEsh/reword/actions/runs/38913418616)
+  at 03069a1 passed both Linux and Windows jobs. The Windows test verifies the
+  hashes of every staged/installed file, native Qt startup with a clean PATH,
+  complete uninstall of shipped files and preservation of the added user file.
+  The subsequent native Windows field/password/hotkey probe also passed.
+- Downloaded the matching Windows development installer locally. Its SHA256 is
+  5a8b56e4758e3ee22255c59a5008bcab1ab05ca5860144e36de76aa34dccf31a.
+- Reviewed all seven compact-page captures at 150% scale; captions, controls and
+  mixed Persian/English workspace text remain readable without overlapping content
+  in the captured states. This does not replace populated/dialog/keyboard testing.
+- Preliminary packaging audit: the old Linux dependency closure requires
+  GLIBC_2.39 through libsystemd. The hardcoded >=2.38 dependency must be corrected
+  from measured final-bundle requirements. Copyleft source delivery and full
+  bundled notices remain release work; see
+  [Qt's source-delivery guidance](https://www.qt.io/development/download-open-source).

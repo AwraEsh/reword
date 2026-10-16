@@ -9,21 +9,25 @@ of Git. No release has been accepted as production ready.
 
 - C++20/Qt Quick application, shared correction/store core, X11 helper, Windows
   adapter and Fcitx addon are implemented. See [architecture](ARCHITECTURE.md).
-- Latest committed service change before this handoff: c02bf5d. It fixes completed
-  words being missed during typing bursts and retry advancement after rejected
-  writes. Four local CTest suites pass.
-- Current Wayland hardening adds canonical hotkeys, full-context code protection
+- Service change c02bf5d fixes completed words being missed during typing bursts
+  and retry advancement after rejected writes. Four local CTest suites pass.
+- Wayland hardening a87ed97 adds canonical hotkeys, full-context code protection
   and confirmation before successful retry advancement. Repeatable GNOME/Fcitx
   probes pass on real Qt and supported GTK3 fields. See
-  [compatibility evidence](COMPATIBILITY.md) for the exact limits.
-- Windows CI at c02bf5d passed native field/password/hotkey probes and built an
-  installer. At a87ed97 the installed native Qt application launched with a clean
-  PATH and uninstall assertions passed, but cleanup raced NSIS's temporary
-  uninstaller. The revised test waits for final registry cleanup and checks every
-  installed file plus all shipped-file removal; fresh CI proof is pending.
-- Linux CI at a87ed97 passed all automated and native GTK/service probes, including
-  three controlled cycles. Supplying AT-SPI runtime activation and a real private
-  window manager resolved the fixture's missing active-window state.
+  [compatibility evidence](COMPATIBILITY.md) for exact limits.
+- Source at 03069a1 passed the full Linux and Windows workflow run
+  [38913418616](https://github.com/AwraEsh/reword/actions/runs/38913418616).
+  Linux includes three isolated native GTK/service cycles. Windows includes all
+  installed-file hashes, native-platform launch without developer paths, complete
+  shipped-file removal while preserving a user-added file, and the native
+  field/password/hotkey probe.
+- Downloaded development installer: `dist/windows-ci-03069a1/Reword-Setup-0.1.0.exe`.
+  SHA256: 5a8b56e4758e3ee22255c59a5008bcab1ab05ca5860144e36de76aa34dccf31a.
+  It is a CI artifact, not an accepted public release.
+- Reviewed the seven pages with synthetic content in light/dark themes, including
+  minimum logical size 880x620 at 150% scaling. The switch indicators now clearly
+  distinguish checked state and keyboard focus. Populated lists, dialogs,
+  keyboard-only interaction and Windows-rendered captures still need review.
 - Frequency tables contain 93,959 English and 31,166 Persian ranks with pinned
   hashes and attribution. They are heuristic ranking data, not universal coverage.
 - The detached two-hour idle run tests an earlier binary, identified by SHA256
@@ -51,23 +55,26 @@ scripts name their required host tools in their help/docstrings.
 
 ## Required work still open
 
-1. Verify fresh CI for the updated X11 desktop harness and Windows installer test;
-   fix failures rather than weakening assertions.
-2. Audit remaining retry reset cases on Wayland (cursor movement, continuation,
+1. Audit remaining retry reset cases on Wayland (cursor movement, continuation,
    timing), selected-operation cancellation/staleness, settings/permission changes
    during operations and actual lock/unlock behavior.
-3. Verify Windows user-only NTFS storage permissions; Qt file permissions alone
+2. Verify Windows user-only NTFS storage permissions; Qt file permissions alone
    are not sufficient evidence of a protected Windows DACL.
-4. Complete rendered UI review at minimum size and scaled display, keyboard-only
-   navigation, populated lists and dialogs, plus native Windows UI review.
-5. Rebuild Linux AppImage/.deb from the final source; current local packages are
+3. Complete keyboard-only navigation, populated lists and dialogs, plus rendered
+   Windows UI review. Check native shortcut conflict reporting and rollback.
+4. Rebuild Linux AppImage/.deb from the final source; current local packages are
    older. Verify runtime closure, exact minimum glibc, host integration dependency
    declarations, bundled third-party notices and clean-environment launch.
-6. Expand real compatibility tests to browsers and representative GTK/Qt/Windows
+   Preliminary readelf inspection of the old staged closure found GLIBC_2.39
+   (libsystemd), while the .deb script declares >=2.38; derive the real baseline
+   when rebuilding. Supply corresponding copyleft-library source/notice material
+   before public binary distribution; a third-party project URL alone is not an
+   adequate completed source-delivery workflow.
+5. Expand real compatibility tests to browsers and representative GTK/Qt/Windows
    editors, including focus races and fast typing. Supported synthetic fields do
    not prove broad application coverage.
-7. Run a final multi-hour active/resource test and refresh latency measurements.
-8. Produce matching versioned artifacts, checksums, repeatable install instructions
+6. Run a final multi-hour active/resource test and refresh latency measurements.
+7. Produce matching versioned artifacts, checksums, repeatable install instructions
    and a requirement-by-requirement acceptance audit before declaring completion.
 
 The source has no redistribution license yet; [LICENSE](../LICENSE) states the

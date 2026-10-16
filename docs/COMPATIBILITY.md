@@ -5,11 +5,11 @@ This table describes tested fixtures, not blanket support for applications.
 | Environment | Evidence | Limits |
 |---|---|---|
 | Debian 13 / GNOME X11 | Local GTK entry and end-to-end service probes have passed. | Plain single-line editable fields. Shared-desktop focus can be interrupted by other apps. Browser/editor matrix pending. |
-| Controlled Linux Xvfb / Openbox | CI at a87ed97 passed build, four automated suites, GUI launch and three native GTK/service probe cycles. | Synthetic single-line fields; no physical lock-screen proof. |
+| Controlled Linux Xvfb / Openbox | CI at 03069a1 passed build, four automated suites, GUI launch and three native GTK/service probe cycles. | Synthetic single-line fields; no physical lock-screen proof. |
 | Linux without accessibility bus | Helper reports unavailable; internal workspace remains usable. | No native correction. |
 | GNOME 48.7 Wayland / Fcitx 5.1.12 / Qt QLineEdit | Real keyboard input in a private compositor passed first/second/third, rejected-write retry, live Undo, code-span protection, pause, selected correction/history/Undo and password exclusion. | Synthetic field, explicit Qt Fcitx5 integration. Physical session and browser coverage pending. |
 | GNOME Wayland / Fcitx5 / GTK3 GtkEntry | Real input passed first/second/third, live Undo, code-span protection, pause and password exclusion. | This GTK3 input module does not expose the selection anchor; selected-text correction is skipped. Use the workspace. |
-| Windows x64 / hosted Windows runner | CI at c02bf5d passed build, automated tests, NSIS packaging and native Win32 field/password/hotkey probes. | Native-platform clean-PATH installer launch passed at a87ed97, but its test cleanup raced the temporary NSIS uninstaller. Stronger full-file install/uninstall verification is pending. Physical Windows 10/11 UI and browser/editor coverage pending. |
+| Windows x64 / hosted Windows runner | CI at 03069a1 passed build, automated tests, installed-file hashes, native-platform clean-PATH launch/uninstall and native Win32 field/password/hotkey probes. | Physical Windows 10/11 UI and browser/editor coverage pending. |
 | Internal workspace | Qt Quick tests verify correction/history, stale-result rejection, limits, pause/cancellation and saved markup never requesting HTTP/HTTPS. | Offline rules are conservative; no semantic rewriting. |
 
 ## Native boundaries
