@@ -182,8 +182,14 @@ ApplicationWindow {
                             SettingRow { title: "Expand abbreviations"; detail: "Expand recognized forms such as im → I am."; settingKey: "abbreviations" }
                             SettingRow { title: "Capitalize sentence beginnings"; detail: "Capitalize English text after sentence or paragraph breaks."; settingKey: "capitalization" }
                             SettingRow { title: "Periods"; detail: "Fix duplicate periods while keeping intentional ellipses."; settingKey: "periods" }
+                            SettingRow { title: "Finish prose paragraphs"; detail: "Add a terminal period to unpunctuated paragraphs of three or more words."; settingKey: "paragraphPeriods"; enabled: Backend.settings.periods }
                             SettingRow { title: "Commas"; detail: "Fix repeated English and Persian commas."; settingKey: "commas" }
-                            SettingRow { title: "Punctuation spacing"; detail: "Remove spaces before enabled periods or commas."; settingKey: "spacing" }
+                            SettingRow { title: "Commas after introductory phrases"; detail: "Recognize openings such as However and بنابراین."; settingKey: "introductoryCommas"; enabled: Backend.settings.commas }
+                            SettingRow { title: "Question marks"; detail: "Enable spacing fixes for English and Persian question marks."; settingKey: "questionMarks" }
+                            SettingRow { title: "Exclamation marks"; detail: "Enable spacing fixes for exclamation marks."; settingKey: "exclamationMarks" }
+                            SettingRow { title: "Semicolons"; detail: "Enable spacing fixes for English and Persian semicolons."; settingKey: "semicolons" }
+                            SettingRow { title: "Colons"; detail: "Enable spacing fixes for colons."; settingKey: "colons" }
+                            SettingRow { title: "Punctuation spacing"; detail: "Remove spaces before the punctuation categories you enable."; settingKey: "spacing" }
                             Label { text: "Punctuation rules are conservative. Reword does not guess the meaning of a sentence."; color: root.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                             Rectangle { Layout.fillWidth: true; height: 1; color: root.line }
                             Label { text: "Keyboard shortcuts"; font.pixelSize: 18 }

@@ -49,7 +49,7 @@ Controller::~Controller(){service_->cancel();QMetaObject::invokeMethod(service_,
 QVariantMap Controller::settings()const {
  QVariantMap m;auto o=read([&]{return store_.options();});
 #define SET(k) m[#k]=o.k
- SET(english);SET(persian);SET(spelling);SET(abbreviations);SET(capitalization);SET(normalizePersian);SET(halfSpace);SET(periods);SET(commas);SET(spacing);SET(history);SET(statistics);SET(notifications);SET(browsers);SET(sensitivity);SET(historyCount);SET(historyMiB);SET(historyDays);SET(maxCharacters);
+ SET(english);SET(persian);SET(spelling);SET(abbreviations);SET(capitalization);SET(normalizePersian);SET(halfSpace);SET(periods);SET(commas);SET(spacing);SET(paragraphPeriods);SET(introductoryCommas);SET(questionMarks);SET(exclamationMarks);SET(semicolons);SET(colons);SET(history);SET(statistics);SET(notifications);SET(browsers);SET(sensitivity);SET(historyCount);SET(historyMiB);SET(historyDays);SET(maxCharacters);
 #undef SET
  m["fixShortcut"]=read([&]{return store_.value("fixShortcut","Ctrl+Alt+R");});m["undoShortcut"]=read([&]{return store_.value("undoShortcut","Ctrl+Alt+Z");});m["pauseShortcut"]=read([&]{return store_.value("pauseShortcut","Ctrl+Alt+P");});
  m["shortcutsAvailable"]=shortcuts_;return m;

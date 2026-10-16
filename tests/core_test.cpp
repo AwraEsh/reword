@@ -29,6 +29,18 @@ private slots:
   o.capitalization=false; o.periods=false; o.commas=false; o.spacing=true;
   QCOMPARE(e.text("hello  .. world ,,",o).corrected,QString("hello  .. world ,,"));
  }
+ void punctuationCategoriesAreIndependent(){
+  Engine e;Options o;o.spelling=false;o.abbreviations=false;o.periods=true;o.spacing=true;
+  QCOMPARE(e.text("hello ! world ?",o).corrected,QString("hello ! world ?"));
+  o.questionMarks=true;QCOMPARE(e.text("hello ! world ?",o).corrected,QString("hello ! world?"));
+  o.paragraphPeriods=true;QCOMPARE(e.text("This is a sentence",o).corrected,QString("This is a sentence."));
+  o.periods=false;QCOMPARE(e.text("This is a sentence",o).corrected,QString("This is a sentence"));
+  o.commas=true;o.introductoryCommas=true;
+  QCOMPARE(e.text("However this works",o).corrected,QString("However, this works"));
+  o.english=false;QCOMPARE(e.text("However this works",o).corrected,QString("However this works"));
+  QCOMPARE(e.text(QString::fromUtf8("بنابراین این درست است"),o).corrected,QString::fromUtf8("بنابراین، این درست است"));
+  o.persian=false;QCOMPARE(e.text(QString::fromUtf8("بنابراین این درست است"),o).corrected,QString::fromUtf8("بنابراین این درست است"));
+ }
  void persianHalfSpaceRespectsLanguageSwitch(){
   Engine e;Options o;o.spelling=false;o.halfSpace=true;
   QCOMPARE(e.text(QString::fromUtf8("می روم"),o).corrected,QString::fromUtf8("می‌روم"));

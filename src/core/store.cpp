@@ -42,7 +42,7 @@ void Store::setValue(const QString &key,const QVariant &value) {
 Options Store::options()const {
  Options o;
 #define BOOL(k) o.k=value(#k,o.k).toBool()
- BOOL(english);BOOL(persian);BOOL(spelling);BOOL(abbreviations);BOOL(capitalization);BOOL(normalizePersian);BOOL(halfSpace);BOOL(periods);BOOL(commas);BOOL(spacing);BOOL(history);BOOL(statistics);BOOL(notifications);BOOL(browsers);
+ BOOL(english);BOOL(persian);BOOL(spelling);BOOL(abbreviations);BOOL(capitalization);BOOL(normalizePersian);BOOL(halfSpace);BOOL(periods);BOOL(commas);BOOL(spacing);BOOL(paragraphPeriods);BOOL(introductoryCommas);BOOL(questionMarks);BOOL(exclamationMarks);BOOL(semicolons);BOOL(colons);BOOL(history);BOOL(statistics);BOOL(notifications);BOOL(browsers);
 #undef BOOL
  o.sensitivity=std::clamp(value("sensitivity",0).toInt(),0,1);
  o.historyCount=std::clamp(value("historyCount",100).toInt(),1,500);

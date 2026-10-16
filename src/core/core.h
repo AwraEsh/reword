@@ -12,6 +12,7 @@ struct Options {
  bool english=true, persian=true, spelling=true, abbreviations=true;
  bool capitalization=false, normalizePersian=false, halfSpace=false;
  bool periods=false, commas=false, spacing=false;
+ bool paragraphPeriods=false, introductoryCommas=false, questionMarks=false, exclamationMarks=false, semicolons=false, colons=false;
  bool history=true, statistics=false, notifications=false, browsers=true;
  int sensitivity=0, historyCount=100, historyMiB=20, historyDays=30, maxCharacters=50000;
 };

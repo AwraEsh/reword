@@ -31,7 +31,7 @@ public:
  Field inspect(bool text)override{return decodeField(request({{"operation","inspect"},{"read",text}})["field"].toObject());}
  bool changed()override{return request({{"operation","changed"}})["changed"].toBool();}
  bool replace(const Field &expected,const QString &text,int caret)override{return request({{"operation","replace"},{"expected",encodeField(expected)},{"text",text},{"caret",caret}})["ok"].toBool();}
- QString description()const override{return healthy_?const_cast<LinuxProxy*>(this)->request({{"operation","description"}})["description"].toString():"Native helper unavailable · writing workspace only";}
+ QString description()const override{auto description=healthy_?const_cast<LinuxProxy*>(this)->request({{"operation","description"}})["description"].toString():QString{};return description.isEmpty()?"Native helper unavailable · writing workspace only":description;}
  bool shortcuts(const QString&fix,const QString&undo,const QString&pause)override{return request({{"operation","shortcuts"},{"fix",fix},{"undo",undo},{"pause",pause}})["ok"].toBool();}
  QString takeAction()override{return request({{"operation","action"}})["action"].toString();}
 };

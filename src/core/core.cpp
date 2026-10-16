@@ -186,11 +186,34 @@ Change Engine::text(const QString &input,const Options&o,const std::atomic_bool*
   }
  }
  if(o.spacing){
-  if(o.periods)controlled(QRegularExpression(R"( +([.!?]))"),[](const auto&m){return m.captured(1);});
+  if(o.periods)controlled(QRegularExpression(R"( +(\.))"),[](const auto&m){return m.captured(1);});
   if(o.commas)controlled(QRegularExpression(QString::fromUtf8(" +([,،])")),[](const auto&m){return m.captured(1);});
+  if(o.questionMarks)controlled(QRegularExpression(QString::fromUtf8(" +([?؟])")),[](const auto&m){return m.captured(1);});
+  if(o.exclamationMarks)controlled(QRegularExpression(" +(!)"),[](const auto&m){return m.captured(1);});
+  if(o.semicolons)controlled(QRegularExpression(QString::fromUtf8(" +([;؛])")),[](const auto&m){return m.captured(1);});
+  if(o.colons)controlled(QRegularExpression(" +(:)"),[](const auto&m){return m.captured(1);});
  }
  if(o.periods)controlled(QRegularExpression(R"((?<!\.)\.{2}(?!\.))"),[](const auto&){return QString(".");});
  if(o.commas)controlled(QRegularExpression(QString::fromUtf8("([,،])\\1+")),[](const auto&m){return m.captured(1);});
+ if(o.commas && o.introductoryCommas){
+  auto flags=QRegularExpression::MultilineOption|QRegularExpression::CaseInsensitiveOption;
+  if(o.english)controlled(QRegularExpression(R"(^([ \t]*(?:However|Therefore|Moreover|Unfortunately|Fortunately|In addition))([ \t]+)(?=[\p{L}]))",flags),[](const auto&m){return m.captured(1)+","+m.captured(2);},false);
+  if(o.persian)controlled(QRegularExpression(QString::fromUtf8(R"(^([ \t]*(?:با این حال|بنابراین|در نتیجه|به عنوان مثال))([ \t]+)(?=[\p{L}]))"),flags),[](const auto&m){return m.captured(1)+QString::fromUtf8("،")+m.captured(2);},false);
+ }
+ if(o.periods && o.paragraphPeriods){
+  auto lines=result.split('\n');
+  const QRegularExpression letters(R"([\p{L}]+)");
+  for(auto &line:lines){
+   if(expired()){out.error="Operation cancelled or timed out.";return out;}
+   auto content=line.trimmed();if(content.isEmpty()||!content.back().isLetter()||!protectedSpans(content).isEmpty())continue;
+   if(content.startsWith('-')||content.startsWith('*')||content.startsWith('>')||content.startsWith(QChar(0x2022)))continue;
+   bool fa=persian(QString(content.back()));if(fa?!o.persian:!o.english)continue;
+   int words=0;auto it=letters.globalMatch(content);while(it.hasNext()){it.next();++words;}
+   if(words<3)continue;
+   qsizetype end=line.size();while(end>0&&line[end-1].isSpace())--end;line.insert(end,'.');
+  }
+  result=lines.join('\n');
+ }
  if(expired()){out.error="Operation cancelled or timed out.";return out;}
  if(result.toUcs4().size()>std::clamp(o.maxCharacters,1,100000)){out.error="Corrected text exceeds the operation limit.";return out;}
  out.corrected=result;out.changed=result!=input;return out;

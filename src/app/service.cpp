@@ -26,7 +26,8 @@ void Service::tick(){
  if(!adapter_||!store_)return;
  try{
   auto signature=store_->value("fixShortcut","Ctrl+Alt+R").toString()+"|"+store_->value("undoShortcut","Ctrl+Alt+Z").toString()+"|"+store_->value("pauseShortcut","Ctrl+Alt+P").toString();
-  if(signature!=shortcutSignature_){auto s=signature.split('|');bool ok=adapter_->shortcuts(s[0],s[1],s[2]);shortcutSignature_=signature;emit state(adapter_->description(),ok);}
+  if(signature!=shortcutSignature_){auto s=signature.split('|');bool ok=adapter_->shortcuts(s[0],s[1],s[2]);shortcutSignature_=signature;shortcutsHealthy_=ok;lastDescription_=adapter_->description();emit state(lastDescription_,ok);}
+  auto now=QDateTime::currentMSecsSinceEpoch();if(now-platformPoll_>=1000){platformPoll_=now;auto description=adapter_->description();if(description!=lastDescription_){lastDescription_=description;emit state(description,shortcutsHealthy_);}}
   auto a=adapter_->takeAction();if(!a.isEmpty()){action(a);return;}
   if(!adapter_->changed())return;
   auto f=permitted();if(f.id.isEmpty()){previous_={};undoAfter_={};undoBefore_.clear();retry_.reset();retryStart_=-1;return;}

@@ -34,3 +34,9 @@ Remaining acceptance: Windows build/installer CI, real Windows field/hotkey test
 - Initial performance sample: 1,400 word calls, p95 17.15 ms; maximum 28.83 ms; 50,000-character synthetic passage 103 ms. This is a bounded synthetic sample, not a complete workload benchmark.
 - A two-hour offscreen idle stability run started; its report and process handle remain local under .deps/soak. Do not claim it passed before the process finishes.
 - Remote Linux CI passed at 86f2e9d. Windows progressed to a SetValue(BSTR) type error, now fixed for the next run.
+
+- Windows and Linux CI both succeeded at eade977, including the Windows .exe installer artifact. Physical Windows application acceptance was not implied.
+- Added independent punctuation categories and opt-in terminal-period / introductory-comma rules; all obey language and category switches.
+- Added user-only local activation: opening Reword again raises the existing process instead of creating a second background instance. Activation tests passed.
+- The first idle stability process ended before its requested two hours; marked interrupted, not passed. A detached replacement is running under .deps/soak-current with a binary SHA-256 in its report.
+- Shared-desktop GTK tests can lose focus to other real applications. A failing run reported fixtureStillFocused=0. Controlled display tests are being prepared; earlier successful native probes remain valid for their tested conditions.

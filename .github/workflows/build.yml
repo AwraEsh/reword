@@ -75,3 +75,9 @@ jobs:
         with:
           name: Reword-Windows
           path: dist/Reword-Setup-0.1.0.exe
+      - name: Native Windows field and shortcut probe
+        shell: pwsh
+        run: |
+          $env:PATH="$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/bin;$env:PATH"
+          ./build/Release/reword_windows_native_probe.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows integration probe failed' }

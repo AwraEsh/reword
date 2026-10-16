@@ -25,6 +25,7 @@ class WindowsAdapter final:public Adapter {
  }
 public:
  WindowsAdapter(){com_=SUCCEEDED(CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED));if(com_)CoCreateInstance(CLSID_CUIAutomation,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&automation_));
+  ComPtr<IUIAutomation2> timed;if(automation_&&SUCCEEDED(automation_.As(&timed))){timed->put_ConnectionTimeout(500);timed->put_TransactionTimeout(500);}
   WNDCLASSW cls{};cls.lpfnWndProc=windowProc;cls.hInstance=GetModuleHandleW(nullptr);cls.lpszClassName=L"RewordHotkeyWindow";RegisterClassW(&cls);
   window_=CreateWindowExW(0,cls.lpszClassName,L"",0,0,0,0,0,HWND_MESSAGE,nullptr,cls.hInstance,this);
  }
