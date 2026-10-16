@@ -64,3 +64,21 @@ Remaining acceptance: Windows build/installer CI, real Windows field/hotkey test
 - The detached two-hour idle run remains live at the last check (runner 9896,
   application 9904). It tests an earlier binary whose hash is in its local report,
   and is not acceptance of later source changes.
+
+
+## 2026-10-16: typing bursts and retry transactions
+
+- Reproduced three failing service cases before the fix: a completed typo followed
+  by the next partial word, two completed words in one poll, and alternation
+  advancing after a rejected write. The same tests pass after the change.
+- New service tests also cover offset changes, punctuation preservation, the
+  first/second/third cycle, focus reset, stale Undo, protected context and refusing
+  even to request password text. The native probes remain separate checks.
+- Fresh full local build and all four CTest suites passed (14.70 seconds).
+- CI's accessibility failure was traced to missing `at-spi2-core`, which owns the
+  D-Bus activation service. Added that runtime package to the Linux CI setup;
+  a fresh remote run is still required.
+- A private GNOME Wayland session with actual keyboard injection and the explicit
+  GTK Fcitx5 module corrected `teh ` to `the `. The module loaded, discovered the
+  synthetic application and wrote its heartbeat. Broader Wayland acceptance is
+  still pending; the first successful word is not a full acceptance result.

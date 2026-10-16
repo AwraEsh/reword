@@ -35,7 +35,8 @@ class Service : public QObject {
     void undo();
 
   public:
-    explicit Service(QString directory) : directory_(std::move(directory)) {}
+    explicit Service(QString directory, std::unique_ptr<Adapter> adapter = {})
+        : directory_(std::move(directory)), adapter_(std::move(adapter)) {}
     void cancel() {
         cancel_.store(true);
     }

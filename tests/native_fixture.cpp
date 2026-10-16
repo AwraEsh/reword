@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string>
+#include <cstdio>
 static GtkWidget *entry;
 static std::string pending;
 static gboolean command(gpointer) {
@@ -18,7 +19,13 @@ static gboolean command(gpointer) {
             break;
         auto s = pending.substr(0, end);
         pending.erase(0, end + 1);
-        if (s == "password")
+        if (s == "snapshot") {
+            const auto text = gtk_entry_get_text(GTK_ENTRY(entry));
+            auto encoded = g_base64_encode(reinterpret_cast<const guchar *>(text), strlen(text));
+            std::printf("DATA:%s\n", encoded);
+            std::fflush(stdout);
+            g_free(encoded);
+        } else if (s == "password")
             gtk_entry_set_visibility(GTK_ENTRY(entry), FALSE);
         else if (s == "plain")
             gtk_entry_set_visibility(GTK_ENTRY(entry), TRUE);

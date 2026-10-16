@@ -25,6 +25,11 @@ struct Field {
          plain = false;
     quint64 revision = 0;
 };
+struct CompletedWord {
+    QString token;
+    int start = 0;
+};
+QVector<CompletedWord> completedWords(const Field &before, const Field &after);
 struct Access {
     bool allowed = false;
     bool browser = false;

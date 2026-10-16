@@ -8,7 +8,8 @@ void Service::start() {
     try {
         store_ = std::make_unique<Store>(directory_);
         engine_ = std::make_unique<Engine>();
-        adapter_ = createAdapter();
+        if (!adapter_)
+            adapter_ = createAdapter();
         wayland_ = qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland";
         timer_ = new QTimer(this);
         connect(timer_, &QTimer::timeout, this, &Service::tick);
@@ -125,41 +126,50 @@ void Service::tick() {
             return; // Deleting a correction keeps its retry session.
         if (f.caret > f.text.size())
             return;
-        auto prefix = f.text.left(f.caret);
-        static const QRegularExpression ending(R"(([^\s]+?)([\s.,!?،؛؟]+)$)");
-        auto match = ending.match(prefix);
-        if (!match.hasMatch())
+        const auto completed = completedWords(old, f);
+        if (completed.isEmpty())
             return;
-        auto token = match.captured(1);
-        int start = match.capturedStart(1);
-        if (start > 0 && f.text.mid(0, start) != old.text.mid(0, start))
-            retry_.reset();
         auto o = store_->options();
         o.abbreviations = false;
         engine_->setPersonal(store_->words(), store_->replacements());
-        auto correct = engine_->word(token, o, f.text.left(start).right(128));
-        if (correct == token) {
-            if (retryStart_ == start && token != retryWord_) {
-                retry_.reset();
-                retryStart_ = -1;
+        int offset = 0;
+        for (const auto &word : completed) {
+            int start = word.start + offset;
+            const auto &token = word.token;
+            auto correct = engine_->word(token, o, f.text.left(start).right(128));
+            if (correct == token) {
+                if (retryStart_ == start && token != retryWord_) {
+                    retry_.reset();
+                    retryStart_ = -1;
+                }
+                continue;
             }
-            return;
-        }
-        retryStart_ = start;
-        retryPrefix_ = f.text.left(start);
-        retryWord_ = token;
-        if (!retry_.shouldCorrect(f.id, start, token, QDateTime::currentMSecsSinceEpoch()))
-            return;
-        QString updated = f.text;
-        updated.replace(start, token.size(), correct);
-        if (adapter_->replace(f, updated, f.caret + correct.size() - token.size())) {
+            auto savedRetry = retry_;
+            retryStart_ = start;
+            retryPrefix_ = f.text.left(start);
+            retryWord_ = token;
+            if (!retry_.shouldCorrect(f.id, start, token, QDateTime::currentMSecsSinceEpoch()))
+                continue;
+            QString updated = f.text;
+            updated.replace(start, token.size(), correct);
+            int caret = f.caret + correct.size() - token.size();
+            if (!adapter_->replace(f, updated, caret)) {
+                retry_ = savedRetry;
+                break;
+            }
             undoBefore_ = f.text;
             undoCaret_ = f.caret;
             undoAfter_ = adapter_->inspect(true);
             previous_ = undoAfter_;
             store_->count(token, correct, o);
             emit corrected(token, correct);
+            if (undoAfter_.id != f.id || undoAfter_.app != f.app || undoAfter_.text != updated ||
+                undoAfter_.caret != caret)
+                break;
+            f = undoAfter_;
+            offset += correct.size() - token.size();
         }
+
     } catch (...) {
         previous_ = {};
         retry_.reset();

@@ -127,6 +127,33 @@ static bool overlaps(const Spans &spans, qsizetype start, qsizetype end) {
                                [](auto r, qsizetype n) { return r.second <= n; });
     return it != spans.end() && it->first < end;
 }
+QVector<CompletedWord> completedWords(const Field &before, const Field &after) {
+    // Only an insertion at the observed caret can create new completed words.
+    // A replacement, selection, deletion or navigation is not a typing burst.
+    if (before.app != after.app || before.id != after.id || before.caret < 0 ||
+        after.caret <= before.caret || before.caret > before.text.size() ||
+        after.caret > after.text.size() || before.selectionStart >= 0 ||
+        after.selectionStart >= 0 ||
+        after.text.size() - before.text.size() != after.caret - before.caret ||
+        after.text.left(before.caret) != before.text.left(before.caret) ||
+        after.text.mid(after.caret) != before.text.mid(before.caret))
+        return {};
+    auto protectedRanges = protectedSpans(after.text);
+    static const QRegularExpression boundaries(R"(([^\s.,!?،؛؟]+)([\s.,!?،؛؟]+))");
+    auto matches = boundaries.globalMatch(after.text.left(after.caret));
+    QVector<CompletedWord> words;
+    while (matches.hasNext()) {
+        auto match = matches.next();
+        if (match.capturedStart(2) < before.caret ||
+            overlaps(protectedRanges, match.capturedStart(1), match.capturedEnd(1)))
+            continue;
+        words.append({match.captured(1), int(match.capturedStart(1))});
+        // Large pastes belong to the cancellable passage operation.
+        if (words.size() > 32)
+            return {};
+    }
+    return words;
+}
 static int distance(const QString &a, const QString &b) {
     QVector<int> prev(b.size() + 1), curr(b.size() + 1), before;
     for (int j = 0; j <= b.size(); ++j)
