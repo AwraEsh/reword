@@ -80,3 +80,11 @@ scripts name their required host tools in their help/docstrings.
 The source has no redistribution license yet; [LICENSE](../LICENSE) states the
 current terms. Third-party licenses are recorded separately. Public visibility
 does not grant a source license or prove installer acceptance.
+
+## In-flight storage branch
+
+`codex/storage-permissions` is checked out at
+`/home/debian/.codex/worktrees/storage-access/reword`. Storage hardening and its
+regressions pass all five local CTest suites; Windows native ACL verification
+and independent review are pending. Do not treat the develop branch or older
+installer as containing this change until the branch is integrated.

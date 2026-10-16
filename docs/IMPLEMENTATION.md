@@ -161,3 +161,26 @@ Remaining acceptance: Windows build/installer CI, real Windows field/hotkey test
   from measured final-bundle requirements. Copyleft source delivery and full
   bundled notices remain release work; see
   [Qt's source-delivery guidance](https://www.qt.io/development/download-open-source).
+
+## Storage access hardening — 2026-10-16
+
+Work continues on `codex/storage-permissions` in the managed `storage-access`
+worktree. New regression tests first reproduced two Linux failures: a registered
+SQL connection survived a failed Store constructor, and an existing SQLite
+sidecar retained mode 0644. The constructor now releases its connection on all
+initialization exceptions. Storage permissions are checked before SQLite opens
+existing database/sidecar paths, and again after a new database is created.
+
+On Linux the helper opens paths without following their final symlink, checks
+current-account ownership and regular-file/directory type, and requires chmod
+0700/0600 to succeed. On Windows it opens the native object without following
+reparse points and installs a protected DACL with explicit full access for the
+current account and SYSTEM; directory entries protect newly created children.
+Failure stops storage initialization with a fixed message containing no path or
+user text. Storage remains unencrypted.
+
+Local Release build succeeded and all five CTest suites passed (16.56 seconds),
+including storage persistence and unchanged synthetic sidecar content. The
+Windows implementation still requires fresh Windows CI evidence. This change
+does not claim protection against a malicious process already running as the
+same account. No production release is accepted.
