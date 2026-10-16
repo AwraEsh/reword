@@ -210,3 +210,15 @@ compares the external alias DACL and content before/after rejection. This Window
 fixture has not yet run successfully; the follow-up requires CI evidence. All
 five local suites passed after implementation (12.82 seconds); platform-specific
 link tests explicitly skip on the other OS.
+
+CI for 6c24b15 (38949857941) compiled Windows successfully but all storage-using
+tests failed during initialization. Linux, including native GTK probes, passed.
+A guarded initialization test now reports only fixed failure-stage text and an
+optional numeric Win32 error. The Windows workflow inspects its synthetic test
+temporary-directory ancestors to distinguish a redirected path from native
+permission API failure. Security protections are not weakened to make CI pass.
+
+A fresh private GNOME 48.7 probe on this source failed while creating its
+RemoteDesktop session (the three-second D-Bus call timed out). The process is
+terminal; no correction assertion ran. This is not counted as current Wayland
+acceptance and does not supersede earlier recorded successful probes.

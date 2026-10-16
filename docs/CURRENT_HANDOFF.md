@@ -83,8 +83,10 @@ does not grant a source license or prove installer acceptance.
 
 ## In-flight storage branch
 
-`codex/storage-permissions` is checked out at
-`/home/debian/.codex/worktrees/storage-access/reword`. Storage hardening and its
-regressions pass all five local CTest suites; Windows native ACL verification
-and independent review are pending. Do not treat the develop branch or older
+`codex/storage-permissions` is in the attached managed `storage-access` worktree.
+Storage hardening and its regressions pass all five local CTest suites.
+Independent review found no remaining Critical/Important defects within the
+documented scope. Windows native ACL verification is still pending; its latest
+CI compiled but storage initialization failed, so diagnostic evidence is being
+added before integration. Do not treat the develop branch or older
 installer as containing this change until the branch is integrated.

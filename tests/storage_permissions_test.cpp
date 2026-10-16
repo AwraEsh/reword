@@ -78,6 +78,17 @@ static QString securityError(const QString &path, bool directory) {
 class StoragePermissionsTest : public QObject {
     Q_OBJECT
   private slots:
+    void storageInitializationIsAvailable() {
+        QTemporaryDir data;
+        QVERIFY(data.isValid());
+        try {
+            reword::Store store(data.path() + "/private-data");
+            store.setValue("synthetic", true);
+            QCOMPARE(store.value("synthetic").toBool(), true);
+        } catch (const std::exception &error) {
+            QFAIL(error.what());
+        }
+    }
     void failedInitializationRemovesConnection() {
         QTemporaryDir data;
         QFile file(data.path() + "/reword.sqlite");

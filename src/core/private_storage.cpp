@@ -15,11 +15,14 @@
 #include <QDir>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <vector>
 namespace reword {
 namespace {
-[[noreturn]] void failed() {
-    throw std::runtime_error("Cannot establish private local storage access.");
+[[noreturn]] void failed(const char *stage = "Cannot establish private local storage access.",
+                         unsigned long code = 0) {
+    throw std::runtime_error(std::string(stage) +
+                             (code ? " System error " + std::to_string(code) + "." : ""));
 }
 } // namespace
 void validateStorageLocation(const QString &path) {
@@ -30,7 +33,7 @@ void validateStorageLocation(const QString &path) {
 #ifdef _WIN32
         auto attributes = GetFileAttributesW(reinterpret_cast<LPCWSTR>(current.utf16()));
         if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT))
-            failed();
+            failed("Linked storage locations are not supported.");
 #else
         if (QFileInfo(current).isSymLink())
             failed();
@@ -50,19 +53,20 @@ static void accessStoragePath(const QString &path, bool directory, bool apply) {
                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                     FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
     if (raw == INVALID_HANDLE_VALUE)
-        failed();
+        failed("Cannot open the private storage object.", GetLastError());
     std::unique_ptr<void, decltype(&CloseHandle)> file(raw, &CloseHandle);
     BY_HANDLE_FILE_INFORMATION info{};
-    if (!GetFileInformationByHandle(file.get(), &info) ||
-        (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ||
+    if (!GetFileInformationByHandle(file.get(), &info))
+        failed("Cannot inspect the private storage object.", GetLastError());
+    if ((info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ||
         bool(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != directory ||
         (!directory && info.nNumberOfLinks != 1))
-        failed();
+        failed("Private storage object type or link count is unsafe.");
     if (!apply)
         return;
     HANDLE rawToken = nullptr;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &rawToken))
-        failed();
+        failed("Cannot inspect the storage account token.", GetLastError());
     std::unique_ptr<void, decltype(&CloseHandle)> token(rawToken, &CloseHandle);
     DWORD bytes = 0;
     GetTokenInformation(token.get(), TokenUser, nullptr, 0, &bytes);
@@ -70,12 +74,12 @@ static void accessStoragePath(const QString &path, bool directory, bool apply) {
         failed();
     std::vector<BYTE> buffer(bytes);
     if (!GetTokenInformation(token.get(), TokenUser, buffer.data(), bytes, &bytes))
-        failed();
+        failed("Cannot read the storage account identity.", GetLastError());
     auto user = reinterpret_cast<TOKEN_USER *>(buffer.data())->User.Sid;
     alignas(DWORD) BYTE system[SECURITY_MAX_SID_SIZE];
     DWORD systemBytes = sizeof(system);
     if (!CreateWellKnownSid(WinLocalSystemSid, nullptr, system, &systemBytes))
-        failed();
+        failed("Cannot construct the storage system identity.", GetLastError());
     EXPLICIT_ACCESSW entries[2]{};
     PSID accounts[] = {user, system};
     for (int i = 0; i < 2; ++i) {
@@ -87,14 +91,16 @@ static void accessStoragePath(const QString &path, bool directory, bool apply) {
         entries[i].Trustee.ptstrName = reinterpret_cast<LPWSTR>(accounts[i]);
     }
     PACL rawAcl = nullptr;
-    if (SetEntriesInAclW(2, entries, nullptr, &rawAcl) != ERROR_SUCCESS)
-        failed();
+    auto aclStatus = SetEntriesInAclW(2, entries, nullptr, &rawAcl);
+    if (aclStatus != ERROR_SUCCESS)
+        failed("Cannot construct the private storage access list.", aclStatus);
     std::unique_ptr<void, decltype(&LocalFree)> acl(rawAcl, &LocalFree);
-    if (SetSecurityInfo(file.get(), SE_FILE_OBJECT,
-                        OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION |
-                            PROTECTED_DACL_SECURITY_INFORMATION,
-                        user, nullptr, rawAcl, nullptr) != ERROR_SUCCESS)
-        failed();
+    auto status = SetSecurityInfo(file.get(), SE_FILE_OBJECT,
+                                  OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION |
+                                      PROTECTED_DACL_SECURITY_INFORMATION,
+                                  user, nullptr, rawAcl, nullptr);
+    if (status != ERROR_SUCCESS)
+        failed("Cannot restrict the private storage access list.", status);
 #else
     int fd = ::open(QFile::encodeName(path).constData(),
                     O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK | (directory ? O_DIRECTORY : 0));
