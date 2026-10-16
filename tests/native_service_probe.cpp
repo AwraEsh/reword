@@ -19,7 +19,7 @@ int main(int argc,char**argv){
  auto command=[&](QByteArray text){fixture.write(text+'\n');fixture.waitForBytesWritten();pump(160);};
  auto text=[&]{return observer->inspect(true).text;};
  auto finish=[&](const char*message,int code){std::cout<<message<<'\n';if(code!=0){auto field=observer->inspect(false);std::cerr<<"seen="<<seenFixture<<" fixtureStillFocused="<<(field.app==fixturePath&&field.focused)<<" state="<<serviceState.toStdString()<<" message="<<lastMessage.toStdString()<<"\n";}fixture.write("quit\n");fixture.waitForBytesWritten();fixture.waitForFinished(2000);service.stop();return code;};
- if(!until([&]{return observer->inspect(false).app==fixturePath;}))return finish("FAIL: fixture focus unavailable.",1);
+ if(!until([&]{auto field=observer->inspect(false);return field.app==fixturePath&&field.focused&&field.known&&!field.locked;}))return finish("FAIL: fixture focus unavailable.",1);
  pump(300);command("text:");command("text:teh ");
  if(!until([&]{return text()=="the ";}))return finish("FAIL: first attempt was not corrected.",1);
  command("text:");command("text:teh ");pump(300);

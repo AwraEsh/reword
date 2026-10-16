@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Observe a real offscreen app and its helper without recording user content."""
-import argparse, json, os, pathlib, subprocess, time, datetime, signal
+import argparse, json, os, pathlib, subprocess, time, datetime, signal, hashlib
 parser=argparse.ArgumentParser();parser.add_argument('--minutes',type=float,default=120);parser.add_argument('--output',default='.deps/soak');args=parser.parse_args()
 root=pathlib.Path(__file__).resolve().parents[1];output=(root/args.output).resolve();output.mkdir(parents=True,exist_ok=True)
 env=dict(os.environ,QT_QPA_PLATFORM='offscreen',QT_QUICK_BACKEND='software',QT_QPA_PLATFORMTHEME='',REWORD_DATA_DIR=str(output/'data'))
 process=subprocess.Popen([str(root/'build/reword')],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-report={'pid':process.pid,'startedUtc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'targetSeconds':args.minutes*60,'state':'running','samples':0,'maxRssKiB':0,'appCpuSeconds':0,'helperMaxRssKiB':0}
+report={'pid':process.pid,'binarySha256':hashlib.sha256((root/'build/reword').read_bytes()).hexdigest(),'startedUtc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'targetSeconds':args.minutes*60,'state':'running','samples':0,'maxRssKiB':0,'appCpuSeconds':0,'helperMaxRssKiB':0}
 started=time.monotonic();ticks=os.sysconf('SC_CLK_TCK');baseline=None
 try:
  while time.monotonic()-started<args.minutes*60:

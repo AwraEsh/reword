@@ -20,7 +20,7 @@ class LinuxAdapter final:public Adapter {
  static inline int trapError_=0;
  static inline XErrorHandler previousHandler_=nullptr;
  static int errorHandler(Display*d,XErrorEvent*e){if(d==trapped_){trapError_=e->error_code;return 0;}return previousHandler_?previousHandler_(d,e):0;}
- bool dirty_=true;QElapsedTimer lastPoll_;
+ bool dirty_=true;QElapsedTimer lastPoll_,lastScan_;int scanApplication_=0;
  Display *display_=nullptr; QHash<int,QString> keys_; bool wayland_=false;
  static void event(AtspiEvent *e,void *data){
   auto self=static_cast<LinuxAdapter*>(data);self->dirty_=true;
@@ -29,6 +29,24 @@ class LinuxAdapter final:public Adapter {
    self->focus_=ATSPI_ACCESSIBLE(g_object_ref(e->source));
   }
   g_boxed_free(ATSPI_TYPE_EVENT,e);
+ }
+ void discoverInitialFocus(){
+  if(focus_ || (lastScan_.isValid()&&lastScan_.elapsed()<1000))return;
+  lastScan_.start();QElapsedTimer budget;budget.start();int nodes=0;
+  std::function<AtspiAccessible*(AtspiAccessible*,int)> visit=[&](AtspiAccessible*object,int depth)->AtspiAccessible*{
+   if(!object||depth>10||++nodes>400||budget.elapsed()>300)return nullptr;
+   auto role=atspi_accessible_get_role(object,nullptr);
+   GRef<AtspiStateSet> states(atspi_accessible_get_state_set(object),g_object_unref);
+   if(!states)return nullptr;
+   if((role==ATSPI_ROLE_FRAME||role==ATSPI_ROLE_WINDOW)&&!atspi_state_set_contains(states.get(),ATSPI_STATE_ACTIVE))return nullptr;
+   if(atspi_state_set_contains(states.get(),ATSPI_STATE_FOCUSED)&&(role==ATSPI_ROLE_ENTRY||role==ATSPI_ROLE_TEXT||role==ATSPI_ROLE_PASSWORD_TEXT))return ATSPI_ACCESSIBLE(g_object_ref(object));
+   int count=atspi_accessible_get_child_count(object,nullptr);
+   for(int i=0;i<count&&nodes<400&&budget.elapsed()<300;++i){GRef<AtspiAccessible> child(atspi_accessible_get_child_at_index(object,i,nullptr),g_object_unref);if(auto result=visit(child.get(),depth+1))return result;}
+   return nullptr;
+  };
+  GRef<AtspiAccessible> desktop(atspi_get_desktop(0),g_object_unref);if(!desktop)return;
+  int count=atspi_accessible_get_child_count(desktop.get(),nullptr);
+  for(int i=0;i<count&&budget.elapsed()<300;++i){int index=scanApplication_++%count;GRef<AtspiAccessible> application(atspi_accessible_get_child_at_index(desktop.get(),index,nullptr),g_object_unref);auto found=visit(application.get(),0);if(found){if(!focus_)focus_=found;else g_object_unref(found);return;}}
  }
  bool unlocked(){
   // A missing lock service is uncertainty, not permission to read text.
@@ -66,7 +84,7 @@ public:
  Field inspect(bool includeText)override {
   if(!available_)return {};
   for(int i=0;i<32 && g_main_context_pending(nullptr);++i)g_main_context_iteration(nullptr,false);
-  Field f;if(!focus_)return f;
+  discoverInitialFocus();Field f;if(!focus_)return f;
   GError *error=nullptr;
   auto pid=atspi_accessible_get_process_id(focus_,&error);
   if(error){g_error_free(error);return f;}
