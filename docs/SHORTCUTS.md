@@ -34,8 +34,16 @@ Three controlled native X11 cycles pass on the current Debian host. Another
 native connection reserves the new shortcut; Service reverts settings and the
 previous Pause binding is physically delivered through XTest on the private
 X server. The Windows native probe reserves a Win32 hotkey and uses SendInput to
-verify the restored Pause binding; Windows compilation and execution require
-fresh CI and are not yet counted as passed.
+verify the restored Pause binding. Both Linux and Windows passed on source
+9915766 in [workflow run 38957426101](https://github.com/AwraEsh/reword/actions/runs/38957426101)
+and the corresponding PR run 38957436135. Windows evidence is from the Windows
+Server 2022 CI runner; a normal Windows 10/11 desktop account remains untested.
+
+Fresh private GNOME Wayland Qt and GTK3 runs also exit successfully on that
+source. Qt confirms rejected native writes, alternating correction, Undo, code
+protection, pause, selected correction/history and password exclusion. GTK3
+passes the live cases and refuses selection without an exposed anchor, leaving
+text and history unchanged. These fixtures do not establish browser-wide support.
 
 Native X11 tests need Xvfb, Openbox, Xauth, xprop, AT-SPI and libXtst (development
 headers for the probe build). Local missing tools were extracted under ignored

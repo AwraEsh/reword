@@ -288,5 +288,8 @@ Native X11 conflict probes also verify restored Pause delivery with XTest on a
 private display. Three cycles complete successfully using ignored rootless test
 tools. The first assertion-complete run exposed private GVFS cleanup failure;
 the test directory now outlives its D-Bus session, with bounded own-mount cleanup.
-The analogous native Windows conflict/SendInput probe has been added but needs
-fresh Windows CI. No Windows acceptance is inferred from the local X11 run.
+The analogous native Windows conflict/SendInput probe passes fresh Windows
+Server 2022 CI on source 9915766 (runs 38957426101 and 38957436135). PR #3 merged
+as a273876. Both private GNOME Wayland Qt/GTK3 probes exit successfully on the
+same source. This is CI/fixture evidence, not ordinary Windows 10/11 desktop or
+broad application acceptance. Existing packaged artifacts predate this change.

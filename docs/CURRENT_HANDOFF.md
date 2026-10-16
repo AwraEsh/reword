@@ -63,7 +63,8 @@ scripts name their required host tools in their help/docstrings.
    protected native NTFS DACLs and outside hard-link preservation now pass CI on
    the Windows Server 2022 runner.
 3. Complete keyboard-only navigation, populated lists and dialogs, plus rendered
-   Windows UI review. Check native shortcut conflict reporting and rollback.
+   Windows UI review. Native shortcut conflict recovery now passes Linux/Windows
+   CI; ordinary Windows desktop interaction still needs acceptance.
 4. Rebuild Linux AppImage/.deb from the final source; current local packages are
    older. Verify runtime closure, exact minimum glibc, host integration dependency
    declarations, bundled third-party notices and clean-environment launch.
@@ -107,12 +108,15 @@ pass with a clean environment and private data/D-Bus, without developer paths.
 These are development artifacts, not an accepted public release. See
 [package checks](LINUX_PACKAGING_CHECKS.md) for the remaining distribution gates.
 
-## In-flight shortcut branch
+## Shortcut recovery integration
 
-`codex/shortcut-conflicts` is in the attached managed `shortcut-conflicts`
-worktree. Transactional rollback, concurrent/revised settings, temporary storage
-failure and unavailable-registration recovery are covered by Service regressions.
-The full six-suite local run passes. Native X11 conflict/old-Pause delivery passes
-three controlled cycles, including cleanup. Windows has a corresponding native
-probe but fresh CI is pending. Read [shortcut verification](SHORTCUTS.md) before
-continuing; neither develop nor the earlier installers contain this branch yet.
+[PR #3](https://github.com/AwraEsh/reword/pull/3) merged as a273876 after source
+9915766 passed both platforms in [run 38957426101](https://github.com/AwraEsh/reword/actions/runs/38957426101)
+and PR run 38957436135. All six suites pass after integration on the primary
+checkout (15.78 seconds). Transactional rollback, concurrent/revised settings,
+temporary storage failure and unavailable-registration recovery are covered by
+Service regressions. Native X11 confirms restored Pause delivery in three private
+cycles; Windows confirms it with SendInput on the Server 2022 runner. Fresh
+private GNOME Wayland Qt/GTK3 probes also exit successfully. Read
+[shortcut verification](SHORTCUTS.md) for scope and limits. Previously downloaded
+installers and local distribution artifacts predate this integration.
