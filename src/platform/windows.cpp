@@ -68,7 +68,9 @@ public:
   if(!sameTarget(expected,inspect(true)))return false;
   auto e=validated_;ComPtr<IUIAutomationValuePattern> v;BOOL password=TRUE,focused=FALSE;
   if(!e||FAILED(e->get_CurrentIsPassword(&password))||password||FAILED(e->get_CurrentHasKeyboardFocus(&focused))||!focused||!unlocked()||FAILED(e->GetCurrentPatternAs(UIA_ValuePatternId,IID_PPV_ARGS(&v))))return false;
-  if(FAILED(v->SetValue(reinterpret_cast<LPCWSTR>(text.utf16()))))return false;
+  BSTR replacement=SysAllocStringLen(reinterpret_cast<const OLECHAR*>(text.utf16()),UINT(text.size()));
+  if(!replacement)return false;HRESULT written=v->SetValue(replacement);SysFreeString(replacement);
+  if(FAILED(written))return false;
   ComPtr<IUIAutomationTextPattern> p;ComPtr<IUIAutomationTextRange> r;
   if(SUCCEEDED(e->GetCurrentPatternAs(UIA_TextPatternId,IID_PPV_ARGS(&p)))&&SUCCEEDED(p->get_DocumentRange(&r))){
    r->MoveEndpointByRange(TextPatternRangeEndpoint_End,r.Get(),TextPatternRangeEndpoint_Start);

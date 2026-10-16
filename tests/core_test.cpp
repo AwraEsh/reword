@@ -29,6 +29,11 @@ private slots:
   o.capitalization=false; o.periods=false; o.commas=false; o.spacing=true;
   QCOMPARE(e.text("hello  .. world ,,",o).corrected,QString("hello  .. world ,,"));
  }
+ void persianHalfSpaceRespectsLanguageSwitch(){
+  Engine e;Options o;o.spelling=false;o.halfSpace=true;
+  QCOMPARE(e.text(QString::fromUtf8("می روم"),o).corrected,QString::fromUtf8("می‌روم"));
+  o.persian=false;QCOMPARE(e.text(QString::fromUtf8("می روم"),o).corrected,QString::fromUtf8("می روم"));
+ }
  void protectedTextSurvivesEveryRule() {
   Engine e;Options o;o.spelling=false;o.abbreviations=false;o.capitalization=true;o.periods=true;o.commas=true;o.spacing=true;o.halfSpace=true;
   for(const auto &s:QStringList{"https://example.com/file","../teh/file","printf(\"hello,,world\")","`teh code`","```teh code```"})QCOMPARE(e.text(s,o).corrected,s);

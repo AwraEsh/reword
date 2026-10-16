@@ -27,3 +27,10 @@ Ruling: the current session is X11; Wayland runtime acceptance requires a real W
 - GitHub CI at commit 07f575b failed: Windows COM header include order, Linux missing accessibility bus. Fixes are now implemented and need a fresh remote run.
 
 Remaining acceptance: Windows build/installer CI, real Windows field/hotkey tests, real GNOME Wayland/Fcitx integration, packaged launch checks, extended stability and performance evidence. This is a development build, not production acceptance.
+
+- End-to-end GTK service probe now verifies first/second/third correction, both Undo paths, pause, selected-text history and password exclusion. The probe waits for service initialization before creating its fixture.
+- New regression tests cover Unicode half-space normalization, immediate cancellation, storage failure containment and mutual exclusion of full-passage work.
+- Full-passage jobs share a user-local operation lock across the GUI service and Fcitx addon.
+- Initial performance sample: 1,400 word calls, p95 17.15 ms; maximum 28.83 ms; 50,000-character synthetic passage 103 ms. This is a bounded synthetic sample, not a complete workload benchmark.
+- A two-hour offscreen idle stability run started; its report and process handle remain local under .deps/soak. Do not claim it passed before the process finishes.
+- Remote Linux CI passed at 86f2e9d. Windows progressed to a SetValue(BSTR) type error, now fixed for the next run.

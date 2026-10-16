@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QTimer>
 #include <QFutureWatcher>
+#include <QLockFile>
 namespace reword {
 class Service:public QObject {
  Q_OBJECT
@@ -12,6 +13,7 @@ class Service:public QObject {
  RetryCycle retry_;QString retryPrefix_,retryWord_;int retryStart_=-1;QString lastAsk_;QDate askDate_;QString shortcutSignature_;
  std::atomic_bool cancel_{false};bool wayland_=false,jobRunning_=false;
  QFutureWatcher<Change> *job_=nullptr;
+ std::unique_ptr<QLockFile> jobLock_;
  void runText(QString input,bool native,Field field={});
  void tick();
  Field permitted();

@@ -10,7 +10,7 @@ void Service::start(){
  timer_=new QTimer(this);connect(timer_,&QTimer::timeout,this,&Service::tick);timer_->start(80);
  }catch(...){emit message("Native integration could not start. Use the writing workspace.");}
 }
-void Service::stop(){cancel_.store(true);if(job_){job_->disconnect(this);job_->waitForFinished();delete job_;job_=nullptr;}if(timer_)timer_->stop();previous_={};undoAfter_={};undoBefore_.clear();adapter_.reset();engine_.reset();store_.reset();}
+void Service::stop(){cancel_.store(true);if(job_){job_->disconnect(this);job_->waitForFinished();delete job_;job_=nullptr;}jobLock_.reset();if(timer_)timer_->stop();previous_={};undoAfter_={};undoBefore_.clear();adapter_.reset();engine_.reset();store_.reset();}
 Field Service::permitted(){
  auto f=adapter_->inspect(false);if(f.app.isEmpty())return {};
  store_->discover(f.app,QFileInfo(f.app).fileName(),restrictedApp(f.app));
@@ -59,14 +59,17 @@ void Service::tick(){
  }catch(...){previous_={};retry_.reset();emit message("An integration operation failed safely. No further edit was attempted.");}
 }
 void Service::runText(QString input,bool native,Field field){
- if(jobRunning_){emit message("A correction is already running.");return;}
+ if(jobRunning_){if(native)emit message("A correction is already running.");else emit result(input,input,"A correction is already running.",false);return;}
  if(!store_){emit result(input,input,"Correction engine is unavailable.",native);return;}
- jobRunning_=true;
+ auto operationLock=std::make_unique<QLockFile>(directory_+"/operation.lock");operationLock->setStaleLockTime(15000);
+ if(!operationLock->tryLock(0)){emit result(input,input,"Another correction is already running.",native);return;}
+ jobLock_=std::move(operationLock);jobRunning_=true;
  auto options=store_->options();auto words=store_->words();auto replacements=store_->replacements();
  auto revision=store_->value("configRevision",0).toLongLong();
  job_=new QFutureWatcher<Change>(this);
  connect(job_,&QFutureWatcher<Change>::finished,this,[this,input,native,field,revision]{
-  auto completed=job_;job_=nullptr;jobRunning_=false;auto change=completed->result();completed->deleteLater();
+  auto operationLock=std::move(jobLock_);auto completed=job_;job_=nullptr;jobRunning_=false;completed->deleteLater();
+  try{auto change=completed->result();
   if(cancel_.load() || revision!=store_->value("configRevision",0).toLongLong())change.error="Cancelled or settings changed. Nothing was replaced.";
   if(!change.error.isEmpty()){emit result(input,input,change.error,native);return;}
   if(!native){emit result(input,change.corrected,{},false);return;}
@@ -78,6 +81,7 @@ void Service::runText(QString input,bool native,Field field){
    undoBefore_=field.text;undoCaret_=field.caret;undoAfter_=adapter_->inspect(true);previous_=undoAfter_;
    store_->history(input,change.corrected,store_->options());emit result(input,change.corrected,{},true);
   }catch(...){emit message("The operation stopped safely.");}
+  }catch(...){emit result(input,input,"Local storage is unavailable. The operation stopped.",native);}
  });
  job_->setFuture(QtConcurrent::run([this,input,options,words,replacements]{
   try{QElapsedTimer elapsed;elapsed.start();Engine engine;engine.setPersonal(words,replacements);
@@ -85,7 +89,7 @@ void Service::runText(QString input,bool native,Field field){
   }catch(...){return Change{input,input,false,"Correction failed. The original is unchanged."};}
  }));
 }
-void Service::processText(QString input){runText(input,false);}
+void Service::processText(QString input){try{runText(input,false);}catch(...){jobRunning_=false;jobLock_.reset();emit result(input,input,"Correction could not start. Check local storage access.",false);}}
 void Service::fixSelection(){
  if(jobRunning_){emit message("A correction is already running.");return;}
  cancel_.store(false);auto field=permitted();
@@ -96,5 +100,5 @@ void Service::undo(){
  auto f=permitted();if(undoBefore_.isEmpty()||!sameTarget(undoAfter_,f)){emit message("Undo is no longer safe. Copy the original from History if this was a selected-text correction.");return;}
  if(adapter_->replace(f,undoBefore_,undoCaret_)){previous_=adapter_->inspect(true);undoBefore_.clear();undoAfter_={};emit message("Correction restored.");}
 }
-void Service::action(QString name){try{if(!adapter_||!store_)return;if(name=="fix")fixSelection();else if(name=="undo")undo();else if(name=="pause"){store_->pause(store_->paused()?0:-1);previous_={};retry_.reset();emit message(store_->paused()?"Reword paused.":"Reword resumed.");}}catch(...){emit message("The operation stopped safely.");}}
+void Service::action(QString name){try{if(!adapter_||!store_)return;if(name=="fix")fixSelection();else if(name=="undo")undo();else if(name=="pause"){store_->pause(store_->paused()?0:-1);previous_={};retry_.reset();emit message(store_->paused()?"Reword paused.":"Reword resumed.");}}catch(...){if(!job_){jobRunning_=false;jobLock_.reset();}emit message("The operation stopped safely.");}}
 }

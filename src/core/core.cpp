@@ -156,7 +156,7 @@ Change Engine::text(const QString &input,const Options&o,const std::atomic_bool*
      if(o.normalizePersian)token.replace(QChar(0x064a),QChar(0x06cc)).replace(QChar(0x0643),QChar(0x06a9));
     }
     if(o.english && o.abbreviations && token.compare("im",Qt::CaseInsensitive)==0)token="I am";
-    else token=word(token,o,(result+replaced).right(128));
+    else token=word(token,o,(result.right(128)+replaced.right(128)).right(128));
     replaced+=token;p=wm.capturedEnd();
    }
    chunk=replaced+chunk.mid(p);
@@ -168,12 +168,15 @@ Change Engine::text(const QString &input,const Options&o,const std::atomic_bool*
   for(qsizetype i=position-1;i>=0;--i)if(result[i].isLetter())return persian(QString(result[i]))?o.persian:o.english;
   return false;
  };
- auto controlled=[&](const QRegularExpression &re,auto transform){
+ auto controlled=[&](const QRegularExpression &re,auto transform,bool checkLanguage=true){
   QString next;qsizetype pos=0;const auto spans=protectedSpans(result);auto it=re.globalMatch(result);
-  while(it.hasNext()){auto m=it.next();next+=result.mid(pos,m.capturedStart()-pos);next+=languageEnabled(m.capturedStart())&&!overlaps(spans,m.capturedStart(),m.capturedEnd())?transform(m):m.captured();pos=m.capturedEnd();}
+  while(it.hasNext()){auto m=it.next();next+=result.mid(pos,m.capturedStart()-pos);next+=(!checkLanguage||languageEnabled(m.capturedStart()))&&!overlaps(spans,m.capturedStart(),m.capturedEnd())?transform(m):m.captured();pos=m.capturedEnd();}
   result=next+result.mid(pos);
  };
- if(o.persian && o.halfSpace)controlled(QRegularExpression(QString::fromUtf8("\\b(ن?می) +([\\x{600}-\\x{6ff}]+)")),[](const auto&m){return m.captured(1)+QChar(0x200c)+m.captured(2);});
+ if(o.persian && o.halfSpace)controlled(QRegularExpression(QString::fromUtf8(R"((?<![\p{L}\x{200C}])(ن?می) +([\x{600}-\x{6ff}]+))")),[&](const auto&m){
+  auto joined=m.captured(1)+QChar(0x200c)+m.captured(2);
+  return impl_->fa&&impl_->fa->spell(joined.toUtf8().toStdString())?joined:m.captured();
+ },false);
  if(o.english && o.capitalization){
   const auto spans=protectedSpans(result);bool beginning=true;
   for(qsizetype i=0;i<result.size();++i){

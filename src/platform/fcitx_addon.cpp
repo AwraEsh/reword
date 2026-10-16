@@ -7,6 +7,7 @@
 #include <QDBusReply>
 #include <QRegularExpression>
 #include <QElapsedTimer>
+#include <QLockFile>
 #include <future>
 #undef emit
 #undef signals
@@ -28,6 +29,7 @@ class RewordAddon final:public fcitx::AddonInstance {
  std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>> key_,focus_;
  std::unique_ptr<fcitx::EventSourceTime> timer_;
  reword::RetryCycle retry_;QString context_,prefix_;qint64 heartbeat_=0;
+ QString directory_;std::unique_ptr<QLockFile> operationLock_;
  std::future<reword::Change> future_;std::atomic_bool cancel_{false};
  struct Edit {
   fcitx::TrackableObjectReference<fcitx::InputContext> context;
@@ -65,7 +67,7 @@ class RewordAddon final:public fcitx::AddonInstance {
  }
  void completed(){
   if(!future_.valid()||future_.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready)return;
-  auto change=future_.get();auto job=job_;job_={};auto ic=job.context.get();
+  auto operationLock=std::move(operationLock_);auto change=future_.get();auto job=job_;job_={};auto ic=job.context.get();
   if(cancel_.load()||!change.changed||!change.error.isEmpty()||!permitted(ic,job.app)||!unlocked()||job.revision!=store_->value("configRevision",0).toLongLong())return;
   const auto &st=ic->surroundingText();if(!st.isValid()||QString::fromStdString(st.text())!=job.before||QString::fromStdString(st.selectedText())!=job.original)return;
   auto points=job.before.toUcs4();unsigned start=std::min(st.anchor(),st.cursor()),end=std::max(st.anchor(),st.cursor());
@@ -97,6 +99,7 @@ class RewordAddon final:public fcitx::AddonInstance {
     if(future_.valid()||st.cursor()==st.anchor()||!unlocked())return;
     auto original=QString::fromStdString(st.selectedText());auto options=store_->options();
     if(original.size()>2*options.maxCharacters||original.toUcs4().size()>options.maxCharacters)return;
+    auto lock=std::make_unique<QLockFile>(directory_+"/operation.lock");lock->setStaleLockTime(15000);if(!lock->tryLock(0))return;operationLock_=std::move(lock);
     cancel_.store(false);job_={};job_.context=ic->watch();job_.app=id;job_.before=text;job_.original=original;job_.passage=true;job_.revision=store_->value("configRevision",0).toLongLong();
     auto words=store_->words();auto replacements=store_->replacements();
     future_=std::async(std::launch::async,[this,original,options,words,replacements]{try{QElapsedTimer elapsed;elapsed.start();reword::Engine engine;engine.setPersonal(words,replacements);return engine.text(original,options,&cancel_,std::max(qint64(0),10000-elapsed.elapsed()));}catch(...){return reword::Change{original,original,false,"Correction failed."};}});
@@ -120,7 +123,7 @@ public:
  explicit RewordAddon(fcitx::Instance *instance){
   if(!QCoreApplication::instance())qt_=std::make_unique<QCoreApplication>(argc_,argv_);
   auto dir=qEnvironmentVariable("REWORD_DATA_DIR");if(dir.isEmpty())dir=QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)+"/reword";
-  store_=std::make_unique<reword::Store>(dir);engine_=std::make_unique<reword::Engine>();
+  directory_=dir;store_=std::make_unique<reword::Store>(dir);engine_=std::make_unique<reword::Engine>();
   key_=instance->watchEvent(fcitx::EventType::InputContextKeyEvent,fcitx::EventWatcherPhase::PreInputMethod,[this](fcitx::Event&e){handle(e);});
   focus_=instance->watchEvent(fcitx::EventType::InputContextFocusOut,fcitx::EventWatcherPhase::Default,[this](fcitx::Event&){retry_.reset();context_.clear();prefix_.clear();pending_={};cancel_.store(true);});
   timer_=instance->eventLoop().addTimeEvent(CLOCK_MONOTONIC,fcitx::now(CLOCK_MONOTONIC)+40000,0,[this](fcitx::EventSourceTime *timer,uint64_t){try{completed();if(pending_.valid){auto ic=pending_.context.get();if(permitted(ic,pending_.app)&&unlocked())observe(ic);else pending_={};}}catch(...){cancel_.store(true);pending_={};}timer->setNextInterval(40000);timer->setEnabled(true);return true;});

@@ -23,8 +23,12 @@ Section "Reword"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Reword" "UninstallString" '"$INSTDIR\Uninstall.exe"'
 SectionEnd
 Section "Uninstall"
- RMDir /r "$INSTDIR"
- RMDir /r "$SMPROGRAMS\Reword"
+ !include "${ROOT}\dist\uninstall-files.nsh"
+ Delete "$INSTDIR\Uninstall.exe"
+ RMDir "$INSTDIR"
+ Delete "$SMPROGRAMS\Reword\Reword.lnk"
+ Delete "$SMPROGRAMS\Reword\Uninstall.lnk"
+ RMDir "$SMPROGRAMS\Reword"
  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Reword"
  ; User history is intentionally retained; deletion is available inside Privacy.
 SectionEnd

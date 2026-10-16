@@ -19,27 +19,32 @@ class Controller:public QObject {
  Q_PROPERTY(bool busy READ busy NOTIFY updated)
  Q_PROPERTY(bool dark READ dark NOTIFY updated)
  Q_PROPERTY(bool paused READ paused NOTIFY updated)
+ Q_PROPERTY(bool trayAvailable READ trayAvailable CONSTANT)
  Store store_;QThread worker_;Service *service_=nullptr;QSystemTrayIcon *tray_=nullptr;
  QString platform_="Checking desktop integration…",notice_,pendingId_,pendingName_;
  QVariantList queue_;bool busy_=false,shortcuts_=false;
+ mutable bool storageFailed_=false;
+ template<class F>auto read(F getter)const{try{return getter();}catch(...){storageFailed_=true;return decltype(getter()){};}}
+ template<class F>void guard(F work){storageFailed_=false;try{work();}catch(...){storageFailed_=true;}if(storageFailed_){notice_="Local storage could not be updated. Try again after checking available space and access.";emit updated();}}
  QTimer refresh_;
  void refreshTray();void nextApplication();
 public:
  explicit Controller(const QString&directory,QObject *parent=nullptr);
  ~Controller();
  QVariantMap settings()const;
- QVariantList apps()const{return store_.applications();}
- QVariantList history()const{return store_.histories(false);}
- QVariantList insights()const{return store_.statistics();}
- QStringList words()const{auto w=store_.words().values();w.sort();return w;}
+ QVariantList apps()const{return read([&]{return store_.applications();});}
+ QVariantList history()const{return read([&]{return store_.histories(false);});}
+ QVariantList insights()const{return read([&]{return store_.statistics();});}
+ QStringList words()const{return read([&]{auto w=store_.words().values();w.sort();return w;});}
  QVariantList replacements()const;
- QString status()const{return store_.paused()?"Paused":"Ready";}
+ QString status()const{if(storageFailed_)return "Storage unavailable";try{return store_.paused()?"Paused":"Ready";}catch(...){storageFailed_=true;return "Storage unavailable";}}
  QString platform()const{return platform_;}
- QString notice()const{return notice_;}
+ QString notice()const{return notice_.isEmpty()&&storageFailed_?"Local storage is unavailable. Changes are paused until access returns.":notice_;}
  QString pendingName()const{return pendingName_;}
  bool busy()const{return busy_;}
- bool dark()const{return store_.value("dark",true).toBool();}
- bool paused()const{return store_.paused();}
+ bool dark()const{return read([&]{return store_.value("dark",true).toBool();});}
+ bool paused()const{try{return store_.paused();}catch(...){storageFailed_=true;return true;}}
+ bool trayAvailable()const{return tray_!=nullptr;}
  Q_INVOKABLE void set(QString key,QVariant value);
  Q_INVOKABLE void decide(QString id,QString decision);
  Q_INVOKABLE void consent(QString decision);
@@ -48,7 +53,7 @@ public:
  Q_INVOKABLE void cancel();
  Q_INVOKABLE void recordApplied(QString original,QString corrected);
  Q_INVOKABLE void copy(QString text);
- Q_INVOKABLE QVariantMap historyDetail(qint64 id)const{return store_.historyDetail(id);}
+ Q_INVOKABLE QVariantMap historyDetail(qint64 id)const{return read([&]{return store_.historyDetail(id);});}
  Q_INVOKABLE void deleteHistory(qint64 id);
  Q_INVOKABLE void clearHistory();
  Q_INVOKABLE void clearStatistics();

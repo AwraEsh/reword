@@ -33,7 +33,8 @@ ApplicationWindow {
     palette.highlightedText: Backend.dark ? "#101b17" : "white"
     onClosing: function(close) {
         close.accepted = false
-        root.hide()
+        if (Backend.trayAvailable) root.hide()
+        else Backend.quit()
     }
 
     Connections {
@@ -266,10 +267,11 @@ ApplicationWindow {
                                     Label { visible: modelData.decision === "later"; text: "Ask again from " + modelData.remind; color: root.muted; font.pixelSize: 11 }
                                 }
                                 ComboBox {
-                                    model: ["Ask", "Allowed", "Disabled", "Not now"]
-                                    currentIndex: modelData.decision === "allow" ? 1 : modelData.decision === "deny" ? 2 : modelData.decision === "later" ? 3 : 0
+                                    model: ["Allowed", "Disabled", "Ask tomorrow"]
+                                    displayText: currentIndex < 0 ? "Not decided" : model[currentIndex]
+                                    currentIndex: modelData.decision === "allow" ? 0 : modelData.decision === "deny" ? 1 : modelData.decision === "later" ? 2 : -1
                                     Accessible.name: "Permission for " + modelData.name
-                                    onActivated: Backend.decide(modelData.id, currentIndex === 1 ? "allow" : currentIndex === 3 ? "later" : "deny")
+                                    onActivated: Backend.decide(modelData.id, currentIndex === 0 ? "allow" : currentIndex === 2 ? "later" : "deny")
                                 }
                             }
                         }

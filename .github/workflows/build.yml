@@ -33,12 +33,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/cache@v4
+        id: qt-cache
+        with:
+          path: ${{ runner.temp }}/Qt
+          key: windows-2022-qt-6.8.3-msvc2022-v1
+      - uses: actions/cache@v4
+        with:
+          path: C:/vcpkg/installed
+          key: windows-2022-hunspell-x64-v1
       - name: Install Qt
+        if: steps.qt-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           pip install aqtinstall==3.3.0
           python -m aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 -O "$env:RUNNER_TEMP/Qt"
-          "$env:RUNNER_TEMP/Qt/6.8.3/msvc2022_64/bin" >> $env:GITHUB_PATH
+      - name: Add Qt to PATH
+        shell: pwsh
+        run: '"$env:RUNNER_TEMP/Qt/6.8.3/msvc2022_64/bin" >> $env:GITHUB_PATH'
       - name: Install Hunspell
         shell: pwsh
         run: vcpkg install hunspell:x64-windows --disable-metrics
