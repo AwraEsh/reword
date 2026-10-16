@@ -39,8 +39,22 @@ static bool persian(const QString &w) {
  return false;
 }
 static bool protectedToken(const QString &w) {
- static const QRegularExpression risky(R"([@/\\_:=<>`#\d]|https?\.|www\.|\w\.\w)");
+ static const QRegularExpression risky(R"([@/\\_:=<>`#\d(){}\[\]\"]|https?\.|www\.|\w\.\w)");
  return risky.match(w).hasMatch() || w.size()>64;
+}
+using Spans=QVector<QPair<qsizetype,qsizetype>>;
+static Spans protectedSpans(const QString &text){
+ Spans ranges;
+ const QRegularExpression code(R"(```[\s\S]*?(?:```|$)|`[^`]*(?:`|$))");
+ auto c=code.globalMatch(text);while(c.hasNext()){auto m=c.next();ranges.push_back({m.capturedStart(),m.capturedEnd()});}
+ const QRegularExpression chunks(R"(\S+)");auto t=chunks.globalMatch(text);
+ while(t.hasNext()){auto m=t.next();if(protectedToken(m.captured()))ranges.push_back({m.capturedStart(),m.capturedEnd()});}
+ std::sort(ranges.begin(),ranges.end());Spans merged;
+ for(auto r:ranges){if(!merged.isEmpty()&&r.first<=merged.back().second)merged.back().second=std::max(merged.back().second,r.second);else merged.push_back(r);}return merged;
+}
+static bool overlaps(const Spans &spans,qsizetype start,qsizetype end){
+ auto it=std::lower_bound(spans.begin(),spans.end(),start,[](auto r,qsizetype n){return r.second<=n;});
+ return it!=spans.end()&&it->first<end;
 }
 static int distance(const QString &a,const QString &b) {
  QVector<int> prev(b.size()+1), curr(b.size()+1), before;
@@ -121,19 +135,19 @@ QString Engine::word(const QString &w,const Options &o,const QString &context) {
 }
 Change Engine::text(const QString &input,const Options&o,const std::atomic_bool*cancel,qint64 timeoutMs) {
  Change out{input,input,false,{}};
- if(input.toUcs4().size()>std::clamp(o.maxCharacters,1,100000)){out.error="Text exceeds the operation limit. Nothing was changed.";return out;}
+ if(input.size()>2*std::clamp(o.maxCharacters,1,100000) || input.toUcs4().size()>std::clamp(o.maxCharacters,1,100000)){out.error="Text exceeds the operation limit. Nothing was changed.";return out;}
  QElapsedTimer timer;timer.start();
  auto expired=[&]{return (cancel && cancel->load()) || timer.elapsed()>=timeoutMs;};
  if(expired()){out.error="Operation cancelled or timed out.";return out;}
  static const QRegularExpression chunks(R"(\S+)");
  static const QRegularExpression words(R"([\p{L}\x{200C}]+(?:['’][\p{L}]+)*)");
- QString result;qsizetype last=0;
+ QString result;qsizetype last=0;const auto inputProtected=protectedSpans(input);
  auto iterator=chunks.globalMatch(input);
  while(iterator.hasNext()){
   if(expired()){out.error="Operation cancelled or timed out.";return out;}
   auto m=iterator.next();result+=input.mid(last,m.capturedStart()-last);
   auto chunk=m.captured();
-  if(!protectedToken(chunk)){
+  if(!overlaps(inputProtected,m.capturedStart(),m.capturedEnd())){
    QString replaced;qsizetype p=0;auto wi=words.globalMatch(chunk);
    while(wi.hasNext()){
     if(expired()){out.error="Operation cancelled or timed out.";return out;}
@@ -150,25 +164,24 @@ Change Engine::text(const QString &input,const Options&o,const std::atomic_bool*
   result+=chunk;last=m.capturedEnd();
  }
  result+=input.mid(last);
- if(o.persian && o.halfSpace){
-  result.replace(QRegularExpression(QString::fromUtf8("\\b(ن?می) +([\\x{600}-\\x{6ff}]+)")),QString::fromUtf8("\\1‌\\2"));
- }
- if(o.english && o.capitalization){
-  bool beginning=true;
-  for(qsizetype i=0;i<result.size();++i){
-   auto c=result[i];if(beginning && c.isLetter()){if(c.unicode()<128)result[i]=c.toUpper();beginning=false;}
-   if(c=='.'||c=='!'||c=='?'||c=='\n')beginning=true;
-  }
- }
  auto languageEnabled=[&](qsizetype position){
   for(qsizetype i=position-1;i>=0;--i)if(result[i].isLetter())return persian(QString(result[i]))?o.persian:o.english;
   return false;
  };
  auto controlled=[&](const QRegularExpression &re,auto transform){
-  QString next;qsizetype pos=0;auto it=re.globalMatch(result);
-  while(it.hasNext()){auto m=it.next();next+=result.mid(pos,m.capturedStart()-pos);next+=languageEnabled(m.capturedStart())?transform(m):m.captured();pos=m.capturedEnd();}
+  QString next;qsizetype pos=0;const auto spans=protectedSpans(result);auto it=re.globalMatch(result);
+  while(it.hasNext()){auto m=it.next();next+=result.mid(pos,m.capturedStart()-pos);next+=languageEnabled(m.capturedStart())&&!overlaps(spans,m.capturedStart(),m.capturedEnd())?transform(m):m.captured();pos=m.capturedEnd();}
   result=next+result.mid(pos);
  };
+ if(o.persian && o.halfSpace)controlled(QRegularExpression(QString::fromUtf8("\\b(ن?می) +([\\x{600}-\\x{6ff}]+)")),[](const auto&m){return m.captured(1)+QChar(0x200c)+m.captured(2);});
+ if(o.english && o.capitalization){
+  const auto spans=protectedSpans(result);bool beginning=true;
+  for(qsizetype i=0;i<result.size();++i){
+   auto c=result[i];if(overlaps(spans,i,i+1)){if(c.isLetter())beginning=false;continue;}
+   if(beginning&&c.isLetter()){if(c.unicode()<128)result[i]=c.toUpper();beginning=false;}
+   if(c=='.'||c=='!'||c=='?'||c=='\n')beginning=true;
+  }
+ }
  if(o.spacing){
   if(o.periods)controlled(QRegularExpression(R"( +([.!?]))"),[](const auto&m){return m.captured(1);});
   if(o.commas)controlled(QRegularExpression(QString::fromUtf8(" +([,،])")),[](const auto&m){return m.captured(1);});

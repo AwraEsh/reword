@@ -12,19 +12,23 @@
 #include <X11/keysym.h>
 #include <unistd.h>
 namespace reword {
+template<class T>using GRef=std::unique_ptr<T,decltype(&g_object_unref)>;
 class LinuxAdapter final:public Adapter {
+ bool available_=false;
  AtspiAccessible *focus_=nullptr; AtspiEventListener *listener_=nullptr;
  static inline Display *trapped_=nullptr;
  static inline int trapError_=0;
  static inline XErrorHandler previousHandler_=nullptr;
  static int errorHandler(Display*d,XErrorEvent*e){if(d==trapped_){trapError_=e->error_code;return 0;}return previousHandler_?previousHandler_(d,e):0;}
+ bool dirty_=true;QElapsedTimer lastPoll_;
  Display *display_=nullptr; QHash<int,QString> keys_; bool wayland_=false;
  static void event(AtspiEvent *e,void *data){
-  auto self=static_cast<LinuxAdapter*>(data);
+  auto self=static_cast<LinuxAdapter*>(data);self->dirty_=true;
   if(QString::fromUtf8(e->type).startsWith("object:state-changed:focused") && e->detail1){
    if(self->focus_)g_object_unref(self->focus_);
    self->focus_=ATSPI_ACCESSIBLE(g_object_ref(e->source));
   }
+  g_boxed_free(ATSPI_TYPE_EVENT,e);
  }
  bool unlocked(){
   // A missing lock service is uncertainty, not permission to read text.
@@ -37,18 +41,30 @@ class LinuxAdapter final:public Adapter {
 public:
  LinuxAdapter(){
   wayland_=qEnvironmentVariable("XDG_SESSION_TYPE")=="wayland";
-  atspi_init();atspi_set_timeout(80,100);
+  QDBusInterface a11y("org.a11y.Bus","/org/a11y/bus","org.a11y.Bus",QDBusConnection::sessionBus());a11y.setTimeout(100);
+  QDBusReply<QString> address=a11y.call("GetAddress");if(!address.isValid()||address.value().isEmpty())return;
+  auto probe=QDBusConnection::connectToBus(address.value(),"reword-a11y-probe");bool connected=probe.isConnected();QDBusConnection::disconnectFromBus("reword-a11y-probe");if(!connected)return;
+  qputenv("AT_SPI_BUS_ADDRESS",address.value().toUtf8());
+  atspi_init();atspi_set_timeout(80,100);available_=true;
   listener_=atspi_event_listener_new(event,this,nullptr);
-  atspi_event_listener_register(listener_,"object:state-changed:focused",nullptr);
+  for(auto event:{"object:state-changed:focused","object:text-changed","object:text-caret-moved"})atspi_event_listener_register(listener_,event,nullptr);
+  lastPoll_.start();
   if(!wayland_)display_=XOpenDisplay(nullptr);
  }
  ~LinuxAdapter()override{
-  if(listener_){atspi_event_listener_deregister(listener_,"object:state-changed:focused",nullptr);g_object_unref(listener_);}
+  if(listener_){for(auto event:{"object:state-changed:focused","object:text-changed","object:text-caret-moved"})atspi_event_listener_deregister(listener_,event,nullptr);g_object_unref(listener_);}
   if(focus_)g_object_unref(focus_);if(display_)XCloseDisplay(display_);
-  atspi_exit();
+  if(available_)atspi_exit();
  }
- QString description()const override{return wayland_?"Wayland · Fcitx5 integration required for live correction":"X11 · accessible plain text fields";}
+ QString description()const override{if(!available_)return "Accessibility bus unavailable · writing workspace only";return wayland_?"Wayland · Fcitx5 integration required for live correction":"X11 · accessible plain text fields";}
+ bool changed()override{
+  if(!available_)return false;
+  for(int i=0;i<32 && g_main_context_pending(nullptr);++i)g_main_context_iteration(nullptr,false);
+  if(lastPoll_.elapsed()>1000){dirty_=true;lastPoll_.restart();}
+  bool changed=dirty_;dirty_=false;return changed;
+ }
  Field inspect(bool includeText)override {
+  if(!available_)return {};
   for(int i=0;i<32 && g_main_context_pending(nullptr);++i)g_main_context_iteration(nullptr,false);
   Field f;if(!focus_)return f;
   GError *error=nullptr;
@@ -66,24 +82,25 @@ public:
   f.focused=atspi_state_set_contains(states,ATSPI_STATE_FOCUSED);
   f.editable=atspi_state_set_contains(states,ATSPI_STATE_EDITABLE);
   bool sensitive=atspi_state_set_contains(states,ATSPI_STATE_SENSITIVE);
+  bool singleLine=atspi_state_set_contains(states,ATSPI_STATE_SINGLE_LINE);
   g_object_unref(states);
-  f.known=role==ATSPI_ROLE_ENTRY || f.password;
-  f.plain=role==ATSPI_ROLE_ENTRY;
+  f.plain=role==ATSPI_ROLE_ENTRY || (role==ATSPI_ROLE_TEXT && singleLine);
+  f.known=f.plain || f.password;
   // The Fcitx addon owns Wayland live edits; never double-correct via AT-SPI.
   f.locked=!unlocked();
   if(!includeText || f.password || !f.known || !f.editable || !f.focused || f.locked || !sensitive)return f;
-  auto text=atspi_accessible_get_text_iface(focus_);
-  auto editable=atspi_accessible_get_editable_text_iface(focus_);
+  GRef<AtspiText> text(atspi_accessible_get_text_iface(focus_),g_object_unref);
+  GRef<AtspiEditableText> editable(atspi_accessible_get_editable_text_iface(focus_),g_object_unref);
   if(!text||!editable){f.known=false;return f;}
-  int count=atspi_text_get_character_count(text,&error);
+  int count=atspi_text_get_character_count(text.get(),&error);
   if(error || count<0 || count>50000){if(error)g_error_free(error);f.known=false;return f;}
-  gchar *content=atspi_text_get_text(text,0,count,&error);
+  gchar *content=atspi_text_get_text(text.get(),0,count,&error);
   if(error || !content){if(error)g_error_free(error);g_free(content);f.known=false;return f;}
   f.text=QString::fromUtf8(content);g_free(content);
   auto chars=f.text.toUcs4();auto utf16offset=[&](int n){return QString::fromUcs4(reinterpret_cast<const char32_t*>(chars.constData()),std::clamp(n,0,int(chars.size()))).size();};
-  f.caret=utf16offset(atspi_text_get_caret_offset(text,&error));
-  if(!error && atspi_text_get_n_selections(text,&error)>0){
-   AtspiRange *r=atspi_text_get_selection(text,0,&error);
+  f.caret=utf16offset(atspi_text_get_caret_offset(text.get(),&error));
+  if(!error && atspi_text_get_n_selections(text.get(),&error)>0){
+   AtspiRange *r=atspi_text_get_selection(text.get(),0,&error);
    if(r){f.selectionStart=utf16offset(r->start_offset);f.selectionEnd=utf16offset(r->end_offset);g_free(r);}
   }
   if(error){g_error_free(error);f.known=false;f.text.clear();}
@@ -91,13 +108,13 @@ public:
  }
  bool replace(const Field &expected,const QString &newText,int caret)override{
   auto current=inspect(true);if(!sameTarget(expected,current))return false;
-  auto editable=atspi_accessible_get_editable_text_iface(focus_);auto text=atspi_accessible_get_text_iface(focus_);
+  GRef<AtspiEditableText> editable(atspi_accessible_get_editable_text_iface(focus_),g_object_unref);GRef<AtspiText> text(atspi_accessible_get_text_iface(focus_),g_object_unref);
   if(!editable||!text)return false;
   GError *error=nullptr;
-  bool ok=atspi_editable_text_set_text_contents(editable,newText.toUtf8().constData(),&error);
+  bool ok=atspi_editable_text_set_text_contents(editable.get(),newText.toUtf8().constData(),&error);
   if(error){g_error_free(error);return false;}
   if(!ok)return false;
-  atspi_text_set_caret_offset(text,newText.left(caret).toUcs4().size(),nullptr);
+  atspi_text_set_caret_offset(text.get(),newText.left(caret).toUcs4().size(),nullptr);
   // A single set-contents call avoids delete/insert windows in supported plain fields.
   auto after=inspect(true);return after.id==expected.id && after.text==newText;
  }
@@ -124,5 +141,5 @@ public:
   return {};
  }
 };
-std::unique_ptr<Adapter> createAdapter(){return std::make_unique<LinuxAdapter>();}
+std::unique_ptr<Adapter> createNativeAdapter(){return std::make_unique<LinuxAdapter>();}
 }

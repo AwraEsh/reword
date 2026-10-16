@@ -13,6 +13,7 @@ if appdir.exists(): shutil.rmtree(appdir)
 for name in ['usr/bin','usr/lib','usr/plugins','usr/qml','usr/share/reword/dictionaries','usr/share/reword/licenses']:
  (appdir/name).mkdir(parents=True,exist_ok=True)
 shutil.copy2(build/'reword',appdir/'usr/bin/reword')
+shutil.copy2(build/'reword-native-helper',appdir/'usr/bin/reword-native-helper')
 qt_prefix=pathlib.Path(os.environ.get('REWORD_QT_PREFIX',str(root/'.deps/usr')))
 if not qt_prefix.exists(): qt_prefix=pathlib.Path('/usr')
 qt_lib=qt_prefix/'lib/x86_64-linux-gnu/qt6'
@@ -35,7 +36,7 @@ for source in [root/'THIRD_PARTY.md',root/'LICENSE']:
 # Resolve the full dynamic closure, including plugins loaded only at runtime.
 skip=re.compile(r'^(libc\.so|libm\.so|libdl\.so|libpthread\.so|librt\.so|libresolv\.so|ld-linux)')
 seen=set()
-for binary in [appdir/'usr/bin/reword',*list((appdir/'usr/plugins').rglob('*.so')),*list((appdir/'usr/qml').rglob('*.so'))]:
+for binary in [appdir/'usr/bin/reword',appdir/'usr/bin/reword-native-helper',*list((appdir/'usr/plugins').rglob('*.so')),*list((appdir/'usr/qml').rglob('*.so'))]:
  output=subprocess.run(['ldd',str(binary)],capture_output=True,text=True,check=True).stdout
  for line in output.splitlines():
   m=re.search(r'=> (/\S+)',line)
@@ -64,6 +65,7 @@ shutil.copytree(appdir,debroot/'opt/reword',symlinks=False)
 addon=build/'libreword-fcitx.so';dependencies='libc6 (>= 2.38), libgl1, libegl1'
 if addon.exists():
  target=debroot/'usr/lib/x86_64-linux-gnu/fcitx5';target.mkdir(parents=True);shutil.copy2(addon,target/addon.name)
+ shutil.copytree(root/'assets/dictionaries',debroot/'usr/share/reword/dictionaries',dirs_exist_ok=True)
  target=debroot/'usr/share/fcitx5/addon';target.mkdir(parents=True);shutil.copy2(root/'packaging/reword-fcitx.conf',target/'reword.conf')
  dependencies+=', fcitx5 (>= 5.1), libqt6core6t64 (>= 6.8), libqt6sql6 (>= 6.8), libqt6dbus6 (>= 6.8), libqt6sql6-sqlite, libhunspell-1.7-0'
 (debroot/'DEBIAN').mkdir();(debroot/'DEBIAN/control').write_text(f'''Package: reword

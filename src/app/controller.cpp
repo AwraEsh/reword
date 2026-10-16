@@ -62,7 +62,7 @@ void Controller::set(QString key,QVariant value){
   value=seq.toString(QKeySequence::PortableText);
   for(auto other:{"fixShortcut","undoShortcut","pauseShortcut"})if(key!=other && QKeySequence(settings()[other].toString())==seq){notice_="This shortcut is already assigned in Reword.";emit updated();return;}
  }
- store_.setValue(key,value);store_.prune(store_.options());emit updated();
+ store_.setValue(key,value);store_.setValue("configRevision",store_.value("configRevision",0).toLongLong()+1);service_->cancel();store_.prune(store_.options());emit updated();
 }
 void Controller::decide(QString id,QString decision){store_.decide(id,decision);emit updated();}
 void Controller::nextApplication(){
@@ -79,8 +79,8 @@ void Controller::consent(QString decision){if(!pendingId_.isEmpty() && !decision
 void Controller::pause(int minutes){store_.pause(minutes);refreshTray();emit updated();}
 void Controller::fix(QString text){
  if(busy_){notice_="A correction is already running.";emit updated();return;}
- if(text.toUcs4().size()>store_.options().maxCharacters){notice_="Text exceeds the operation limit. Nothing was changed.";emit updated();return;}
- busy_=true;notice_.clear();emit updated();QMetaObject::invokeMethod(service_,[this,text]{service_->processText(text);},Qt::QueuedConnection);
+ if(text.size()>2*store_.options().maxCharacters || text.toUcs4().size()>store_.options().maxCharacters){notice_="Text exceeds the operation limit. Nothing was changed.";emit updated();return;}
+ service_->prepare();busy_=true;notice_.clear();emit updated();QMetaObject::invokeMethod(service_,[this,text]{service_->processText(text);},Qt::QueuedConnection);
 }
 void Controller::recordApplied(QString original,QString corrected){store_.history(original,corrected,store_.options());emit updated();}
 void Controller::cancel(){service_->cancel();notice_="Cancelling…";emit updated();}

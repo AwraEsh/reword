@@ -3,13 +3,16 @@
 #include "core/store.h"
 #include <QObject>
 #include <QTimer>
+#include <QFutureWatcher>
 namespace reword {
 class Service:public QObject {
  Q_OBJECT
  QString directory_;std::unique_ptr<Store> store_;std::unique_ptr<Engine> engine_;std::unique_ptr<Adapter> adapter_;
  QTimer *timer_=nullptr;Field previous_,undoAfter_;QString undoBefore_;int undoCaret_=0;
- RetryCycle retry_;QString lastAsk_;QDate askDate_;QString shortcutSignature_;
- std::atomic_bool cancel_{false};bool wayland_=false;
+ RetryCycle retry_;QString retryPrefix_,retryWord_;int retryStart_=-1;QString lastAsk_;QDate askDate_;QString shortcutSignature_;
+ std::atomic_bool cancel_{false};bool wayland_=false,jobRunning_=false;
+ QFutureWatcher<Change> *job_=nullptr;
+ void runText(QString input,bool native,Field field={});
  void tick();
  Field permitted();
  void fixSelection();
@@ -17,6 +20,7 @@ class Service:public QObject {
 public:
  explicit Service(QString directory):directory_(std::move(directory)){}
  void cancel(){cancel_.store(true);}
+ void prepare(){cancel_.store(false);}
 public slots:
  void start();
  void stop();

@@ -1,6 +1,8 @@
 #include "service.h"
 #include <QFileInfo>
 #include <QRegularExpression>
+#include <QtConcurrent>
+#include <QElapsedTimer>
 namespace reword {
 void Service::start(){
  try{store_=std::make_unique<Store>(directory_);engine_=std::make_unique<Engine>();adapter_=createAdapter();
@@ -8,7 +10,7 @@ void Service::start(){
  timer_=new QTimer(this);connect(timer_,&QTimer::timeout,this,&Service::tick);timer_->start(80);
  }catch(...){emit message("Native integration could not start. Use the writing workspace.");}
 }
-void Service::stop(){if(timer_)timer_->stop();previous_={};undoAfter_={};undoBefore_.clear();adapter_.reset();engine_.reset();store_.reset();}
+void Service::stop(){cancel_.store(true);if(job_){job_->disconnect(this);job_->waitForFinished();delete job_;job_=nullptr;}if(timer_)timer_->stop();previous_={};undoAfter_={};undoBefore_.clear();adapter_.reset();engine_.reset();store_.reset();}
 Field Service::permitted(){
  auto f=adapter_->inspect(false);if(f.app.isEmpty())return {};
  store_->discover(f.app,QFileInfo(f.app).fileName(),restrictedApp(f.app));
@@ -26,10 +28,16 @@ void Service::tick(){
   auto signature=store_->value("fixShortcut","Ctrl+Alt+R").toString()+"|"+store_->value("undoShortcut","Ctrl+Alt+Z").toString()+"|"+store_->value("pauseShortcut","Ctrl+Alt+P").toString();
   if(signature!=shortcutSignature_){auto s=signature.split('|');bool ok=adapter_->shortcuts(s[0],s[1],s[2]);shortcutSignature_=signature;emit state(adapter_->description(),ok);}
   auto a=adapter_->takeAction();if(!a.isEmpty()){action(a);return;}
-  auto f=permitted();if(f.id.isEmpty()){previous_={};retry_.reset();return;}
-  if(f.id!=previous_.id){retry_.reset();previous_=f;return;}
+  if(!adapter_->changed())return;
+  auto f=permitted();if(f.id.isEmpty()){previous_={};undoAfter_={};undoBefore_.clear();retry_.reset();retryStart_=-1;return;}
+  if(f.id!=previous_.id){undoAfter_={};undoBefore_.clear();retry_.reset();retryStart_=-1;previous_=f;return;}
   if(f.text==previous_.text){if(f.caret!=previous_.caret)retry_.reset();previous_=f;return;}
   auto old=previous_;previous_=f;
+  if(retryStart_>=0){
+   static const QRegularExpression continued(R"([\s.,!?،؛؟]+[^\s.,!?،؛؟])");
+   if(f.caret<retryStart_ || f.text.left(retryStart_)!=retryPrefix_ || continued.match(f.text.mid(retryStart_,f.caret-retryStart_)).hasMatch()){retry_.reset();retryStart_=-1;}
+  }
+  if(jobRunning_)return;
   if(wayland_ || f.caret<=0 || f.selectionStart>=0)return;
   if(f.text.size()<old.text.size())return; // Deleting a correction keeps its retry session.
   if(f.caret>f.text.size())return;
@@ -40,7 +48,8 @@ void Service::tick(){
   if(start>0 && f.text.mid(0,start)!=old.text.mid(0,start))retry_.reset();
   auto o=store_->options();o.abbreviations=false;
   engine_->setPersonal(store_->words(),store_->replacements());
-  auto correct=engine_->word(token,o,f.text.left(start).right(128));if(correct==token)return;
+  auto correct=engine_->word(token,o,f.text.left(start).right(128));if(correct==token){if(retryStart_==start && token!=retryWord_){retry_.reset();retryStart_=-1;}return;}
+  retryStart_=start;retryPrefix_=f.text.left(start);retryWord_=token;
   if(!retry_.shouldCorrect(f.id,start,token,QDateTime::currentMSecsSinceEpoch()))return;
   QString updated=f.text;updated.replace(start,token.size(),correct);
   if(adapter_->replace(f,updated,f.caret+correct.size()-token.size())){
@@ -49,25 +58,39 @@ void Service::tick(){
   }
  }catch(...){previous_={};retry_.reset();emit message("An integration operation failed safely. No further edit was attempted.");}
 }
-void Service::processText(QString input){
- cancel_.store(false);
- try{if(!engine_||!store_){emit result(input,input,"Correction engine is unavailable.",false);return;}
-  engine_->setPersonal(store_->words(),store_->replacements());auto o=store_->options();auto change=engine_->text(input,o,&cancel_);
-  emit result(input,change.corrected,change.error,false);
- }catch(...){emit result(input,input,"Correction failed. The original text is unchanged.",false);}
+void Service::runText(QString input,bool native,Field field){
+ if(jobRunning_){emit message("A correction is already running.");return;}
+ if(!store_){emit result(input,input,"Correction engine is unavailable.",native);return;}
+ jobRunning_=true;
+ auto options=store_->options();auto words=store_->words();auto replacements=store_->replacements();
+ auto revision=store_->value("configRevision",0).toLongLong();
+ job_=new QFutureWatcher<Change>(this);
+ connect(job_,&QFutureWatcher<Change>::finished,this,[this,input,native,field,revision]{
+  auto completed=job_;job_=nullptr;jobRunning_=false;auto change=completed->result();completed->deleteLater();
+  if(cancel_.load() || revision!=store_->value("configRevision",0).toLongLong())change.error="Cancelled or settings changed. Nothing was replaced.";
+  if(!change.error.isEmpty()){emit result(input,input,change.error,native);return;}
+  if(!native){emit result(input,change.corrected,{},false);return;}
+  if(!change.changed){emit message("No confident corrections found.");return;}
+  try{
+   auto current=permitted();if(!sameTarget(field,current)){emit message("The selection changed. Nothing was replaced.");return;}
+   QString updated=field.text;updated.replace(field.selectionStart,field.selectionEnd-field.selectionStart,change.corrected);
+   if(!adapter_->replace(field,updated,field.selectionStart+change.corrected.size())){emit message("The application did not confirm the replacement. Check its text before continuing.");return;}
+   undoBefore_=field.text;undoCaret_=field.caret;undoAfter_=adapter_->inspect(true);previous_=undoAfter_;
+   store_->history(input,change.corrected,store_->options());emit result(input,change.corrected,{},true);
+  }catch(...){emit message("The operation stopped safely.");}
+ });
+ job_->setFuture(QtConcurrent::run([this,input,options,words,replacements]{
+  try{QElapsedTimer elapsed;elapsed.start();Engine engine;engine.setPersonal(words,replacements);
+   return engine.text(input,options,&cancel_,std::max(qint64(0),10000-elapsed.elapsed()));
+  }catch(...){return Change{input,input,false,"Correction failed. The original is unchanged."};}
+ }));
 }
+void Service::processText(QString input){runText(input,false);}
 void Service::fixSelection(){
- cancel_.store(false);
- auto f=permitted();if(f.id.isEmpty()||f.selectionStart<0||f.selectionEnd<=f.selectionStart){emit message("No supported, permitted text selection. Use the writing workspace instead.");return;}
- auto input=f.text.mid(f.selectionStart,f.selectionEnd-f.selectionStart);auto o=store_->options();
- engine_->setPersonal(store_->words(),store_->replacements());auto change=engine_->text(input,o,&cancel_);
- if(!change.error.isEmpty()){emit result(input,input,change.error,true);return;}
- if(!change.changed){emit message("No confident corrections found.");return;}
- auto current=permitted();if(!sameTarget(f,current)){emit message("The selection changed. Nothing was replaced.");return;}
- QString updated=f.text;updated.replace(f.selectionStart,f.selectionEnd-f.selectionStart,change.corrected);
- if(!adapter_->replace(f,updated,f.selectionStart+change.corrected.size())){emit message("The application did not confirm the replacement. Check its text before continuing.");return;}
- undoBefore_=f.text;undoCaret_=f.caret;undoAfter_=adapter_->inspect(true);previous_=undoAfter_;
- store_->history(input,change.corrected,o);emit result(input,change.corrected,{},true);
+ if(jobRunning_){emit message("A correction is already running.");return;}
+ cancel_.store(false);auto field=permitted();
+ if(field.id.isEmpty()||field.selectionStart<0||field.selectionEnd<=field.selectionStart){emit message("No supported, permitted text selection. Use the writing workspace instead.");return;}
+ runText(field.text.mid(field.selectionStart,field.selectionEnd-field.selectionStart),true,field);
 }
 void Service::undo(){
  auto f=permitted();if(undoBefore_.isEmpty()||!sameTarget(undoAfter_,f)){emit message("Undo is no longer safe. Copy the original from History if this was a selected-text correction.");return;}

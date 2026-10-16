@@ -29,6 +29,11 @@ private slots:
   o.capitalization=false; o.periods=false; o.commas=false; o.spacing=true;
   QCOMPARE(e.text("hello  .. world ,,",o).corrected,QString("hello  .. world ,,"));
  }
+ void protectedTextSurvivesEveryRule() {
+  Engine e;Options o;o.spelling=false;o.abbreviations=false;o.capitalization=true;o.periods=true;o.commas=true;o.spacing=true;o.halfSpace=true;
+  for(const auto &s:QStringList{"https://example.com/file","../teh/file","printf(\"hello,,world\")","`teh code`","```teh code```"})QCOMPARE(e.text(s,o).corrected,s);
+  o.english=false;o.persian=false;QCOMPARE(e.text("hello.. world,,",o).corrected,QString("hello.. world,,"));
+ }
  void persistenceConsentPauseAndRetention() {
   QTemporaryDir dir; QVERIFY(dir.isValid());
   Options o; o.historyCount=2; Store s(dir.path());
