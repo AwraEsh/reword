@@ -10,7 +10,8 @@ of Git. No release has been accepted as production ready.
 - C++20/Qt Quick application, shared correction/store core, X11 helper, Windows
   adapter and Fcitx addon are implemented. See [architecture](ARCHITECTURE.md).
 - Service change c02bf5d fixes completed words being missed during typing bursts
-  and retry advancement after rejected writes. Four local CTest suites pass.
+  and retry advancement after rejected writes. The current verification counts
+  are recorded below.
 - Wayland hardening a87ed97 adds canonical hotkeys, full-context code protection
   and confirmation before successful retry advancement. Repeatable GNOME/Fcitx
   probes pass on real Qt and supported GTK3 fields. See
@@ -58,16 +59,18 @@ scripts name their required host tools in their help/docstrings.
 1. Audit remaining retry reset cases on Wayland (cursor movement, continuation,
    timing), selected-operation cancellation/staleness, settings/permission changes
    during operations and actual lock/unlock behavior.
-2. Verify Windows user-only NTFS storage permissions; Qt file permissions alone
-   are not sufficient evidence of a protected Windows DACL.
+2. Extend the Windows storage evidence to a normal Windows 10/11 desktop account;
+   protected native NTFS DACLs and outside hard-link preservation now pass CI on
+   the Windows Server 2022 runner.
 3. Complete keyboard-only navigation, populated lists and dialogs, plus rendered
    Windows UI review. Check native shortcut conflict reporting and rollback.
 4. Rebuild Linux AppImage/.deb from the final source; current local packages are
    older. Verify runtime closure, exact minimum glibc, host integration dependency
    declarations, bundled third-party notices and clean-environment launch.
-   Preliminary readelf inspection of the old staged closure found GLIBC_2.39
-   (libsystemd), while the .deb script declares >=2.38; derive the real baseline
-   when rebuilding. Supply corresponding copyleft-library source/notice material
+   The distribution branch now derives the real glibc floor and rejects unresolved
+   libraries; its real staged closure requires GLIBC_2.39 and the .deb declares
+   >=2.39. Staged and extracted-.deb launches pass without developer paths.
+   Final-source rebuilds and host-addon dependency declarations still need audit. Supply corresponding copyleft-library source/notice material
    before public binary distribution; a third-party project URL alone is not an
    adequate completed source-delivery workflow.
 5. Expand real compatibility tests to browsers and representative GTK/Qt/Windows
@@ -81,12 +84,22 @@ The source has no redistribution license yet; [LICENSE](../LICENSE) states the
 current terms. Third-party licenses are recorded separately. Public visibility
 does not grant a source license or prove installer acceptance.
 
-## In-flight storage branch
+## Storage integration and distribution work
 
-`codex/storage-permissions` is in the attached managed `storage-access` worktree.
-Storage hardening and its regressions pass all five local CTest suites.
-Independent review found no remaining Critical/Important defects within the
-documented scope. Windows native ACL verification is still pending; its latest
-CI compiled but storage initialization failed, so diagnostic evidence is being
-added before integration. Do not treat the develop branch or older
-installer as containing this change until the branch is integrated.
+Storage hardening was merged in [PR #1](https://github.com/AwraEsh/reword/pull/1),
+merge commit 17e59b6. Source d3f00ba passed the full Linux/Windows run
+[38951426522](https://github.com/AwraEsh/reword/actions/runs/38951426522), including
+native ACLs, outside hard-link preservation, installer validation and native
+Windows input probes. Five local suites passed after integration (12.58 seconds).
+The Windows native security handle needs READ_CONTROL as well as write-security
+rights; no privilege elevation is used. Earlier downloaded installers predate it.
+
+`codex/linux-distribution` is in the attached managed `linux-distribution` worktree.
+It adds eight isolated packaging regressions and a sixth CTest suite. The initial
+regressions reproduced incorrect glibc metadata and accepted unresolved libraries;
+follow-ups cover the addon and non-C locales. Independent review has no remaining
+Critical/Important findings within this scope. The real staged package contains
+240 ELF objects and declares glibc >=2.39. Staged and extracted-.deb smoke launches
+pass with a clean environment and private data/D-Bus, without developer paths.
+These are development artifacts, not an accepted public release. See
+[package checks](LINUX_PACKAGING_CHECKS.md) for the remaining distribution gates.

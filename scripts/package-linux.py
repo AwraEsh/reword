@@ -6,6 +6,7 @@ APPIMAGETOOL points to a local appimagetool binary. No tool is downloaded/execut
 implicitly by this script.
 """
 import pathlib, subprocess, shutil, os, re, json
+from package_audit import dynamic_libraries, is_elf, minimum_glibc
 root=pathlib.Path(__file__).resolve().parents[1]
 build=root/'build'; dist=root/'dist'; dist.mkdir(exist_ok=True)
 appdir=dist/'Reword.AppDir'
@@ -40,14 +41,23 @@ for source in [root/'THIRD_PARTY.md',root/'LICENSE']:
 # Resolve the full dynamic closure, including plugins loaded only at runtime.
 skip=re.compile(r'^(libc\.so|libm\.so|libdl\.so|libpthread\.so|librt\.so|libresolv\.so|ld-linux)')
 seen=set()
-for binary in [appdir/'usr/bin/reword',appdir/'usr/bin/reword-native-helper',*list((appdir/'usr/plugins').rglob('*.so')),*list((appdir/'usr/qml').rglob('*.so'))]:
- output=subprocess.run(['ldd',str(binary)],capture_output=True,text=True,check=True).stdout
- for line in output.splitlines():
-  m=re.search(r'=> (/\S+)',line)
-  if not m:continue
-  src=pathlib.Path(m[1]);name=src.name
+for binary in [path for path in appdir.rglob('*') if is_elf(path)]:
+ for resolved in dynamic_libraries(binary):
+  src=pathlib.Path(resolved);name=src.name
   if name in seen or skip.match(name):continue
   seen.add(name);shutil.copy2(src,appdir/'usr/lib'/name)
+# Include every shipped ELF and the addon that is loaded against host libraries.
+addon=build/'libreword-fcitx.so'
+objects=[path for path in appdir.rglob('*') if is_elf(path)]
+addon_libraries=[]
+if addon.exists():
+ objects.append(addon)
+ addon_libraries=sorted(pathlib.Path(path).name for path in dynamic_libraries(addon))
+glibc=minimum_glibc(objects)
+(appdir/'usr/share/reword/runtime-manifest.json').write_text(json.dumps({
+ 'minimumGlibc':glibc,'elfObjects':len(objects),'runtimeLibraries':sorted(seen),
+ 'fcitxAddon':addon.exists(),'fcitxHostLibraries':addon_libraries,
+},indent=2)+'\n')
 shutil.copy2(root/'assets/reword.desktop',appdir/'reword.desktop')
 shutil.copy2(root/'assets/reword.svg',appdir/'reword.svg')
 (appdir/'AppRun').write_text('''#!/bin/sh
@@ -66,7 +76,7 @@ shutil.copytree(appdir,debroot/'opt/reword',symlinks=False)
 (debroot/'usr/bin').mkdir(parents=True);(debroot/'usr/bin/reword').symlink_to('/opt/reword/AppRun')
 (debroot/'usr/share/applications').mkdir(parents=True);shutil.copy2(root/'assets/reword.desktop',debroot/'usr/share/applications/reword.desktop')
 (debroot/'usr/share/icons/hicolor/scalable/apps').mkdir(parents=True);shutil.copy2(root/'assets/reword.svg',debroot/'usr/share/icons/hicolor/scalable/apps/reword.svg')
-addon=build/'libreword-fcitx.so';dependencies='libc6 (>= 2.38), libgl1, libegl1'
+dependencies=f'libc6 (>= {glibc}), libgl1, libegl1'
 if addon.exists():
  target=debroot/'usr/lib/x86_64-linux-gnu/fcitx5';target.mkdir(parents=True);shutil.copy2(addon,target/addon.name)
  shutil.copytree(root/'assets/dictionaries',debroot/'usr/share/reword/dictionaries',dirs_exist_ok=True)
