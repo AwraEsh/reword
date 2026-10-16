@@ -21,8 +21,9 @@ class Service : public QObject {
     int retryStart_ = -1;
     QString lastAsk_;
     QDate askDate_;
-    QString shortcutSignature_, lastDescription_;
-    qint64 platformPoll_ = 0;
+    QStringList shortcutSettings_, workingShortcuts_;
+    QString lastDescription_;
+    qint64 platformPoll_ = 0, shortcutRevision_ = -1;
     bool shortcutsHealthy_ = false;
     std::atomic_bool cancel_{false};
     bool wayland_ = false, jobRunning_ = false;

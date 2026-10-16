@@ -269,3 +269,24 @@ machine paths. Real staging finds 240 ELF objects, requires glibc 2.39 and produ
 matching Debian metadata. Staged and extracted-.deb smoke launches succeed with
 clean environment/private D-Bus and synthetic data. Final release installation,
 source/notice delivery and final-source rebuild acceptance remain open.
+
+## Shortcut conflict recovery — 2026-10-16
+
+Packaging PR #2 passed both platforms (run 38953164712) and merged as d4b0bf0.
+Six suites pass on the primary checkout after integration (13.13 seconds).
+
+The shortcut-conflicts branch reproduces native registration failures losing the
+old bindings while retaining rejected settings. Service now restores its last
+working registrations and uses transactional tuple/revision comparison before
+reverting persisted settings. Newer edits survive. Follow-up regressions exposed
+a permanently cached failure after a SQLite write error, an X-to-Y-to-X revision
+race and failure to retry unchanged unavailable bindings after re-saving. All
+were observed failing before their fixes. The latest full six-suite run passes;
+see SHORTCUTS.md for the cases and native verification scope.
+
+Native X11 conflict probes also verify restored Pause delivery with XTest on a
+private display. Three cycles complete successfully using ignored rootless test
+tools. The first assertion-complete run exposed private GVFS cleanup failure;
+the test directory now outlives its D-Bus session, with bounded own-mount cleanup.
+The analogous native Windows conflict/SendInput probe has been added but needs
+fresh Windows CI. No Windows acceptance is inferred from the local X11 run.

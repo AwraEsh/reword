@@ -91,6 +91,34 @@ void Store::setValue(const QString &key, const QVariant &value) {
         QJsonDocument(QJsonArray::fromVariantList({value})).toJson(QJsonDocument::Compact)));
     checked(q);
 }
+QStringList Store::shortcuts() const {
+    return {value("fixShortcut", "Ctrl+Alt+R").toString(),
+            value("undoShortcut", "Ctrl+Alt+Z").toString(),
+            value("pauseShortcut", "Ctrl+Alt+P").toString()};
+}
+bool Store::restoreShortcuts(const QStringList &expected, qint64 revision,
+                             const QStringList &previous) {
+    if (expected.size() != 3 || previous.size() != 3)
+        throw std::invalid_argument("Invalid shortcut configuration.");
+    if (!db_.transaction())
+        throw std::runtime_error("Cannot begin shortcut settings transaction.");
+    try {
+        if (shortcuts() != expected || value("configRevision", 0).toLongLong() != revision) {
+            db_.rollback();
+            return false;
+        }
+        const QStringList keys{"fixShortcut", "undoShortcut", "pauseShortcut"};
+        for (int index = 0; index < keys.size(); ++index)
+            setValue(keys[index], previous[index]);
+        setValue("configRevision", value("configRevision", 0).toLongLong() + 1);
+        if (!db_.commit())
+            throw std::runtime_error("Cannot restore shortcut settings.");
+        return true;
+    } catch (...) {
+        db_.rollback();
+        throw;
+    }
+}
 Options Store::options() const {
     Options o;
 #define BOOL(k) o.k = value(#k, o.k).toBool()
