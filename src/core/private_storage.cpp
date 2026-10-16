@@ -11,6 +11,8 @@
 #endif
 #include "private_storage.h"
 #include <QFile>
+#include <QFileInfo>
+#include <QDir>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -20,20 +22,44 @@ namespace {
     throw std::runtime_error("Cannot establish private local storage access.");
 }
 } // namespace
-void restrictStoragePath(const QString &path, bool directory) {
+void validateStorageLocation(const QString &path) {
+    if (QDir::fromNativeSeparators(path).split('/').contains(".."))
+        failed();
+    auto current = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+    for (;;) {
 #ifdef _WIN32
-    HANDLE raw = CreateFileW(
-        reinterpret_cast<LPCWSTR>(path.utf16()), WRITE_DAC | WRITE_OWNER | FILE_READ_ATTRIBUTES,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
-        FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        auto attributes = GetFileAttributesW(reinterpret_cast<LPCWSTR>(current.utf16()));
+        if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT))
+            failed();
+#else
+        if (QFileInfo(current).isSymLink())
+            failed();
+#endif
+        auto parent = QFileInfo(current).absolutePath();
+        if (parent == current)
+            break;
+        current = parent;
+    }
+}
+static void accessStoragePath(const QString &path, bool directory, bool apply) {
+    validateStorageLocation(path);
+#ifdef _WIN32
+    HANDLE raw =
+        CreateFileW(reinterpret_cast<LPCWSTR>(path.utf16()),
+                    FILE_READ_ATTRIBUTES | (apply ? WRITE_DAC | WRITE_OWNER : 0),
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                    FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
     if (raw == INVALID_HANDLE_VALUE)
         failed();
     std::unique_ptr<void, decltype(&CloseHandle)> file(raw, &CloseHandle);
     BY_HANDLE_FILE_INFORMATION info{};
     if (!GetFileInformationByHandle(file.get(), &info) ||
         (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ||
-        bool(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != directory)
+        bool(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != directory ||
+        (!directory && info.nNumberOfLinks != 1))
         failed();
+    if (!apply)
+        return;
     HANDLE rawToken = nullptr;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &rawToken))
         failed();
@@ -75,12 +101,19 @@ void restrictStoragePath(const QString &path, bool directory) {
     if (fd < 0)
         failed();
     struct stat state{};
-    bool valid = ::fstat(fd, &state) == 0 && state.st_uid == ::geteuid() &&
-                 (directory ? S_ISDIR(state.st_mode) : S_ISREG(state.st_mode));
-    bool protectedAccess = valid && ::fchmod(fd, directory ? 0700 : 0600) == 0;
+    bool valid =
+        ::fstat(fd, &state) == 0 && state.st_uid == ::geteuid() &&
+        (directory ? S_ISDIR(state.st_mode) : (S_ISREG(state.st_mode) && state.st_nlink == 1));
+    bool protectedAccess = valid && (!apply || ::fchmod(fd, directory ? 0700 : 0600) == 0);
     ::close(fd);
     if (!protectedAccess)
         failed();
 #endif
+}
+void validateExistingStorageFile(const QString &path) {
+    accessStoragePath(path, false, false);
+}
+void restrictStoragePath(const QString &path, bool directory) {
+    accessStoragePath(path, directory, true);
 }
 } // namespace reword

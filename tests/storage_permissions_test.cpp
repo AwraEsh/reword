@@ -147,8 +147,98 @@ class StoragePermissionsTest : public QObject {
         reword::Store reopened(directory);
         QCOMPARE(reopened.value("synthetic").toBool(), true);
     }
-#ifndef _WIN32
+    void parentTraversalIsRejected() {
+        QTemporaryDir data;
+        auto actual = data.path() + "/target";
+        auto linked = data.path() + "/linked";
+        QVERIFY(QDir().mkpath(actual + "/child"));
+        QVERIFY(QDir().mkpath(actual + "/private-data"));
+        QVERIFY(QDir().mkpath(data.path() + "/private-data"));
+#ifdef _WIN32
+        QVERIFY_EXCEPTION_THROWN(reword::Store{data.path() + "/target/../private-data"},
+                                 std::exception);
+#else
+        QVERIFY(::symlink(QFile::encodeName(actual + "/child").constData(),
+                          QFile::encodeName(linked).constData()) == 0);
+        QVERIFY_EXCEPTION_THROWN(reword::Store{linked + "/../private-data"}, std::exception);
+#endif
+        QVERIFY(!QFileInfo::exists(actual + "/private-data/reword.sqlite"));
+    }
+    void linkedAncestorDoesNotCreateStorage() {
+#ifdef _WIN32
+        QSKIP("POSIX link fixture; native Windows ACLs are tested separately.");
+#else
+        QTemporaryDir data;
+        auto actual = data.path() + "/actual";
+        auto linked = data.path() + "/linked";
+        QVERIFY(QDir().mkpath(actual));
+        QVERIFY(::symlink(QFile::encodeName(actual).constData(),
+                          QFile::encodeName(linked).constData()) == 0);
+        QVERIFY_EXCEPTION_THROWN(reword::Store{linked + "/private-data"}, std::exception);
+        QVERIFY(!QFileInfo::exists(actual + "/private-data"));
+#endif
+    }
+    void nativeHardLinkDoesNotChangeOutsideAcl() {
+#ifdef _WIN32
+        QTemporaryDir data;
+        auto outside = data.path() + "/outside.sqlite";
+        QFile original(outside);
+        QVERIFY(original.open(QIODevice::WriteOnly));
+        original.write("synthetic outside data");
+        original.close();
+        auto snapshot = [](const QString &path) {
+            DWORD bytes = 0;
+            GetFileSecurityW(reinterpret_cast<LPCWSTR>(path.utf16()), DACL_SECURITY_INFORMATION,
+                             nullptr, 0, &bytes);
+            QByteArray result(bytes, '\0');
+            if (!bytes || !GetFileSecurityW(
+                              reinterpret_cast<LPCWSTR>(path.utf16()), DACL_SECURITY_INFORMATION,
+                              reinterpret_cast<PSECURITY_DESCRIPTOR>(result.data()), bytes, &bytes))
+                return QByteArray{};
+            return result;
+        };
+        auto before = snapshot(outside);
+        QVERIFY(!before.isEmpty());
+        auto folder = data.path() + "/private-data";
+        QVERIFY(QDir().mkpath(folder));
+        auto linked = folder + "/reword.sqlite";
+        QVERIFY(CreateHardLinkW(reinterpret_cast<LPCWSTR>(linked.utf16()),
+                                reinterpret_cast<LPCWSTR>(outside.utf16()), nullptr));
+        QVERIFY_EXCEPTION_THROWN(reword::Store{folder}, std::exception);
+        QCOMPARE(snapshot(outside), before);
+        QVERIFY(original.open(QIODevice::ReadOnly));
+        QCOMPARE(original.readAll(), QByteArray("synthetic outside data"));
+#else
+        QSKIP("Native NTFS hard-link fixture; POSIX aliases are tested separately.");
+#endif
+    }
+    void hardLinkedDatabaseDoesNotChangeAlias() {
+#ifdef _WIN32
+        QSKIP("POSIX link fixture; native Windows ACLs are tested separately.");
+#else
+        QTemporaryDir data;
+        auto outside = data.path() + "/outside.sqlite";
+        QFile original(outside);
+        QVERIFY(original.open(QIODevice::WriteOnly));
+        original.write("synthetic outside data");
+        original.close();
+        QVERIFY(::chmod(QFile::encodeName(outside).constData(), 0644) == 0);
+        auto folder = data.path() + "/private-data";
+        QVERIFY(QDir().mkpath(folder));
+        QVERIFY(::link(QFile::encodeName(outside).constData(),
+                       QFile::encodeName(folder + "/reword.sqlite").constData()) == 0);
+        QVERIFY_EXCEPTION_THROWN(reword::Store{folder}, std::exception);
+        struct stat state{};
+        QVERIFY(::stat(QFile::encodeName(outside).constData(), &state) == 0);
+        QCOMPARE(state.st_mode & 0777, mode_t(0644));
+        QVERIFY(original.open(QIODevice::ReadOnly));
+        QCOMPARE(original.readAll(), QByteArray("synthetic outside data"));
+#endif
+    }
     void linkedPathsDoNotOpenStorage() {
+#ifdef _WIN32
+        QSKIP("POSIX link fixture; native Windows ACLs are tested separately.");
+#else
         QTemporaryDir data;
         auto actual = data.path() + "/actual";
         auto linked = data.path() + "/linked";
@@ -163,8 +253,8 @@ class StoragePermissionsTest : public QObject {
         }
         QVERIFY(rejected);
         QVERIFY(!QFile::exists(actual + "/reword.sqlite"));
-    }
 #endif
+    }
 };
 QTEST_GUILESS_MAIN(StoragePermissionsTest)
 #include "storage_permissions_test.moc"

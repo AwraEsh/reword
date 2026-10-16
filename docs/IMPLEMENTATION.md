@@ -184,3 +184,29 @@ including storage persistence and unchanged synthetic sidecar content. The
 Windows implementation still requires fresh Windows CI evidence. This change
 does not claim protection against a malicious process already running as the
 same account. No production release is accepted.
+
+Independent storage review found ancestor-link traversal and hard-linked files
+were still accepted. Two added POSIX regressions reproduced both defects before
+the follow-up: the linked ancestor allowed creating a storage directory at the
+external target, and rejecting an invalid hard-linked database still changed its
+external alias from 0644 to 0600. The implementation now rejects linked ancestors
+before creating a directory and requires one link for database/sidecar files
+before changing access. Windows uses native reparse attributes and link counts;
+its link-fixture coverage remains separate from the POSIX-only tests.
+
+CI run 38948425106 passed Linux (including native GTK probes), but Windows stopped
+compiling the test because Qt MOC saw a POSIX-only slot omitted by the C++
+compiler. Slot declarations are now unconditional, with platform-specific test
+bodies. Fresh CI is required; the first run is not Windows acceptance. The local
+native X11 probe could not start because Xvfb is absent from the current host's
+PATH/tool directory; this is recorded separately from the passing CI probe.
+
+Follow-up review also caught a `link/..` normalization mismatch and Windows
+directory ACL propagation preceding file validation. A regression reproduced
+the parent-traversal mismatch on Linux; parent traversal is now rejected before
+normalization. All existing SQLite files are preflighted without modifying their
+permissions before directory ACL hardening. A native Windows hard-link fixture
+compares the external alias DACL and content before/after rejection. This Windows
+fixture has not yet run successfully; the follow-up requires CI evidence. All
+five local suites passed after implementation (12.82 seconds); platform-specific
+link tests explicitly skip on the other OS.

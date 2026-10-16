@@ -20,17 +20,23 @@ void Store::exec(const QString &sql) {
     checked(q);
 }
 Store::Store(const QString &directory) {
+    validateStorageLocation(directory);
     if (QFileInfo(directory).isSymLink())
         throw std::runtime_error("Unsafe data directory.");
     if (!QDir().mkpath(directory))
         throw std::runtime_error("Cannot create private data directory.");
-    restrictStoragePath(directory, true);
     auto path = directory + "/reword.sqlite";
     if (QFileInfo(path).isSymLink())
         throw std::runtime_error("Unsafe database path.");
     for (const auto &suffix : {QString{}, QString("-journal"), QString("-wal"), QString("-shm")}) {
         auto candidate = path + suffix;
         if (QFileInfo(candidate).exists() || QFileInfo(candidate).isSymLink())
+            validateExistingStorageFile(candidate);
+    }
+    restrictStoragePath(directory, true);
+    for (const auto &suffix : {QString{}, QString("-journal"), QString("-wal"), QString("-shm")}) {
+        auto candidate = path + suffix;
+        if (QFileInfo(candidate).exists())
             restrictStoragePath(candidate, false);
     }
     connection_ = QUuid::createUuid().toString();
