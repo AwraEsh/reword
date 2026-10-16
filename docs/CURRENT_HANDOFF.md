@@ -80,3 +80,13 @@ scripts name their required host tools in their help/docstrings.
 The source has no redistribution license yet; [LICENSE](../LICENSE) states the
 current terms. Third-party licenses are recorded separately. Public visibility
 does not grant a source license or prove installer acceptance.
+
+## In-flight storage branch
+
+`codex/storage-permissions` is in the attached managed `storage-access` worktree.
+Storage hardening and its regressions pass all five local CTest suites.
+Independent review found no remaining Critical/Important defects within the
+documented scope. Windows native ACL verification is still pending; its latest
+CI compiled but storage initialization failed, so diagnostic evidence is being
+added before integration. Do not treat the develop branch or older
+installer as containing this change until the branch is integrated.

@@ -1,4 +1,5 @@
 #include "store.h"
+#include "private_storage.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QJsonDocument>
@@ -19,34 +20,52 @@ void Store::exec(const QString &sql) {
     checked(q);
 }
 Store::Store(const QString &directory) {
+    validateStorageLocation(directory);
     if (QFileInfo(directory).isSymLink())
         throw std::runtime_error("Unsafe data directory.");
     if (!QDir().mkpath(directory))
         throw std::runtime_error("Cannot create private data directory.");
-    QFile::setPermissions(directory,
-                          QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
     auto path = directory + "/reword.sqlite";
     if (QFileInfo(path).isSymLink())
         throw std::runtime_error("Unsafe database path.");
+    for (const auto &suffix : {QString{}, QString("-journal"), QString("-wal"), QString("-shm")}) {
+        auto candidate = path + suffix;
+        if (QFileInfo(candidate).exists() || QFileInfo(candidate).isSymLink())
+            validateExistingStorageFile(candidate);
+    }
+    restrictStoragePath(directory, true);
+    for (const auto &suffix : {QString{}, QString("-journal"), QString("-wal"), QString("-shm")}) {
+        auto candidate = path + suffix;
+        if (QFileInfo(candidate).exists())
+            restrictStoragePath(candidate, false);
+    }
     connection_ = QUuid::createUuid().toString();
-    db_ = QSqlDatabase::addDatabase("QSQLITE", connection_);
-    db_.setDatabaseName(path);
-    if (!db_.open())
-        throw std::runtime_error("Cannot open local database.");
-    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    exec("PRAGMA busy_timeout=1000");
-    exec("PRAGMA secure_delete=ON");
-    exec("CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
-    exec("CREATE TABLE IF NOT EXISTS applications(id TEXT PRIMARY KEY,name TEXT NOT NULL,decision "
-         "TEXT NOT NULL DEFAULT 'unknown',remind TEXT)");
-    exec("CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY,created INTEGER NOT "
-         "NULL,original TEXT NOT NULL,corrected TEXT NOT NULL,bytes INTEGER NOT NULL)");
-    exec("CREATE TABLE IF NOT EXISTS statistics(original TEXT NOT NULL,corrected TEXT NOT "
-         "NULL,count INTEGER NOT NULL,PRIMARY KEY(original,corrected))");
-    exec("CREATE TABLE IF NOT EXISTS words(word TEXT PRIMARY KEY)");
-    exec("CREATE TABLE IF NOT EXISTS replacements(original TEXT PRIMARY KEY,corrected TEXT NOT "
-         "NULL)");
-    prune(options());
+    try {
+        db_ = QSqlDatabase::addDatabase("QSQLITE", connection_);
+        db_.setDatabaseName(path);
+        if (!db_.open())
+            throw std::runtime_error("Cannot open local database.");
+        restrictStoragePath(path, false);
+        exec("PRAGMA busy_timeout=1000");
+        exec("PRAGMA secure_delete=ON");
+        exec("CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
+        exec("CREATE TABLE IF NOT EXISTS applications(id TEXT PRIMARY KEY,name TEXT NOT "
+             "NULL,decision "
+             "TEXT NOT NULL DEFAULT 'unknown',remind TEXT)");
+        exec("CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY,created INTEGER NOT "
+             "NULL,original TEXT NOT NULL,corrected TEXT NOT NULL,bytes INTEGER NOT NULL)");
+        exec("CREATE TABLE IF NOT EXISTS statistics(original TEXT NOT NULL,corrected TEXT NOT "
+             "NULL,count INTEGER NOT NULL,PRIMARY KEY(original,corrected))");
+        exec("CREATE TABLE IF NOT EXISTS words(word TEXT PRIMARY KEY)");
+        exec("CREATE TABLE IF NOT EXISTS replacements(original TEXT PRIMARY KEY,corrected TEXT NOT "
+             "NULL)");
+        prune(options());
+    } catch (...) {
+        db_.close();
+        db_ = QSqlDatabase();
+        QSqlDatabase::removeDatabase(connection_);
+        throw;
+    }
 }
 Store::~Store() {
     db_.close();

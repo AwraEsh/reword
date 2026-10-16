@@ -161,3 +161,88 @@ Remaining acceptance: Windows build/installer CI, real Windows field/hotkey test
   from measured final-bundle requirements. Copyleft source delivery and full
   bundled notices remain release work; see
   [Qt's source-delivery guidance](https://www.qt.io/development/download-open-source).
+
+## Storage access hardening — 2026-10-16
+
+Work continues on `codex/storage-permissions` in the managed `storage-access`
+worktree. New regression tests first reproduced two Linux failures: a registered
+SQL connection survived a failed Store constructor, and an existing SQLite
+sidecar retained mode 0644. The constructor now releases its connection on all
+initialization exceptions. Storage permissions are checked before SQLite opens
+existing database/sidecar paths, and again after a new database is created.
+
+On Linux the helper opens paths without following their final symlink, checks
+current-account ownership and regular-file/directory type, and requires chmod
+0700/0600 to succeed. On Windows it opens the native object without following
+reparse points and installs a protected DACL with explicit full access for the
+current account and SYSTEM; directory entries protect newly created children.
+Failure stops storage initialization with a fixed message containing no path or
+user text. Storage remains unencrypted.
+
+Local Release build succeeded and all five CTest suites passed (16.56 seconds),
+including storage persistence and unchanged synthetic sidecar content. The
+Windows implementation still requires fresh Windows CI evidence. This change
+does not claim protection against a malicious process already running as the
+same account. No production release is accepted.
+
+Independent storage review found ancestor-link traversal and hard-linked files
+were still accepted. Two added POSIX regressions reproduced both defects before
+the follow-up: the linked ancestor allowed creating a storage directory at the
+external target, and rejecting an invalid hard-linked database still changed its
+external alias from 0644 to 0600. The implementation now rejects linked ancestors
+before creating a directory and requires one link for database/sidecar files
+before changing access. Windows uses native reparse attributes and link counts;
+its link-fixture coverage remains separate from the POSIX-only tests.
+
+CI run 38948425106 passed Linux (including native GTK probes), but Windows stopped
+compiling the test because Qt MOC saw a POSIX-only slot omitted by the C++
+compiler. Slot declarations are now unconditional, with platform-specific test
+bodies. Fresh CI is required; the first run is not Windows acceptance. The local
+native X11 probe could not start because Xvfb is absent from the current host's
+PATH/tool directory; this is recorded separately from the passing CI probe.
+
+Follow-up review also caught a `link/..` normalization mismatch and Windows
+directory ACL propagation preceding file validation. A regression reproduced
+the parent-traversal mismatch on Linux; parent traversal is now rejected before
+normalization. All existing SQLite files are preflighted without modifying their
+permissions before directory ACL hardening. A native Windows hard-link fixture
+compares the external alias DACL and content before/after rejection. This Windows
+fixture has not yet run successfully; the follow-up requires CI evidence. All
+five local suites passed after implementation (12.82 seconds); platform-specific
+link tests explicitly skip on the other OS.
+
+CI for 6c24b15 (38949857941) compiled Windows successfully but all storage-using
+tests failed during initialization. Linux, including native GTK probes, passed.
+A guarded initialization test now reports only fixed failure-stage text and an
+optional numeric Win32 error. The Windows workflow inspects its synthetic test
+temporary-directory ancestors to distinguish a redirected path from native
+permission API failure. Security protections are not weakened to make CI pass.
+
+A fresh private GNOME 48.7 probe on this source failed while creating its
+RemoteDesktop session (the three-second D-Bus call timed out). The process is
+terminal; no correction assertion ran. This is not counted as current Wayland
+acceptance and does not supersede earlier recorded successful probes.
+
+The Windows diagnostic invocation reported ordinary non-reparse temporary-path
+ancestors, but no QtTest result was captured before its failure. It now uses
+Start-Process with explicit waiting and a QtTest file logger, and checks the
+actual process ExitCode. This avoids treating missing GUI-process stdout or an
+unset PowerShell LASTEXITCODE as evidence of a native permission failure.
+
+Increasing only the private GNOME CreateSession startup-call timeout from three
+to fifteen seconds made the checked-in Qt fixture probe pass all assertions on
+the current storage binary. Other D-Bus calls retain their three-second limit.
+The private compositor PID/owner checks and isolated directories are unchanged.
+
+The awaited Windows diagnostic now identifies the failing native call:
+SetSecurityInfo returns ERROR_ACCESS_DENIED (5) on a newly created private
+directory; the ordinary temporary ancestors are not reparse points. The handle
+previously requested write-security and attribute rights but omitted READ_CONTROL.
+The next CI tests adding security-descriptor read access to the existing native
+handle request. This is a targeted hypothesis, not a verified fix yet, and no
+privilege elevation or relaxed ACL is introduced.
+
+The checked-in private GNOME/Fcitx probes now pass on both Qt and supported GTK3
+fields after the bounded startup-timeout adjustment. Qt additionally verifies
+selection correction/history/Undo and rejected-write retry preservation; GTK3
+still refuses unsupported native selection. Both processes completed normally.

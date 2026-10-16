@@ -63,10 +63,10 @@ def main():
     from gi.repository import Gio, GLib
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
 
-    def call(destination, path, interface, method, signature=None, values=()):
+    def call(destination, path, interface, method, signature=None, values=(), timeout=3000):
         parameters = GLib.Variant(signature, values) if signature else None
         result = bus.call_sync(destination, path, interface, method, parameters, None,
-                               Gio.DBusCallFlags.NONE, 3000, None)
+                               Gio.DBusCallFlags.NONE, timeout, None)
         return result.unpack() if result else ()
 
     def owned():
@@ -126,7 +126,9 @@ def main():
                              "(s)", (SERVICE,))[0]
             if owner_pid != shell.pid:
                 raise RuntimeError("Refusing input: remote-desktop owner is not our compositor.")
-            session = call(SERVICE, MANAGER, SERVICE, "CreateSession")[0]
+            # The compositor advertises its D-Bus name before shell startup is complete.
+            # Keep normal calls short; allow this one-time startup request longer.
+            session = call(SERVICE, MANAGER, SERVICE, "CreateSession", timeout=15000)[0]
             smoke = subprocess.run([str(ROOT / "scripts/env.sh"), str(ROOT / "build/reword"),
                                     "--smoke-test"], cwd=ROOT, env=env,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)

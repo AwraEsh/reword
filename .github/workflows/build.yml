@@ -60,6 +60,20 @@ jobs:
         shell: pwsh
         run: cmake -S . -B build -DCMAKE_PREFIX_PATH="$env:RUNNER_TEMP/Qt/6.8.3/msvc2022_64" -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DREWORD_FCITX=OFF
       - run: cmake --build build --config Release --parallel 2
+      - name: Inspect native storage initialization
+        shell: pwsh
+        run: |
+          foreach ($location in @($env:TEMP, $env:RUNNER_TEMP)) {
+            $entry = Get-Item -LiteralPath $location
+            while ($entry) {
+              Write-Output ("Storage test ancestor: {0}; attributes: {1}; link type: {2}" -f $entry.FullName, $entry.Attributes, $entry.LinkType)
+              $entry = $entry.Parent
+            }
+          }
+          $env:PATH="$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/bin;$env:PATH"
+          $probe = Start-Process -FilePath ./build/Release/reword_storage_tests.exe -ArgumentList @('storageInitializationIsAvailable', '-v1', '-o', 'build/storage-initialization.txt,txt') -Wait -PassThru
+          if (Test-Path build/storage-initialization.txt) { Get-Content build/storage-initialization.txt }
+          if ($probe.ExitCode -ne 0) { throw ("Native storage initialization failed with exit code " + $probe.ExitCode) }
       - name: Tests
         shell: pwsh
         run: |

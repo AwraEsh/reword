@@ -1,5 +1,5 @@
 /build*/
-/.deps/
+/.deps
 /dist/
 *.user
 
