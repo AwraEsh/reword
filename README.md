@@ -1,21 +1,22 @@
 # Reword
 
-Reword fixes spelling mistakes as you type. It runs locally, supports English and
-Persian, and lets you decide which apps it can work in.
+Reword is an offline spelling assistant for English and Persian. It corrects
+mistakes while you type, with separate controls for each language and permission
+settings for each app.
 
-If you delete a correction and type the same mistake again, Reword leaves it alone.
-Try once more and it corrects it again. You can also fix a selected passage and
-recover the original from a small, local history.
+Delete a correction and repeat the same mistake, and Reword leaves it alone.
+Repeat it once more and correction resumes. For longer passages, you can correct
+selected text, undo the change, or copy the original from local history.
 
-## Status
+## Development status
 
-Reword is being built. The core tests run on Linux; desktop integration and
-installers are still in progress. It is not ready for everyday use yet.
+Reword is under active development and is not ready for everyday use. Desktop
+integration, packaging and compatibility testing are still being worked on.
 
-The targets are Windows 10/11 and Debian-based Linux, including X11 and Wayland.
-Support depends on what each app exposes to the desktop's text-input and
-accessibility APIs. Reword leaves fields alone when it cannot safely identify or
-edit them.
+The target platforms are Windows 10/11 and Debian-based Linux. X11 uses AT-SPI;
+Wayland integration requires Fcitx5. Coverage varies by application, and fields
+that cannot be checked or edited safely are skipped. See the
+[compatibility notes](docs/COMPATIBILITY.md) for tested cases and limitations.
 
 ## Build from source
 
@@ -32,8 +33,8 @@ scripts/env.sh ctest --test-dir build --output-on-failure
 ```
 
 The bootstrap downloads packages from your configured apt repositories and unpacks
-them into `.deps`. It does not install system packages. Packaged releases will not
-need this setup.
+them into `.deps`. It does not install system packages. This setup is for
+development; it is not an installer.
 
 ## Your data
 
@@ -41,7 +42,7 @@ Text stays on your computer. There is no cloud service or telemetry.
 Selected-text history is stored locally and can be disabled or deleted. It is not
 encrypted at rest. Everyday typing is not saved in history.
 
-## Project notes
+## Documentation
 
 - [Requirements](docs/REQUIREMENTS.md)
 - [Implementation progress](docs/IMPLEMENTATION.md)
