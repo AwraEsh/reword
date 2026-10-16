@@ -65,6 +65,8 @@ int main(int argc, char **argv) {
                 entry->setEchoMode(QLineEdit::Password);
             else if (command == "plain")
                 entry->setEchoMode(QLineEdit::Normal);
+            else if (command.startsWith("cursor:"))
+                entry->setCursorPosition(command.mid(7).toInt());
             else if (command == "select-all")
                 entry->selectAll();
             else if (command.startsWith("text:"))
@@ -79,6 +81,6 @@ int main(int argc, char **argv) {
             }
         }
     });
-    QTimer::singleShot(60000, &app, &QCoreApplication::quit);
+    QTimer::singleShot(120000, &app, &QCoreApplication::quit);
     return app.exec();
 }

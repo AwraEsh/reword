@@ -115,13 +115,15 @@ int main(int argc, char **argv) {
         return finish("FAIL: private X display could not open for shortcut delivery.", 1);
     auto control = XKeysymToKeycode(display.get(), XK_Control_L);
     auto alt = XKeysymToKeycode(display.get(), XK_Alt_L);
+    auto shift = XKeysymToKeycode(display.get(), XK_Shift_L);
     auto pause = XKeysymToKeycode(display.get(), XK_p);
-    if (!control || !alt || !pause)
+    if (!control || !alt || !shift || !pause)
         return finish("FAIL: private keyboard has no shortcut keycodes.", 1);
     bool delivered = true;
     for (auto [key, down] :
-         {std::pair{control, true}, std::pair{alt, true}, std::pair{pause, true},
-          std::pair{pause, false}, std::pair{alt, false}, std::pair{control, false}})
+         {std::pair{control, true}, std::pair{alt, true}, std::pair{shift, true},
+          std::pair{pause, true}, std::pair{pause, false}, std::pair{shift, false},
+          std::pair{alt, false}, std::pair{control, false}})
         delivered = (XTestFakeKeyEvent(display.get(), key, down, 0) != 0) && delivered;
     XSync(display.get(), False);
     if (!delivered || !until([&] { return store.paused(); }))

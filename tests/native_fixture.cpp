@@ -34,7 +34,9 @@ static gboolean command(gpointer) {
         else if (s.rfind("text:", 0) == 0) {
             gtk_entry_set_text(GTK_ENTRY(entry), s.substr(5).c_str());
             gtk_editable_set_position(GTK_EDITABLE(entry), -1);
-        } else if (s == "select-all")
+        } else if (s.rfind("cursor:", 0) == 0)
+            gtk_editable_set_position(GTK_EDITABLE(entry), std::stoi(s.substr(7)));
+        else if (s == "select-all")
             gtk_editable_select_region(GTK_EDITABLE(entry), 0, -1);
     }
     return TRUE;
@@ -63,7 +65,7 @@ int main(int argc, char **argv) {
     fcntl(0, F_SETFL, O_NONBLOCK);
     g_timeout_add(25, command, nullptr);
     g_timeout_add_seconds(
-        60,
+        120,
         [](gpointer) -> gboolean {
             gtk_main_quit();
             return FALSE;

@@ -104,7 +104,7 @@ class ServiceTest : public QObject {
     void shortcutConflictRestoresSettingsAndRegistrations() {
         Harness h;
         QSignalSpy messages(&h.service, &Service::message);
-        const QStringList original{"Ctrl+Alt+R", "Ctrl+Alt+Z", "Ctrl+Alt+P"};
+        const QStringList original{"Ctrl+Alt+R", "Ctrl+Alt+Z", "Ctrl+Alt+Shift+P"};
         QTRY_COMPARE(h.adapter->activeShortcuts, original);
         auto revision = h.store.value("configRevision", 0).toLongLong();
         h.adapter->unavailableFix = "Ctrl+Alt+X";
@@ -118,12 +118,12 @@ class ServiceTest : public QObject {
     }
     void shortcutConflictDoesNotOverwriteNewerConfiguration() {
         Harness h;
-        const QStringList original{"Ctrl+Alt+R", "Ctrl+Alt+Z", "Ctrl+Alt+P"};
+        const QStringList original{"Ctrl+Alt+R", "Ctrl+Alt+Z", "Ctrl+Alt+Shift+P"};
         QTRY_COMPARE(h.adapter->activeShortcuts, original);
         h.adapter->unavailableFix = "Ctrl+Alt+X";
         h.adapter->onShortcutRejected = [&] { h.store.setValue("fixShortcut", "Ctrl+Alt+Y"); };
         h.store.setValue("fixShortcut", "Ctrl+Alt+X");
-        const QStringList newest{"Ctrl+Alt+Y", "Ctrl+Alt+Z", "Ctrl+Alt+P"};
+        const QStringList newest{"Ctrl+Alt+Y", "Ctrl+Alt+Z", "Ctrl+Alt+Shift+P"};
         QTRY_COMPARE(h.adapter->activeShortcuts, newest);
         QCOMPARE(h.store.value("fixShortcut").toString(), newest[0]);
     }
@@ -165,7 +165,7 @@ class ServiceTest : public QObject {
         h.adapter->rejectRestore = false;
         h.adapter->unavailableFix.clear();
         h.store.setValue("configRevision", h.store.value("configRevision", 0).toLongLong() + 1);
-        const QStringList original{"Ctrl+Alt+R", "Ctrl+Alt+Z", "Ctrl+Alt+P"};
+        const QStringList original{"Ctrl+Alt+R", "Ctrl+Alt+Z", "Ctrl+Alt+Shift+P"};
         QTRY_COMPARE(h.adapter->activeShortcuts, original);
     }
     void failedShortcutRestoreReportsUnavailable() {

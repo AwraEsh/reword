@@ -293,3 +293,19 @@ Server 2022 CI on source 9915766 (runs 38957426101 and 38957436135). PR #3 merge
 as a273876. Both private GNOME Wayland Qt/GTK3 probes exit successfully on the
 same source. This is CI/fixture evidence, not ordinary Windows 10/11 desktop or
 broad application acceptance. Existing packaged artifacts predate this change.
+
+## Wayland retry event flow — 2026-10-16
+
+The `codex/wayland-retry` branch adds surrounding/capability/Reset observation and
+predictive printable continuation for clients that defer surrounding updates.
+Actual Backspace/Delete tests exposed control-character and stale-deletion
+exemption defects. Reset ordering prevents late confirmation from reinstalling
+an obsolete retry cycle. Native protocol evidence and remaining timing limits
+are in WAYLAND_RETRY.md.
+
+The default Pause combination is Ctrl+Alt+Shift+P, avoiding Fcitx's embedded
+preedit hotkey. Explicitly saved settings survive. The old Wayland Pause test
+was ambiguous with even retry attempts; the probe now checks persisted Pause
+state and real behavior before and after a 31-second interval. Six local suites
+pass (15.46 seconds), and native X11's three cycles confirm the new default.
+Fresh Windows CI is required before integration.

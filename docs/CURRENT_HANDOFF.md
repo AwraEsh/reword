@@ -120,3 +120,26 @@ cycles; Windows confirms it with SendInput on the Server 2022 runner. Fresh
 private GNOME Wayland Qt/GTK3 probes also exit successfully. Read
 [shortcut verification](SHORTCUTS.md) for scope and limits. Previously downloaded
 installers and local distribution artifacts predate this integration.
+
+## Wayland retry work awaiting integration
+
+`codex/wayland-retry` reuses the managed `shortcut-conflicts` worktree. It adds
+surrounding/capability/Reset handling, actual Backspace rewriting, cursor and
+continuation regressions, and 31-second expiry/Pause-after-idle checks. A no-op
+Delete must not exempt a later cursor Reset. The native probes first reproduced
+navigation, continuation, control-character and stale-exemption failures.
+
+The stronger Pause assertion exposed an earlier false-positive Wayland test:
+an uncorrected word could be an even retry, without Pause ever taking effect.
+Fcitx reserves Ctrl+Alt+P for TogglePreedit. The new default Ctrl+Alt+Shift+P is
+shared by Store, UI and addon; explicitly saved bindings are preserved. Native
+X11 confirms delivery of the updated default in three cycles. General Fcitx
+conflict reporting still needs audit. See [retry evidence](WAYLAND_RETRY.md).
+
+The six-suite final local run passes in 15.46 seconds. Final native Qt and GTK processes both exit successfully, including Backspace,
+no-op Delete/client cursor reset, continuation, expiry and Pause after idle.
+Fresh Windows CI and integration are still pending. Do not
+claim ordinary Windows desktop, all-client timing behavior or physical lock
+acceptance from these fixtures. The deletion/Reset correlation has a documented
+250ms bound; capability-only password changes during an unconfirmed write still
+need a targeted regression.
