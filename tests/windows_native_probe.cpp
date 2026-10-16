@@ -1,6 +1,8 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include "platform/adapter.h"
+#include "app/service.h"
+#include <QTemporaryDir>
 #include <QCoreApplication>
 #include <QProcess>
 #include <QThread>
@@ -91,6 +93,52 @@ int main(int argc, char **argv) {
         return finish("FAIL: synthetic test shortcut could not be delivered.", 1);
     if (!until([&] { return adapter->takeAction() == "fix"; }))
         return finish("FAIL: registered shortcut was lost in the event loop.", 1);
+    auto conflictRestoresPause = [&] {
+        HWND blocker = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                       GetModuleHandleW(nullptr), nullptr);
+        if (!blocker)
+            return false;
+        if (!RegisterHotKey(blocker, 99, MOD_CONTROL | MOD_ALT | MOD_SHIFT, 'X')) {
+            DestroyWindow(blocker);
+            return false;
+        }
+        QTemporaryDir data;
+        reword::Store store(data.path());
+        auto fixtureId = adapter->inspect(false).app;
+        store.discover(fixtureId, "Synthetic native shortcut fixture");
+        store.decide(fixtureId, "allow");
+        store.setValue("fixShortcut", "Ctrl+Alt+Shift+S");
+        store.setValue("undoShortcut", "Ctrl+Alt+Shift+T");
+        store.setValue("pauseShortcut", "Ctrl+Alt+Shift+U");
+        reword::Service service(data.path());
+        bool healthy = false;
+        QString message;
+        QObject::connect(&service, &reword::Service::state,
+                         [&](QString, bool keys) { healthy = keys; });
+        QObject::connect(&service, &reword::Service::message,
+                         [&](QString text) { message = text; });
+        service.start();
+        bool ok = until([&] { return healthy; });
+        if (ok) {
+            store.setValue("fixShortcut", "Ctrl+Alt+Shift+X");
+            ok = until([&] {
+                return healthy && store.value("fixShortcut").toString() == "Ctrl+Alt+Shift+S" &&
+                       message.contains("restored", Qt::CaseInsensitive);
+            });
+        }
+        if (ok) {
+            inputs[3].ki.wVk = inputs[4].ki.wVk = 'U';
+            ok = SendInput(8, inputs, sizeof(INPUT)) == 8 && until([&] { return store.paused(); });
+        }
+        service.stop();
+        UnregisterHotKey(blocker, 99);
+        DestroyWindow(blocker);
+        return ok;
+    };
+    if (!conflictRestoresPause())
+        return finish("FAIL: native shortcut conflict did not restore a working Pause shortcut.",
+                      1);
+    std::cout << "PASS: native Windows shortcut conflict restores settings and Pause delivery.\n";
     command("password");
     field = adapter->inspect(true);
     if (!field.password || !field.text.isEmpty())

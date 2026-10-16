@@ -4,63 +4,157 @@
 The lock service is a controlled fixture, not proof of a physical lock screen.
 No host application or display is read or modified.
 """
-import os,pathlib,subprocess,sys,tempfile,time,shutil,secrets
-root=pathlib.Path(__file__).resolve().parents[1]
-if '--inside' not in sys.argv:
- result=subprocess.run(['dbus-run-session','--',sys.executable,__file__,'--inside',*sys.argv[1:]])
- raise SystemExit(result.returncode)
-server=shutil.which('Xvfb') or str(root/'.deps/xvfb/usr/bin/Xvfb')
-if not pathlib.Path(server).exists():raise SystemExit('Install Xvfb to run the controlled native probes.')
-with tempfile.TemporaryDirectory(prefix='reword-native-') as directory:
- folder=pathlib.Path(directory);(folder/'runtime').mkdir(mode=0o700)
- number=4000+secrets.randbelow(16000)
- while pathlib.Path(f'/tmp/.X{number}-lock').exists():number+=1
- display=f':{number}';authority=folder/'Xauthority'
- subprocess.run(['xauth','-f',str(authority),'add',display,'.',secrets.token_hex(16)],check=True,stderr=subprocess.DEVNULL)
- env=dict(os.environ,DISPLAY=display,XAUTHORITY=str(authority),XDG_RUNTIME_DIR=str(folder/'runtime'),XDG_SESSION_TYPE='x11',XDG_CONFIG_HOME=str(folder/'config'),XDG_CACHE_HOME=str(folder/'cache'),XDG_DATA_HOME=str(folder/'data'),GTK_IM_MODULE='gtk-im-context-simple',GSETTINGS_BACKEND='memory')
- env.pop('AT_SPI_BUS_ADDRESS',None);env.pop('WAYLAND_DISPLAY',None);env['GDK_BACKEND']='x11'
- # Activated accessibility services must inherit this private display/runtime too.
- from gi.repository import Gio,GLib
- activation={key:env[key] for key in ['DISPLAY','XAUTHORITY','XDG_RUNTIME_DIR','XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','XDG_SESSION_TYPE','GDK_BACKEND','GSETTINGS_BACKEND']}
- bus=Gio.bus_get_sync(Gio.BusType.SESSION,None)
- bus.call_sync('org.freedesktop.DBus','/org/freedesktop/DBus','org.freedesktop.DBus','UpdateActivationEnvironment',GLib.Variant('(a{ss})',(activation,)),None,Gio.DBusCallFlags.NONE,2000,None)
- children=[]
- try:
-  log=(folder/'xvfb.log').open('wb');xserver=subprocess.Popen([server,display,'-screen','0','1280x800x24','-nolisten','tcp','-auth',str(authority)],env=env,stdout=log,stderr=log);children.append(xserver)
-  deadline=time.monotonic()+5
-  while not pathlib.Path(f'/tmp/.X11-unix/X{number}').exists():
-   if xserver.poll() is not None:raise RuntimeError('Private X server failed to start.')
-   if time.monotonic()>deadline:raise RuntimeError('Private X server did not become ready.')
-   time.sleep(.05)
-  # GTK active-window state needs a window manager, just as on a desktop.
-  # A bare Xvfb server does not provide that state to the AT-SPI focus scan.
-  manager=shutil.which('openbox')
-  if not manager:raise RuntimeError('Install Openbox to run the controlled desktop probes.')
-  config=folder/'openbox.xml'
-  config.write_text('<openbox_config xmlns="http://openbox.org/3.4/rc"><focus><focusNew>yes</focusNew></focus><keyboard/><mouse/></openbox_config>')
-  wm=subprocess.Popen([manager,'--sm-disable','--config-file',str(config)],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);children.append(wm)
-  deadline=time.monotonic()+5
-  while True:
-   if wm.poll() is not None:raise RuntimeError('Private window manager exited during startup.')
-   check=subprocess.run(['xprop','-root','_NET_SUPPORTING_WM_CHECK'],env=env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
-   if check.returncode==0 and 'window id #' in check.stdout:break
-   if time.monotonic()>deadline:raise RuntimeError('Private window manager did not become ready.')
-   time.sleep(.05)
-  bus.call_sync('org.a11y.Bus','/org/a11y/bus','org.freedesktop.DBus.Properties','Set',GLib.Variant('(ssv)',('org.a11y.Status','IsEnabled',GLib.Variant('b',True))),None,Gio.DBusCallFlags.NONE,3000,None)
-  lock=subprocess.Popen([sys.executable,str(root/'tests/test_lock_service.py')],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);children.append(lock)
-  for _ in range(40):
-   ready=subprocess.run(['gdbus','call','--session','--dest','org.gnome.ScreenSaver','--object-path','/org/gnome/ScreenSaver','--method','org.gnome.ScreenSaver.GetActive'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-   if ready.returncode==0:break
-   time.sleep(.05)
-  else:raise RuntimeError('Controlled lock service failed to start.')
-  repeat=int(os.environ.get('REWORD_NATIVE_REPEAT','3'))
-  for index in range(repeat):
-   for probe in ['reword_native_probe','reword_native_service_probe']:
-    result=subprocess.run([str(root/'build'/probe)],env=env,timeout=40)
-    if result.returncode:raise RuntimeError(f'{probe} failed on run {index+1}.')
-  print(f'PASS: {repeat} controlled native probe cycles.',flush=True)
- finally:
-  for child in reversed(children):
-   child.terminate()
-   try:child.wait(timeout=5)
-   except subprocess.TimeoutExpired:child.kill();child.wait()
+import argparse
+from contextlib import nullcontext
+import os
+from pathlib import Path
+import secrets
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def detach_test_mounts(directory):
+    for relative in ("runtime/doc", "runtime/gvfs"):
+        mount = Path(directory) / relative
+        if os.path.ismount(mount):
+            tool = shutil.which("fusermount3") or shutil.which("fusermount")
+            if not tool:
+                raise RuntimeError("Cannot detach the private test FUSE mount.")
+            subprocess.run([tool, "-uz", str(mount)], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--inside", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--directory", help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    if not args.inside:
+        # Own the directory outside D-Bus, so activated services have stopped
+        # before any private FUSE mount or temporary file is removed.
+        with tempfile.TemporaryDirectory(prefix="reword-native-") as directory:
+            try:
+                result = subprocess.run([
+                    "dbus-run-session", "--", sys.executable, str(Path(__file__).resolve()),
+                    "--inside", "--directory", directory,
+                ])
+            finally:
+                detach_test_mounts(directory)
+            return result.returncode
+    if not args.directory:
+        raise RuntimeError("The private session needs its caller-owned temporary directory.")
+    server = shutil.which("Xvfb") or str(ROOT / ".deps/xvfb/usr/bin/Xvfb")
+    if not Path(server).exists():
+        raise RuntimeError("Install Xvfb to run the controlled native probes.")
+    with nullcontext(args.directory) as directory:
+        folder = Path(directory)
+        (folder / "runtime").mkdir(mode=0o700)
+        number = 4000 + secrets.randbelow(16000)
+        while Path(f"/tmp/.X{number}-lock").exists():
+            number += 1
+        display = f":{number}"
+        authority = folder / "Xauthority"
+        subprocess.run(["xauth", "-f", str(authority), "add", display, ".", secrets.token_hex(16)],
+                       check=True, stderr=subprocess.DEVNULL)
+        env = dict(os.environ, DISPLAY=display, XAUTHORITY=str(authority),
+                   XDG_RUNTIME_DIR=str(folder / "runtime"), XDG_SESSION_TYPE="x11",
+                   XDG_CONFIG_HOME=str(folder / "config"), XDG_CACHE_HOME=str(folder / "cache"),
+                   XDG_DATA_HOME=str(folder / "data"), GTK_IM_MODULE="gtk-im-context-simple",
+                   GSETTINGS_BACKEND="memory", GIO_USE_VFS="local", GIO_USE_VOLUME_MONITOR="unix",
+                   GVFS_DISABLE_FUSE="1", GDK_BACKEND="x11")
+        env.pop("AT_SPI_BUS_ADDRESS", None)
+        env.pop("WAYLAND_DISPLAY", None)
+        from gi.repository import Gio, GLib
+        activation_keys = (
+            "DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
+            "XDG_DATA_HOME", "XDG_SESSION_TYPE", "GDK_BACKEND", "GSETTINGS_BACKEND",
+            "GIO_USE_VFS", "GIO_USE_VOLUME_MONITOR", "GVFS_DISABLE_FUSE",
+        )
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+                      "UpdateActivationEnvironment",
+                      GLib.Variant("(a{ss})", ({key: env[key] for key in activation_keys},)),
+                      None, Gio.DBusCallFlags.NONE, 2000, None)
+        children = []
+        logs = []
+
+        def spawn(command, name):
+            log = (folder / (name + ".log")).open("wb")
+            logs.append(log)
+            child = subprocess.Popen(command, env=env, stdout=log, stderr=log)
+            children.append(child)
+            return child
+
+        try:
+            xserver = spawn([server, display, "-screen", "0", "1280x800x24", "-nolisten", "tcp",
+                             "-auth", str(authority)], "xvfb")
+            deadline = time.monotonic() + 5
+            while not Path(f"/tmp/.X11-unix/X{number}").exists():
+                if xserver.poll() is not None:
+                    raise RuntimeError("Private X server failed to start.")
+                if time.monotonic() > deadline:
+                    raise RuntimeError("Private X server did not become ready.")
+                time.sleep(.05)
+            manager = shutil.which("openbox")
+            if not manager:
+                raise RuntimeError("Install Openbox to run the controlled desktop probes.")
+            config = folder / "openbox.xml"
+            config.write_text('<openbox_config xmlns="http://openbox.org/3.4/rc">'
+                              '<focus><focusNew>yes</focusNew></focus><keyboard/><mouse/>'
+                              '</openbox_config>')
+            wm = spawn([manager, "--sm-disable", "--config-file", str(config)], "openbox")
+            deadline = time.monotonic() + 5
+            while True:
+                if wm.poll() is not None:
+                    raise RuntimeError("Private window manager exited during startup.")
+                check = subprocess.run(["xprop", "-root", "_NET_SUPPORTING_WM_CHECK"], env=env,
+                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+                if check.returncode == 0 and "window id #" in check.stdout:
+                    break
+                if time.monotonic() > deadline:
+                    raise RuntimeError("Private window manager did not become ready.")
+                time.sleep(.05)
+            bus.call_sync("org.a11y.Bus", "/org/a11y/bus", "org.freedesktop.DBus.Properties", "Set",
+                          GLib.Variant("(ssv)", ("org.a11y.Status", "IsEnabled", GLib.Variant("b", True))),
+                          None, Gio.DBusCallFlags.NONE, 3000, None)
+            spawn([sys.executable, str(ROOT / "tests/test_lock_service.py")], "lock")
+            for _ in range(40):
+                ready = subprocess.run([
+                    "gdbus", "call", "--session", "--dest", "org.gnome.ScreenSaver",
+                    "--object-path", "/org/gnome/ScreenSaver",
+                    "--method", "org.gnome.ScreenSaver.GetActive",
+                ], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if ready.returncode == 0:
+                    break
+                time.sleep(.05)
+            else:
+                raise RuntimeError("Controlled lock service failed to start.")
+            repeat = int(os.environ.get("REWORD_NATIVE_REPEAT", "3"))
+            if not 1 <= repeat <= 100:
+                raise RuntimeError("Native probe repeat count must be between 1 and 100.")
+            for index in range(repeat):
+                for probe in ("reword_native_probe", "reword_native_service_probe"):
+                    result = subprocess.run([str(ROOT / "build" / probe)], env=env, timeout=40)
+                    if result.returncode:
+                        raise RuntimeError(f"{probe} failed on run {index + 1}.")
+            print(f"PASS: {repeat} controlled native probe cycles.", flush=True)
+        finally:
+            for child in reversed(children):
+                child.terminate()
+                try:
+                    child.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
+            for log in logs:
+                log.close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

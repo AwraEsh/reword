@@ -94,7 +94,10 @@ Windows input probes. Five local suites passed after integration (12.58 seconds)
 The Windows native security handle needs READ_CONTROL as well as write-security
 rights; no privilege elevation is used. Earlier downloaded installers predate it.
 
-`codex/linux-distribution` is in the attached managed `linux-distribution` worktree.
+Packaging was merged in [PR #2](https://github.com/AwraEsh/reword/pull/2),
+merge d4b0bf0, after successful Linux/Windows run 38953164712. Six suites
+pass on the primary checkout (13.13 seconds). The `linux-distribution` worktree
+retains its development packages.
 It adds eight isolated packaging regressions and a sixth CTest suite. The initial
 regressions reproduced incorrect glibc metadata and accepted unresolved libraries;
 follow-ups cover the addon and non-C locales. Independent review has no remaining
@@ -103,3 +106,13 @@ Critical/Important findings within this scope. The real staged package contains
 pass with a clean environment and private data/D-Bus, without developer paths.
 These are development artifacts, not an accepted public release. See
 [package checks](LINUX_PACKAGING_CHECKS.md) for the remaining distribution gates.
+
+## In-flight shortcut branch
+
+`codex/shortcut-conflicts` is in the attached managed `shortcut-conflicts`
+worktree. Transactional rollback, concurrent/revised settings, temporary storage
+failure and unavailable-registration recovery are covered by Service regressions.
+The full six-suite local run passes. Native X11 conflict/old-Pause delivery passes
+three controlled cycles, including cleanup. Windows has a corresponding native
+probe but fresh CI is pending. Read [shortcut verification](SHORTCUTS.md) before
+continuing; neither develop nor the earlier installers contain this branch yet.

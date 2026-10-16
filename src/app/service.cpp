@@ -35,6 +35,10 @@ void Service::stop() {
     adapter_.reset();
     engine_.reset();
     store_.reset();
+    shortcutSettings_.clear();
+    workingShortcuts_.clear();
+    shortcutsHealthy_ = false;
+    shortcutRevision_ = -1;
 }
 Field Service::permitted() {
     auto f = adapter_->inspect(false);
@@ -58,13 +62,42 @@ void Service::tick() {
     if (!adapter_ || !store_)
         return;
     try {
-        auto signature = store_->value("fixShortcut", "Ctrl+Alt+R").toString() + "|" +
-                         store_->value("undoShortcut", "Ctrl+Alt+Z").toString() + "|" +
-                         store_->value("pauseShortcut", "Ctrl+Alt+P").toString();
-        if (signature != shortcutSignature_) {
-            auto s = signature.split('|');
-            bool ok = adapter_->shortcuts(s[0], s[1], s[2]);
-            shortcutSignature_ = signature;
+        auto revision = store_->value("configRevision", 0).toLongLong();
+        auto settings = store_->shortcuts();
+        if (settings != shortcutSettings_ ||
+            (!wayland_ && !shortcutsHealthy_ && revision != shortcutRevision_)) {
+            bool hadAttempt = !shortcutSettings_.isEmpty();
+            // Exceptions or newer settings must leave this attempt eligible for retry.
+            shortcutSettings_.clear();
+            shortcutRevision_ = revision;
+            shortcutsHealthy_ = false;
+            bool ok = adapter_->shortcuts(settings[0], settings[1], settings[2]);
+            shortcutsHealthy_ = ok;
+            if (ok) {
+                workingShortcuts_ = settings;
+                shortcutSettings_ = settings;
+            } else if (!workingShortcuts_.isEmpty()) {
+                bool restored = adapter_->shortcuts(workingShortcuts_[0], workingShortcuts_[1],
+                                                    workingShortcuts_[2]);
+                shortcutsHealthy_ = restored;
+                if (store_->restoreShortcuts(settings, revision, workingShortcuts_)) {
+                    shortcutSettings_ = workingShortcuts_;
+                    shortcutRevision_ = revision + 1;
+                    cancel_.store(true);
+                    emit message(
+                        restored ? "This shortcut set is unavailable or already in use. Previous "
+                                   "shortcuts were restored."
+                                 : "This shortcut set could not be registered. Previous settings "
+                                   "were restored, but global shortcuts are unavailable.");
+                }
+                // A newer edit survives the compare-and-set and is checked next tick.
+                ok = restored;
+            } else {
+                shortcutSettings_ = settings;
+                if (hadAttempt && !wayland_)
+                    emit message(
+                        "Global shortcuts are unavailable in this environment or already in use.");
+            }
             shortcutsHealthy_ = ok;
             lastDescription_ = adapter_->description();
             emit state(lastDescription_, ok);
@@ -173,6 +206,7 @@ void Service::tick() {
     } catch (...) {
         previous_ = {};
         retry_.reset();
+        emit state(lastDescription_, shortcutsHealthy_);
         emit message("An integration operation failed safely. No further edit was attempted.");
     }
 }

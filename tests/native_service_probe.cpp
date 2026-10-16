@@ -6,6 +6,9 @@
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <iostream>
+#include <X11/Xlib.h>
+#include <X11/keysym.h>
+#include <X11/extensions/XTest.h>
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     app.setApplicationName("Reword integration probe");
@@ -26,9 +29,10 @@ int main(int argc, char **argv) {
     });
     QObject::connect(&service, &reword::Service::message,
                      [&](QString message) { lastMessage = message; });
-    bool ready = false;
-    QObject::connect(&service, &reword::Service::state, [&](QString description, bool) {
+    bool ready = false, shortcutHealthy = false;
+    QObject::connect(&service, &reword::Service::state, [&](QString description, bool keys) {
         serviceState = description;
+        shortcutHealthy = keys;
         ready = true;
     });
     service.start();
@@ -93,6 +97,37 @@ int main(int argc, char **argv) {
             return field.app == fixturePath && field.focused && field.known && !field.locked;
         }))
         return finish("FAIL: fixture focus unavailable.", 1);
+    auto blocker = reword::createAdapter();
+    if (!blocker->shortcuts("Ctrl+Alt+Shift+X", "Ctrl+Alt+Shift+Y", "Ctrl+Alt+Shift+Z"))
+        return finish("FAIL: native conflict fixture could not reserve shortcuts.", 1);
+    store.setValue("fixShortcut", "Ctrl+Alt+Shift+X");
+    if (!until([&] {
+            return store.value("fixShortcut").toString() == "Ctrl+Alt+R" &&
+                   lastMessage.contains("restored", Qt::CaseInsensitive);
+        }) ||
+        !shortcutHealthy)
+        return finish("FAIL: native shortcut conflict did not restore settings and registrations.",
+                      1);
+    blocker.reset();
+    std::unique_ptr<Display, decltype(&XCloseDisplay)> display(XOpenDisplay(nullptr),
+                                                               &XCloseDisplay);
+    if (!display)
+        return finish("FAIL: private X display could not open for shortcut delivery.", 1);
+    auto control = XKeysymToKeycode(display.get(), XK_Control_L);
+    auto alt = XKeysymToKeycode(display.get(), XK_Alt_L);
+    auto pause = XKeysymToKeycode(display.get(), XK_p);
+    if (!control || !alt || !pause)
+        return finish("FAIL: private keyboard has no shortcut keycodes.", 1);
+    bool delivered = true;
+    for (auto [key, down] :
+         {std::pair{control, true}, std::pair{alt, true}, std::pair{pause, true},
+          std::pair{pause, false}, std::pair{alt, false}, std::pair{control, false}})
+        delivered = (XTestFakeKeyEvent(display.get(), key, down, 0) != 0) && delivered;
+    XSync(display.get(), False);
+    if (!delivered || !until([&] { return store.paused(); }))
+        return finish("FAIL: restored native Pause shortcut did not arrive.", 1);
+    store.pause(0);
+    std::cout << "PASS: native X11 shortcut conflict restores settings and Pause delivery.\n";
     pump(300);
     command("text:");
     command("text:teh ");

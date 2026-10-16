@@ -14,6 +14,9 @@ class Store {
     QVariant value(const QString &, const QVariant &fallback = {}) const;
     void setValue(const QString &, const QVariant &);
     Options options() const;
+    QStringList shortcuts() const;
+    bool restoreShortcuts(const QStringList &expected, qint64 revision,
+                          const QStringList &previous);
     void discover(const QString &id, const QString &name, bool restricted = false);
     void decide(const QString &id, const QString &decision, QDate today = QDate::currentDate());
     bool allowed(const QString &) const;
