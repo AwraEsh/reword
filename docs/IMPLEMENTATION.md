@@ -246,3 +246,26 @@ The checked-in private GNOME/Fcitx probes now pass on both Qt and supported GTK3
 fields after the bounded startup-timeout adjustment. Qt additionally verifies
 selection correction/history/Undo and rejected-write retry preservation; GTK3
 still refuses unsupported native selection. Both processes completed normally.
+
+## Storage integration and package audit — 2026-10-16
+
+Adding READ_CONTROL to the Windows security handle resolved the diagnosed
+SetSecurityInfo access-denied failure. Source d3f00ba passed both platforms in
+run 38951426522, including protected ACL/alias regressions, installer launch and
+uninstall, and Windows native input. PR #1 merged as 17e59b6. Five suites pass on
+the primary checkout after integration (12.58 seconds). Both private Qt/GTK
+Wayland probes also pass with the bounded GNOME startup call; unsupported GTK3
+selection remains refused.
+
+The separate linux-distribution branch adds functional package-command regressions.
+Initially, a synthetic unresolved library still produced a .deb and a synthetic
+GLIBC_2.39 requirement still declared >=2.38. Both failures were observed before
+the implementation. Follow-up review exposed missing addon dependency validation;
+that and locale-dependent ldd parsing were also reproduced before their fixes.
+Eight regressions pass and CTest now registers a sixth packaging suite. Native
+addon dependencies are checked separately from the bundled GUI closure. A
+runtime manifest records the derived glibc floor and library names without
+machine paths. Real staging finds 240 ELF objects, requires glibc 2.39 and produces
+matching Debian metadata. Staged and extracted-.deb smoke launches succeed with
+clean environment/private D-Bus and synthetic data. Final release installation,
+source/notice delivery and final-source rebuild acceptance remain open.
