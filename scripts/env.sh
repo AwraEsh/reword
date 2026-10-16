@@ -1,5 +1,5 @@
 #!/bin/sh
-# Source this only for the rootless development toolchain.
+# Run a command with the rootless development toolchain.
 REWORD_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 export CMAKE_PREFIX_PATH="$REWORD_ROOT/.deps/usr${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
 export LD_LIBRARY_PATH="$REWORD_ROOT/.deps/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"

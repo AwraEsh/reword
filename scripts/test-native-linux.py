@@ -17,11 +17,11 @@ with tempfile.TemporaryDirectory(prefix='reword-native-') as directory:
  while pathlib.Path(f'/tmp/.X{number}-lock').exists():number+=1
  display=f':{number}';authority=folder/'Xauthority'
  subprocess.run(['xauth','-f',str(authority),'add',display,'.',secrets.token_hex(16)],check=True,stderr=subprocess.DEVNULL)
- env=dict(os.environ,DISPLAY=display,XAUTHORITY=str(authority),XDG_RUNTIME_DIR=str(folder/'runtime'),XDG_SESSION_TYPE='x11',XDG_CONFIG_HOME=str(folder/'config'),XDG_CACHE_HOME=str(folder/'cache'),XDG_DATA_HOME=str(folder/'data'),GTK_IM_MODULE='gtk-im-context-simple')
+ env=dict(os.environ,DISPLAY=display,XAUTHORITY=str(authority),XDG_RUNTIME_DIR=str(folder/'runtime'),XDG_SESSION_TYPE='x11',XDG_CONFIG_HOME=str(folder/'config'),XDG_CACHE_HOME=str(folder/'cache'),XDG_DATA_HOME=str(folder/'data'),GTK_IM_MODULE='gtk-im-context-simple',GSETTINGS_BACKEND='memory')
  env.pop('AT_SPI_BUS_ADDRESS',None);env.pop('WAYLAND_DISPLAY',None);env['GDK_BACKEND']='x11'
  # Activated accessibility services must inherit this private display/runtime too.
  from gi.repository import Gio,GLib
- activation={key:env[key] for key in ['DISPLAY','XAUTHORITY','XDG_RUNTIME_DIR','XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','XDG_SESSION_TYPE','GDK_BACKEND']}
+ activation={key:env[key] for key in ['DISPLAY','XAUTHORITY','XDG_RUNTIME_DIR','XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','XDG_SESSION_TYPE','GDK_BACKEND','GSETTINGS_BACKEND']}
  bus=Gio.bus_get_sync(Gio.BusType.SESSION,None)
  bus.call_sync('org.freedesktop.DBus','/org/freedesktop/DBus','org.freedesktop.DBus','UpdateActivationEnvironment',GLib.Variant('(a{ss})',(activation,)),None,Gio.DBusCallFlags.NONE,2000,None)
  children=[]
@@ -32,6 +32,7 @@ with tempfile.TemporaryDirectory(prefix='reword-native-') as directory:
    if xserver.poll() is not None:raise RuntimeError('Private X server failed to start.')
    if time.monotonic()>deadline:raise RuntimeError('Private X server did not become ready.')
    time.sleep(.05)
+  bus.call_sync('org.a11y.Bus','/org/a11y/bus','org.freedesktop.DBus.Properties','Set',GLib.Variant('(ssv)',('org.a11y.Status','IsEnabled',GLib.Variant('b',True))),None,Gio.DBusCallFlags.NONE,3000,None)
   lock=subprocess.Popen([sys.executable,str(root/'tests/test_lock_service.py')],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);children.append(lock)
   for _ in range(40):
    ready=subprocess.run(['gdbus','call','--session','--dest','org.gnome.ScreenSaver','--object-path','/org/gnome/ScreenSaver','--method','org.gnome.ScreenSaver.GetActive'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

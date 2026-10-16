@@ -1,0 +1,16 @@
+{
+  "en_US-frequency.json": {
+    "source": "https://github.com/rspeer/wordfreq/blob/912caf64b657478d1dff1138efdc078947d54bb1/wordfreq/data/large_en.msgpack.gz",
+    "sourceSha256": "dffae8066b78dce0a6667cf5f58e567054f902674667090a7ac8a8a44628b05c",
+    "sha256": "7a0940dd0bc499d6cde19fe5b2300569b10d85afeb3e123be3e7ccade1c8ff46",
+    "words": 93959,
+    "license": "CC-BY-SA-4.0"
+  },
+  "fa_IR-frequency.json": {
+    "source": "https://github.com/rspeer/wordfreq/blob/912caf64b657478d1dff1138efdc078947d54bb1/wordfreq/data/small_fa.msgpack.gz",
+    "sourceSha256": "bfb503f6b0d6bdddce720ee8154faf1c79d8b0417e6c865643da3b17b7638057",
+    "sha256": "b6e7f30a7668545bacffde6448044a521bacc9ca6c90c7a0178de9dac1d4ea40",
+    "words": 31166,
+    "license": "CC-BY-SA-4.0"
+  }
+}

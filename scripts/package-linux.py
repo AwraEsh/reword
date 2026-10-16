@@ -29,6 +29,10 @@ for name in ['en_US.aff','en_US.dic','fa_IR.aff','fa_IR.dic']:
  source=root/'assets/dictionaries'/name
  if not source.exists():raise SystemExit('Fetch licensed dictionaries first: python3 scripts/fetch-dictionaries.py')
  shutil.copy2(source,appdir/'usr/share/reword/dictionaries'/name)
+for source in (root/'assets/dictionaries').glob('*frequency.json'):
+ shutil.copy2(source,appdir/'usr/share/reword/dictionaries'/source.name)
+for source in (root/'assets/dictionaries').glob('wordfreq-NOTICE.md'):
+ shutil.copy2(source,appdir/'usr/share/reword/licenses'/source.name)
 for source in (root/'assets/dictionaries').glob('*license*'):
  shutil.copy2(source,appdir/'usr/share/reword/licenses'/source.name)
 for source in [root/'THIRD_PARTY.md',root/'LICENSE']:

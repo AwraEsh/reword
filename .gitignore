@@ -7,3 +7,6 @@
 reword.sqlite*
 instance.lock
 operation.lock
+
+__pycache__/
+*.pyc

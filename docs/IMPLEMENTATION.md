@@ -40,3 +40,27 @@ Remaining acceptance: Windows build/installer CI, real Windows field/hotkey test
 - Added user-only local activation: opening Reword again raises the existing process instead of creating a second background instance. Activation tests passed.
 - The first idle stability process ended before its requested two hours; marked interrupted, not passed. A detached replacement is running under .deps/soak-current with a binary SHA-256 in its report.
 - Shared-desktop GTK tests can lose focus to other real applications. A failing run reported fixtureStillFocused=0. Controlled display tests are being prepared; earlier successful native probes remain valid for their tested conditions.
+
+
+## 2026-10-16: offline ranking and UI privacy
+
+- Added pinned, attributed wordfreq-derived frequency tables: 93,959 English and
+  31,166 Persian entries. The tables rank Hunspell candidates; they do not promise
+  coverage of every word. Source hashes and CC BY-SA attribution travel with the
+  data. Generation uses developer tools only; application correction stays local.
+- Added regression checks for broader spelling candidates, lowercase proper names,
+  pause cancelling pending work, and saved markup never starting HTTP/HTTPS loads.
+  User-provided labels now explicitly render plain text.
+- Formatted C++ and QML sources for maintenance. Include order is preserved for the
+  Windows COM headers.
+- Synthetic frequency-engine sample during a parallel build: 1,400 calls, word
+  p95 37.98 ms, maximum 71.83 ms; a 50,000-character passage completed in 273 ms.
+  This is a workload sample, not a hardware-independent latency guarantee.
+- A private headless GNOME Wayland session launched the actual Qt application with
+  exit code 0. Fcitx correction in that session is still being tested.
+- Windows CI at 5a4f4c2 passed, including the real Edit-control/password/hotkey
+  probe and installer creation. Linux CI failed to observe the controlled GTK
+  fixture focus; its accessibility activation environment is being corrected.
+- The detached two-hour idle run remains live at the last check (runner 9896,
+  application 9904). It tests an earlier binary whose hash is in its local report,
+  and is not acceptance of later source changes.

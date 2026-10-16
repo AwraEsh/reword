@@ -12,8 +12,20 @@ RowLayout {
     ColumnLayout {
         Layout.fillWidth: true
         spacing: 5
-        Label { text: row.title; font.pixelSize: 15; font.weight: Font.Medium }
-        Label { text: row.detail; opacity: 0.62; font.pixelSize: 13; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+        Label {
+            textFormat: Text.PlainText
+            text: row.title
+            font.pixelSize: 15
+            font.weight: Font.Medium
+        }
+        Label {
+            textFormat: Text.PlainText
+            text: row.detail
+            opacity: 0.62
+            font.pixelSize: 13
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+        }
     }
     Switch {
         checked: Boolean(Backend.settings[row.settingKey])
