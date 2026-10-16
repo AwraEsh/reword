@@ -132,3 +132,13 @@ Remaining acceptance: Windows build/installer CI, real Windows field/hotkey test
   every page at the 880x620 minimum logical size and 150% scale; the compact
   capture test passed. Reviewed overview, language and privacy captures without
   overlapping content. Scrollable settings continue below the viewport.
+
+
+- CI at a87ed97 passed the entire Linux job, including three controlled native
+  GTK/service cycles. Windows install, native-platform clean-PATH launch and the
+  original uninstall assertions passed; the job then failed while deleting its
+  test directory. The test had waited only for the uninstaller launcher / first
+  file deletion. It now waits for the registry cleanup at the end of the uninstall
+  section, verifies installed-file hashes and refuses leftover shipped files.
+  Cleanup failure no longer hides the original acceptance result. Fresh Windows
+  execution of these stronger assertions is required.

@@ -17,9 +17,13 @@ of Git. No release has been accepted as production ready.
   probes pass on real Qt and supported GTK3 fields. See
   [compatibility evidence](COMPATIBILITY.md) for the exact limits.
 - Windows CI at c02bf5d passed native field/password/hotkey probes and built an
-  installer. The new clean-runtime install/uninstall check still needs CI proof.
-- Linux native CI has been failing fixture focus. AT-SPI runtime activation was
-  added; the next harness version also supplies an Openbox window manager.
+  installer. At a87ed97 the installed native Qt application launched with a clean
+  PATH and uninstall assertions passed, but cleanup raced NSIS's temporary
+  uninstaller. The revised test waits for final registry cleanup and checks every
+  installed file plus all shipped-file removal; fresh CI proof is pending.
+- Linux CI at a87ed97 passed all automated and native GTK/service probes, including
+  three controlled cycles. Supplying AT-SPI runtime activation and a real private
+  window manager resolved the fixture's missing active-window state.
 - Frequency tables contain 93,959 English and 31,166 Persian ranks with pinned
   hashes and attribution. They are heuristic ranking data, not universal coverage.
 - The detached two-hour idle run tests an earlier binary, identified by SHA256
