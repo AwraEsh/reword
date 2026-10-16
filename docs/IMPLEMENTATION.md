@@ -233,3 +233,16 @@ Increasing only the private GNOME CreateSession startup-call timeout from three
 to fifteen seconds made the checked-in Qt fixture probe pass all assertions on
 the current storage binary. Other D-Bus calls retain their three-second limit.
 The private compositor PID/owner checks and isolated directories are unchanged.
+
+The awaited Windows diagnostic now identifies the failing native call:
+SetSecurityInfo returns ERROR_ACCESS_DENIED (5) on a newly created private
+directory; the ordinary temporary ancestors are not reparse points. The handle
+previously requested write-security and attribute rights but omitted READ_CONTROL.
+The next CI tests adding security-descriptor read access to the existing native
+handle request. This is a targeted hypothesis, not a verified fix yet, and no
+privilege elevation or relaxed ACL is introduced.
+
+The checked-in private GNOME/Fcitx probes now pass on both Qt and supported GTK3
+fields after the bounded startup-timeout adjustment. Qt additionally verifies
+selection correction/history/Undo and rejected-write retry preservation; GTK3
+still refuses unsupported native selection. Both processes completed normally.

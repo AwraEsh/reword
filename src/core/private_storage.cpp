@@ -49,7 +49,7 @@ static void accessStoragePath(const QString &path, bool directory, bool apply) {
 #ifdef _WIN32
     HANDLE raw =
         CreateFileW(reinterpret_cast<LPCWSTR>(path.utf16()),
-                    FILE_READ_ATTRIBUTES | (apply ? WRITE_DAC | WRITE_OWNER : 0),
+                    FILE_READ_ATTRIBUTES | (apply ? READ_CONTROL | WRITE_DAC | WRITE_OWNER : 0),
                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                     FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
     if (raw == INVALID_HANDLE_VALUE)
