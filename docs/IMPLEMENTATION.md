@@ -222,3 +222,14 @@ A fresh private GNOME 48.7 probe on this source failed while creating its
 RemoteDesktop session (the three-second D-Bus call timed out). The process is
 terminal; no correction assertion ran. This is not counted as current Wayland
 acceptance and does not supersede earlier recorded successful probes.
+
+The Windows diagnostic invocation reported ordinary non-reparse temporary-path
+ancestors, but no QtTest result was captured before its failure. It now uses
+Start-Process with explicit waiting and a QtTest file logger, and checks the
+actual process ExitCode. This avoids treating missing GUI-process stdout or an
+unset PowerShell LASTEXITCODE as evidence of a native permission failure.
+
+Increasing only the private GNOME CreateSession startup-call timeout from three
+to fifteen seconds made the checked-in Qt fixture probe pass all assertions on
+the current storage binary. Other D-Bus calls retain their three-second limit.
+The private compositor PID/owner checks and isolated directories are unchanged.
