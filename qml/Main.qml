@@ -140,6 +140,18 @@ ApplicationWindow {
                         TextArea {
                             id: editor
                             objectName: "workspaceEditor"
+                            property string acceptedText: ""
+                            property bool restoringText: false
+                            onTextChanged: {
+                                if (restoringText) return
+                                const count = Backend.characterCount(text)
+                                if (count > Backend.settings.maxCharacters && count > Backend.characterCount(acceptedText)) {
+                                    restoringText = true
+                                    text = acceptedText
+                                    restoringText = false
+                                    Backend.rejectOversizedText()
+                                } else acceptedText = text
+                            }
                             placeholderText: "Write or paste your text…"
                             wrapMode: TextEdit.Wrap
                             selectByMouse: true
@@ -153,10 +165,10 @@ ApplicationWindow {
                     RowLayout {
                         Button { text: Backend.busy ? "Correcting…" : "Correct text"; enabled: !Backend.busy && editor.length > 0; highlighted: true; onClicked: Backend.fix(editor.text) }
                         Button { text: "Cancel"; visible: Backend.busy; onClicked: Backend.cancel() }
-                        Button { text: "Undo correction"; enabled: root.undoResult.length > 0 && editor.text === root.undoResult; onClicked: { editor.text = root.undoOriginal; root.undoResult = "" } }
+                        Button { text: "Undo correction"; enabled: root.undoResult.length > 0 && editor.text === root.undoResult; onClicked: { editor.restoringText = true; editor.text = root.undoOriginal; editor.acceptedText = root.undoOriginal; editor.restoringText = false; root.undoResult = "" } }
                         Button { text: "Copy"; enabled: editor.length > 0; onClicked: Backend.copy(editor.text) }
                         Item { Layout.fillWidth: true }
-                        Label { text: editor.length.toLocaleString() + " / " + Backend.settings.maxCharacters.toLocaleString(); color: editor.length > Backend.settings.maxCharacters ? "#e48c80" : root.muted; font.pixelSize: 12 }
+                        Label { text: Backend.characterCount(editor.text).toLocaleString() + " / " + Backend.settings.maxCharacters.toLocaleString(); color: Backend.characterCount(editor.text) > Backend.settings.maxCharacters ? "#e48c80" : root.muted; font.pixelSize: 12 }
                     }
                     Label { text: Backend.platform; color: root.muted; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                     Label { text: "Direct correction waits for permission and a supported, non-sensitive field."; color: root.muted; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }

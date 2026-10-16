@@ -6,6 +6,7 @@
 #include "adapter.h"
 #include <QKeySequence>
 #include <QFileInfo>
+#include <vector>
 using Microsoft::WRL::ComPtr;
 namespace reword {
 class WindowsAdapter final:public Adapter {
@@ -17,6 +18,27 @@ class WindowsAdapter final:public Adapter {
   auto self=reinterpret_cast<WindowsAdapter*>(GetWindowLongPtrW(window,GWLP_USERDATA));
   if(message==WM_HOTKEY&&self){self->pending_=w==1?"fix":w==2?"undo":"pause";return 0;}
   return DefWindowProcW(window,message,w,l);
+ }
+ bool nativeEdit(IUIAutomationElement*element,HWND &window){
+  UIA_HWND handle=0;int pid=0;if(FAILED(element->get_CurrentNativeWindowHandle(&handle))||FAILED(element->get_CurrentProcessId(&pid)))return false;
+  window=reinterpret_cast<HWND>(handle);if(!window)return false;
+  DWORD owner=0;GetWindowThreadProcessId(window,&owner);if(owner!=DWORD(pid))return false;
+  wchar_t name[256]{};if(!GetClassNameW(window,name,256))return false;
+  auto className=QString::fromWCharArray(name);
+  return className.compare("Edit",Qt::CaseInsensitive)==0||className.startsWith("WindowsForms10.EDIT.",Qt::CaseInsensitive);
+ }
+ bool nativeSnapshot(IUIAutomationElement*element,Field &field){
+  HWND window=nullptr;if(!nativeEdit(element,window))return false;
+  constexpr UINT flags=SMTO_ABORTIFHUNG|SMTO_BLOCK;DWORD_PTR length=0,actual=0,after=0;
+  if(!SendMessageTimeoutW(window,WM_GETTEXTLENGTH,0,0,flags,200,&length)||length>100000)return false;
+  std::vector<wchar_t> buffer(size_t(length)+1);
+  if(!SendMessageTimeoutW(window,WM_GETTEXT,buffer.size(),reinterpret_cast<LPARAM>(buffer.data()),flags,200,&actual)||actual!=length)return false;
+  if(!SendMessageTimeoutW(window,WM_GETTEXTLENGTH,0,0,flags,200,&after)||after!=actual)return false;
+  auto text=QString::fromWCharArray(buffer.data(),qsizetype(actual));if(text.toUcs4().size()>50000)return false;
+  DWORD start=DWORD(-1),end=DWORD(-1);DWORD_PTR selection=0;
+  if(!SendMessageTimeoutW(window,EM_GETSEL,reinterpret_cast<WPARAM>(&start),reinterpret_cast<LPARAM>(&end),flags,200,&selection)||start>actual||end>actual)return false;
+  field.text=text;field.caret=int(end);if(start!=end){field.selectionStart=int(std::min(start,end));field.selectionEnd=int(std::max(start,end));}
+  return true;
  }
  bool unlocked(){
   HDESK d=OpenInputDesktop(0,FALSE,DESKTOP_READOBJECTS);if(!d)return false;
@@ -30,7 +52,7 @@ public:
   window_=CreateWindowExW(0,cls.lpszClassName,L"",0,0,0,0,0,HWND_MESSAGE,nullptr,cls.hInstance,this);
  }
  ~WindowsAdapter()override{for(int i=1;i<=3;++i)UnregisterHotKey(window_,i);if(window_)DestroyWindow(window_);validated_.Reset();automation_.Reset();if(com_)CoUninitialize();}
- QString description()const override{return "Windows · UI Automation plain edit fields";}
+ QString description()const override{return "Windows · UI Automation and native plain edit fields";}
  Field inspect(bool read)override{
   validated_.Reset();Field f;if(!automation_)return f;ComPtr<IUIAutomationElement> e;
   if(FAILED(automation_->GetFocusedElement(&e))||!e)return f;
@@ -51,7 +73,9 @@ public:
   f.plain=f.known&&bool(value);
   if(!read||f.password||f.locked||!f.known||!f.focused||!f.editable||!f.plain)return f;
   ComPtr<IUIAutomationTextPattern> pattern;ComPtr<IUIAutomationTextRange> doc;
-  if(FAILED(e->GetCurrentPatternAs(UIA_TextPatternId,IID_PPV_ARGS(&pattern)))||!pattern||FAILED(pattern->get_DocumentRange(&doc))){f.known=false;return f;}
+  if(FAILED(e->GetCurrentPatternAs(UIA_TextPatternId,IID_PPV_ARGS(&pattern)))||!pattern||FAILED(pattern->get_DocumentRange(&doc))){
+   if(nativeSnapshot(e.Get(),f))validated_=e;else f.known=false;return f;
+  }
   BSTR text=nullptr;if(FAILED(doc->GetText(100001,&text))){f.known=false;return f;}
   f.text=QString::fromWCharArray(text,SysStringLen(text));SysFreeString(text);
   if(f.text.size()>=100001 || f.text.toUcs4().size()>50000){f.text.clear();f.known=false;return f;}
@@ -72,8 +96,10 @@ public:
   BSTR replacement=SysAllocStringLen(reinterpret_cast<const OLECHAR*>(text.utf16()),UINT(text.size()));
   if(!replacement)return false;HRESULT written=v->SetValue(replacement);SysFreeString(replacement);
   if(FAILED(written))return false;
-  ComPtr<IUIAutomationTextPattern> p;ComPtr<IUIAutomationTextRange> r;
-  if(SUCCEEDED(e->GetCurrentPatternAs(UIA_TextPatternId,IID_PPV_ARGS(&p)))&&SUCCEEDED(p->get_DocumentRange(&r))){
+  ComPtr<IUIAutomationTextPattern> p;ComPtr<IUIAutomationTextRange> r;HWND native=nullptr;
+  if(nativeEdit(e.Get(),native)){
+   DWORD_PTR ignored=0;SendMessageTimeoutW(native,EM_SETSEL,WPARAM(caret),LPARAM(caret),SMTO_ABORTIFHUNG|SMTO_BLOCK,200,&ignored);
+  }else if(SUCCEEDED(e->GetCurrentPatternAs(UIA_TextPatternId,IID_PPV_ARGS(&p)))&&SUCCEEDED(p->get_DocumentRange(&r))){
    r->MoveEndpointByRange(TextPatternRangeEndpoint_End,r.Get(),TextPatternRangeEndpoint_Start);
    int moved=0;r->MoveEndpointByUnit(TextPatternRangeEndpoint_Start,TextUnit_Character,text.left(caret).toUcs4().size(),&moved);r->Select();
   }

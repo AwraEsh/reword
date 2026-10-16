@@ -15,7 +15,7 @@ int main(int argc,char**argv){
  reword::Field field;
  if(!until([&]{field=adapter->inspect(false);return field.app.endsWith("reword_win_fixture.exe",Qt::CaseInsensitive)&&field.focused;}))return finish("FAIL: native fixture did not receive focus on this desktop.",1);
  if(!field.text.isEmpty())return finish("FAIL: metadata inspection contained text.",1);
- field=adapter->inspect(true);if(!field.known||field.locked||!field.editable||field.text!="teh ")return finish("FAIL: Win32 edit field was not read safely.",1);
+ field=adapter->inspect(true);if(!field.known||field.locked||!field.editable||field.text!="teh "){std::cerr<<"known="<<field.known<<" locked="<<field.locked<<" editable="<<field.editable<<" plain="<<field.plain<<" characters="<<field.text.size()<<" caret="<<field.caret<<"\n";return finish("FAIL: Win32 edit field was not read safely.",1);}
  auto stale=field;stale.text="stale";if(adapter->replace(stale,"WRONG",5))return finish("FAIL: stale replacement accepted.",1);
  if(!adapter->replace(field,"the ",4))return finish("FAIL: native replacement was not confirmed.",1);
  auto command=[&](const QString&text){fixture.write((text+'\n').toUtf8());fixture.waitForBytesWritten(5000);pump(200);};

@@ -89,7 +89,7 @@ public:
   auto pid=atspi_accessible_get_process_id(focus_,&error);
   if(error){g_error_free(error);return f;}
   f.app=QFileInfo(QString("/proc/%1/exe").arg(pid)).symLinkTarget();
-  if(f.app.isEmpty()||pid==getpid())return Field{};
+  if(f.app.isEmpty()||(pid==getpid()||pid==getppid()))return Field{};
   auto obj=ATSPI_OBJECT(focus_);
   f.id=QString::fromUtf8(obj->app->bus_name)+QString::fromUtf8(obj->path);
   auto role=atspi_accessible_get_role(focus_,&error);

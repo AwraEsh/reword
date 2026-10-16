@@ -18,7 +18,12 @@ with tempfile.TemporaryDirectory(prefix='reword-native-') as directory:
  display=f':{number}';authority=folder/'Xauthority'
  subprocess.run(['xauth','-f',str(authority),'add',display,'.',secrets.token_hex(16)],check=True,stderr=subprocess.DEVNULL)
  env=dict(os.environ,DISPLAY=display,XAUTHORITY=str(authority),XDG_RUNTIME_DIR=str(folder/'runtime'),XDG_SESSION_TYPE='x11',XDG_CONFIG_HOME=str(folder/'config'),XDG_CACHE_HOME=str(folder/'cache'),XDG_DATA_HOME=str(folder/'data'),GTK_IM_MODULE='gtk-im-context-simple')
- env.pop('AT_SPI_BUS_ADDRESS',None);env.pop('WAYLAND_DISPLAY',None)
+ env.pop('AT_SPI_BUS_ADDRESS',None);env.pop('WAYLAND_DISPLAY',None);env['GDK_BACKEND']='x11'
+ # Activated accessibility services must inherit this private display/runtime too.
+ from gi.repository import Gio,GLib
+ activation={key:env[key] for key in ['DISPLAY','XAUTHORITY','XDG_RUNTIME_DIR','XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','XDG_SESSION_TYPE','GDK_BACKEND']}
+ bus=Gio.bus_get_sync(Gio.BusType.SESSION,None)
+ bus.call_sync('org.freedesktop.DBus','/org/freedesktop/DBus','org.freedesktop.DBus','UpdateActivationEnvironment',GLib.Variant('(a{ss})',(activation,)),None,Gio.DBusCallFlags.NONE,2000,None)
  children=[]
  try:
   log=(folder/'xvfb.log').open('wb');xserver=subprocess.Popen([server,display,'-screen','0','1280x800x24','-nolisten','tcp','-auth',str(authority)],env=env,stdout=log,stderr=log);children.append(xserver)

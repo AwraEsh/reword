@@ -42,6 +42,10 @@ private slots:
   engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR)+"/qml/Main.qml"));
   QVERIFY(!engine.rootObjects().isEmpty());
   auto root=engine.rootObjects().first();auto editor=root->findChild<QObject*>("workspaceEditor");QVERIFY(editor);
+  editor->setProperty("text","previous valid text");
+  editor->setProperty("text",QString(50001,'x'));
+  QCOMPARE(editor->property("text").toString(),QString("previous valid text"));
+  QCOMPARE(controller.characterCount(QString::fromUcs4(U"🙂")),1);
   editor->setProperty("text","im here with teh book");
   controller.fix("im here with teh book");
   QTRY_COMPARE_WITH_TIMEOUT(editor->property("text").toString(),QString("I am here with the book"),12000);

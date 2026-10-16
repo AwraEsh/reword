@@ -34,7 +34,7 @@ class RewordAddon final:public fcitx::AddonInstance {
  struct Edit {
   fcitx::TrackableObjectReference<fcitx::InputContext> context;
   QString app,before,after,original,corrected;
-  unsigned cursor=0;int start=0;qint64 revision=0,expires=0;
+  unsigned cursor=0,anchorBefore=0,cursorBefore=0;int start=0;qint64 revision=0,expires=0;
   bool passage=false,valid=false,confirmed=false;
  } pending_,job_;
  bool unlocked(){
@@ -69,7 +69,7 @@ class RewordAddon final:public fcitx::AddonInstance {
   if(!future_.valid()||future_.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready)return;
   auto operationLock=std::move(operationLock_);auto change=future_.get();auto job=job_;job_={};auto ic=job.context.get();
   if(cancel_.load()||!change.changed||!change.error.isEmpty()||!permitted(ic,job.app)||!unlocked()||job.revision!=store_->value("configRevision",0).toLongLong())return;
-  const auto &st=ic->surroundingText();if(!st.isValid()||QString::fromStdString(st.text())!=job.before||QString::fromStdString(st.selectedText())!=job.original)return;
+  const auto &st=ic->surroundingText();if(!st.isValid()||QString::fromStdString(st.text())!=job.before||QString::fromStdString(st.selectedText())!=job.original||st.anchor()!=job.anchorBefore||st.cursor()!=job.cursorBefore)return;
   auto points=job.before.toUcs4();unsigned start=std::min(st.anchor(),st.cursor()),end=std::max(st.anchor(),st.cursor());
   QString before=QString::fromUcs4(reinterpret_cast<const char32_t*>(points.constData()),start);
   QString after=QString::fromUcs4(reinterpret_cast<const char32_t*>(points.constData()+end),points.size()-end);
@@ -77,6 +77,8 @@ class RewordAddon final:public fcitx::AddonInstance {
   pending_=job;ic->commitString(change.corrected.toStdString());
  }
  void handle(fcitx::Event &event){
+  // X11 is owned by the accessibility service. Never run two correction cycles.
+  if(qEnvironmentVariable("XDG_SESSION_TYPE")!="wayland")return;
   auto &e=static_cast<fcitx::KeyEvent&>(event);auto *ic=e.inputContext();if(!ic||!ic->hasFocus()||e.isRelease())return;
   try{
    auto app=QString::fromStdString(ic->program());if(app.isEmpty())return;QString id="fcitx:"+app;
@@ -100,7 +102,7 @@ class RewordAddon final:public fcitx::AddonInstance {
     auto original=QString::fromStdString(st.selectedText());auto options=store_->options();
     if(original.size()>2*options.maxCharacters||original.toUcs4().size()>options.maxCharacters)return;
     auto lock=std::make_unique<QLockFile>(directory_+"/operation.lock");lock->setStaleLockTime(15000);if(!lock->tryLock(0))return;operationLock_=std::move(lock);
-    cancel_.store(false);job_={};job_.context=ic->watch();job_.app=id;job_.before=text;job_.original=original;job_.passage=true;job_.revision=store_->value("configRevision",0).toLongLong();
+    cancel_.store(false);job_={};job_.context=ic->watch();job_.app=id;job_.before=text;job_.original=original;job_.anchorBefore=st.anchor();job_.cursorBefore=st.cursor();job_.passage=true;job_.revision=store_->value("configRevision",0).toLongLong();
     auto words=store_->words();auto replacements=store_->replacements();
     future_=std::async(std::launch::async,[this,original,options,words,replacements]{try{QElapsedTimer elapsed;elapsed.start();reword::Engine engine;engine.setPersonal(words,replacements);return engine.text(original,options,&cancel_,std::max(qint64(0),10000-elapsed.elapsed()));}catch(...){return reword::Change{original,original,false,"Correction failed."};}});
     e.filterAndAccept();return;

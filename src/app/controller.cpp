@@ -55,6 +55,10 @@ QVariantMap Controller::settings()const {
  m["shortcutsAvailable"]=shortcuts_;return m;
 }
 QVariantList Controller::replacements()const{QVariantList list;auto map=read([&]{return store_.replacements();});for(auto i=map.cbegin();i!=map.cend();++i)list<<QVariantMap{{"original",i.key()},{"corrected",i.value()}};return list;}
+int Controller::characterCount(const QString&text)const{
+ if(text.size()>200000)return 200001;
+ int count=0;for(qsizetype i=0;i<text.size();++i){if(text[i].isHighSurrogate()&&i+1<text.size()&&text[i+1].isLowSurrogate())++i;++count;}return count;
+}
 void Controller::set(QString key,QVariant value){guard([&]{
  if(!settings().contains(key)&&key!="dark")return;
  if(key.endsWith("Shortcut")){

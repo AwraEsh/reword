@@ -45,6 +45,8 @@ public:
  bool dark()const{return read([&]{return store_.value("dark",true).toBool();});}
  bool paused()const{try{return store_.paused();}catch(...){storageFailed_=true;return true;}}
  bool trayAvailable()const{return tray_!=nullptr;}
+ Q_INVOKABLE int characterCount(const QString &text)const;
+ Q_INVOKABLE void rejectOversizedText(){notice_="Text exceeds the workspace limit. The previous text was kept.";emit updated();}
  Q_INVOKABLE void set(QString key,QVariant value);
  Q_INVOKABLE void decide(QString id,QString decision);
  Q_INVOKABLE void consent(QString decision);
