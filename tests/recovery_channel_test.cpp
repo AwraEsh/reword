@@ -5,6 +5,11 @@
 #include <QTemporaryDir>
 #include <QFileInfo>
 #include <QtEndian>
+#include <QProcess>
+#ifndef _WIN32
+#include <grp.h>
+#include <unistd.h>
+#endif
 #include "platform/recovery_channel.h"
 using namespace reword;
 class RecoveryChannelTest : public QObject {
@@ -17,6 +22,56 @@ class RecoveryChannelTest : public QObject {
         QCOMPARE(socket.readAll(), QByteArray("RWR1"));
     }
   private slots:
+    void crossAccountServerNeverReceivesGreeting() {
+#ifdef _WIN32
+        QSKIP("The isolated foreign-UID server probe is Linux-only.");
+#else
+        if (::geteuid() != 0)
+            QSKIP("Run only in the disposable Linux CI runner with root for UID separation.");
+        QTemporaryDir data;
+        const auto endpoint = QDir::tempPath() + '/' + recoveryEndpoint(data.path());
+        QProcess impostor;
+        impostor.setChildProcessModifier([] {
+            if (::setgroups(0, nullptr) || ::setgid(65534) || ::setuid(65534))
+                ::_exit(100);
+        });
+        const QString script = R"PY(
+import os, socket, sys
+s = socket.socket(socket.AF_UNIX)
+s.bind(sys.argv[1])
+os.chmod(sys.argv[1], 0o666)
+s.listen(1)
+s.settimeout(3)
+print('READY', flush=True)
+try:
+    c, _ = s.accept()
+    c.settimeout(1)
+    try:
+        data = c.recv(16)
+    except TimeoutError:
+        data = b''
+    print('GREETING' if data else 'EMPTY', flush=True)
+    c.close()
+finally:
+    s.close()
+    os.unlink(sys.argv[1])
+)PY";
+        impostor.start("/usr/bin/python3", {"-c", script, endpoint});
+        QVERIFY(impostor.waitForStarted());
+        QByteArray output;
+        QTRY_VERIFY((output += impostor.readAllStandardOutput()).contains("READY\n"));
+        RecoveryClient client;
+        QSignalSpy activity(&client, &RecoveryClient::activeChanged);
+        client.start(data.path());
+        QTRY_COMPARE(impostor.state(), QProcess::NotRunning);
+        output += impostor.readAllStandardOutput();
+        QCOMPARE(impostor.exitCode(), 0);
+        QCOMPARE(output, QByteArray("READY\nEMPTY\n"));
+        QVERIFY(!client.active());
+        QVERIFY(!client.submit("must never leave the account", "result"));
+        QCOMPARE(activity.count(), 0);
+#endif
+    }
     void wirePreservesExactUtf16AndEnforcesBounds() {
         QString original = QString::fromUtf8("متن 🙂 ");
         original += QChar(0xd800); // Preserve even unpaired units; never normalize an original.

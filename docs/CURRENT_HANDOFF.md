@@ -188,9 +188,10 @@ peers, bounded buffers/clients/deadlines and no disk mailbox. A live app handsha
 now gates addon input; disconnect clears pending state. Actual GUI Quit initially
 failed the native probe, then Quit/crash/restart pass with both Qt and GTK.
 History-off passage delivery is confirmed on Qt; unsupported GTK selection stays
-unchanged. Seven local suites pass (23.24 seconds). Review found an endpoint
+unchanged. Seven local suites pass (23.42 seconds). Review found an endpoint
 impersonation risk and a destructor callback lifetime defect; both are fixed with
 OS peer checks, signal suppression and callback guards. Independent final source
-review has no Important finding. Fresh Windows CI and final authentication native
-reruns remain pending, so PR #7 stays draft. See [recovery evidence](ORIGINAL_RECOVERY.md).
+review has no Important finding. Final Qt/GTK reruns after authentication pass. Fresh Windows CI and a separate
+foreign-UID impostor probe in the disposable Linux runner remain pending, so
+PR #7 stays draft. See [recovery evidence](ORIGINAL_RECOVERY.md).
 No production claim or secure-memory-erasure claim is made by this draft.

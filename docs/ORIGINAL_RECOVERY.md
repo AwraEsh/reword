@@ -54,7 +54,7 @@ workspace Undo with History off, the operation-limit bypass, obsolete queued
 frames after a reentrant ACK, callbacks during destruction, and actual Wayland
 correction continuing after clean GUI Quit. These regressions now pass.
 
-Seven local CTest suites pass after transport/authentication changes (23.24s).
+Seven local CTest suites pass after transport/authentication changes (23.42s).
 Tests cover wire bounds and exact UTF-16, partial/oversized frames, timeouts and
 client limits, newest-only queueing, callback reentry/destruction, Controller
 History-off delivery, restart, and explicit offscreen Copy. A Clipboard sentinel
@@ -66,6 +66,9 @@ with History off using only the app's text-free generation count, then native
 Undo. GTK selection without a reliable anchor remains refused unchanged. Exact
 original delivery and Copy are separately covered by offscreen Controller tests.
 These fixtures do not prove all applications, physical lock behavior or ordinary
-Windows 10/11 desktop acceptance. Cross-account adversarial execution is not yet
-an integration test; OS peer checks have independent source review. The final Qt native rerun with peer authentication also passes. Fresh Windows
-CI and the final GTK rerun remain pending at this edit.
+Windows 10/11 desktop acceptance. Final Qt and GTK reruns with peer authentication pass. OS peer checks have
+independent source review. A separate Linux CI probe runs a synthetic server as
+UID 65534 and the client as root, with the socket deliberately world-writable;
+it must receive no greeting. The privilege is solely for disposable test-account
+separation, never required by Reword. Local unprivileged CTest skips this probe.
+Fresh Windows CI and the cross-account CI execution are pending at this edit.

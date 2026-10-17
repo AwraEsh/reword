@@ -20,6 +20,8 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           QT_QUICK_BACKEND: software
+      - name: Reject a foreign-account recovery server
+        run: sudo ./build/reword_recovery_tests crossAccountServerNeverReceivesGreeting
       - name: Launch UI
         run: ./build/reword --smoke-test
         env:
