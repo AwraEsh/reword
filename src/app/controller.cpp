@@ -1,4 +1,5 @@
 #include "controller.h"
+#include "platform/recovery_channel.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QMenu>
@@ -7,6 +8,13 @@
 namespace reword {
 Controller::Controller(const QString &directory, QObject *parent)
     : QObject(parent), store_(directory) {
+    recoveryServer_ = new RecoveryServer(this);
+    connect(recoveryServer_, &RecoveryServer::passage, this,
+            [this](QString original, QString corrected) { rememberPassage(original, corrected); });
+    if (!recoveryServer_->listen(directory) &&
+        qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland")
+        notice_ =
+            "Original recovery is unavailable. Restart Reword before using Wayland correction.";
     service_ = new Service(directory);
     service_->moveToThread(&worker_);
     connect(&worker_, &QThread::started, service_, &Service::start);
@@ -39,6 +47,8 @@ Controller::Controller(const QString &directory, QObject *parent)
                                3000);
         emit updated();
     });
+    connect(service_, &Service::passageApplied, this,
+            [this](QString original, QString corrected) { rememberPassage(original, corrected); });
     connect(
         service_, &Service::result, this,
         [this](QString original, QString corrected, QString error, bool native) {
@@ -47,7 +57,7 @@ Controller::Controller(const QString &directory, QObject *parent)
                 notice_ = error;
             else if (native)
                 notice_ =
-                    "Selected text corrected. The original is in History when history is enabled.";
+                    "Selected text corrected. Copy its original from session recovery in Reword.";
             else
                 emit correctedText(original, corrected);
             emit updated();
@@ -94,6 +104,7 @@ Controller::Controller(const QString &directory, QObject *parent)
     refresh_.start(10000);
 }
 Controller::~Controller() {
+    recoveryServer_->stop();
     service_->cancel();
     QMetaObject::invokeMethod(service_, &Service::stop, Qt::BlockingQueuedConnection);
     worker_.quit();
@@ -251,7 +262,27 @@ void Controller::fix(QString text) {
             service_, [this, text] { service_->processText(text); }, Qt::QueuedConnection);
     });
 }
+bool Controller::rememberPassage(const QString &original, const QString &corrected) {
+    if (!recoveryEligible(original, corrected))
+        return false;
+    recoveryOriginal_ = original;
+    recoveryCorrected_ = corrected;
+    emit updated();
+    return true;
+}
+void Controller::clearRecovery() {
+    recoveryOriginal_.clear();
+    recoveryCorrected_.clear();
+    emit recoveryCleared();
+    emit updated();
+}
+void Controller::copyRecoveryOriginal() {
+    if (!recoveryOriginal_.isEmpty())
+        copy(recoveryOriginal_);
+}
 void Controller::recordApplied(QString original, QString corrected) {
+    if (!rememberPassage(original, corrected))
+        return;
     guard([&] {
         store_.history(original, corrected, store_.options());
         emit updated();
@@ -325,6 +356,8 @@ void Controller::refreshTray() {
     tray_->setToolTip("Reword · " + status());
 }
 void Controller::quit() {
+    recoveryServer_->stop();
+    service_->cancel();
     QApplication::quit();
 }
 } // namespace reword

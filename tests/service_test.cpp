@@ -101,6 +101,26 @@ struct Harness {
 class ServiceTest : public QObject {
     Q_OBJECT
   private slots:
+    void confirmedPassageIsRecoverableWithoutHistory() {
+        Harness h;
+        h.store.setValue("history", false);
+        QSignalSpy recovery(&h.service, SIGNAL(passageApplied(QString, QString)));
+        QVERIFY(recovery.isValid());
+        h.adapter->type("teh");
+        h.adapter->field.selectionStart = 0;
+        h.adapter->field.selectionEnd = 3;
+        h.service.action("fix");
+        QTRY_COMPARE_WITH_TIMEOUT(recovery.count(), 1, 12000);
+        QCOMPARE(recovery.first().at(0).toString(), QString("teh"));
+        QCOMPARE(recovery.first().at(1).toString(), QString("the"));
+        QCOMPARE(h.store.histories().size(), 0);
+        h.adapter->type("subsequent user edit");
+        auto writes = h.adapter->writes;
+        h.service.action("undo");
+        QCOMPARE(h.adapter->field.text, QString("subsequent user edit"));
+        QCOMPARE(h.adapter->writes, writes);
+        QCOMPARE(recovery.count(), 1);
+    }
     void shortcutConflictRestoresSettingsAndRegistrations() {
         Harness h;
         QSignalSpy messages(&h.service, &Service::message);

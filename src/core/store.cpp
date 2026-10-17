@@ -147,7 +147,8 @@ Options Store::options() const {
     o.historyCount = std::clamp(value("historyCount", 100).toInt(), 1, 500);
     o.historyMiB = std::clamp(value("historyMiB", 20).toInt(), 1, 100);
     o.historyDays = std::clamp(value("historyDays", 30).toInt(), 1, 365);
-    o.maxCharacters = std::clamp(value("maxCharacters", 50000).toInt(), 100, 100000);
+    o.maxCharacters =
+        std::clamp(value("maxCharacters", MaxPassageCharacters).toInt(), 100, MaxPassageCharacters);
     return o;
 }
 void Store::discover(const QString &id, const QString &name, bool restricted) {

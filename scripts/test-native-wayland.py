@@ -7,6 +7,9 @@ clipboard, application text, or desktop settings are used.
 """
 import argparse
 import base64
+import hashlib
+import socket
+import struct
 from contextlib import nullcontext
 import os
 from pathlib import Path
@@ -157,6 +160,37 @@ def main():
             wait_for(lambda: call("org.freedesktop.DBus", "/org/freedesktop/DBus",
                                   "org.freedesktop.DBus", "NameHasOwner", "(s)",
                                   ("org.fcitx.Fcitx5",))[0], "Private Fcitx did not start.")
+            def recovery_generation():
+                identity = hashlib.sha256(str(folder / "reword").encode()).hexdigest()[:24]
+                endpoint = Path(os.environ.get("TMPDIR", "/tmp")) / ("reword-recovery-" + identity)
+                try:
+                    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
+                        channel.settimeout(1)
+                        channel.connect(str(endpoint))
+                        def read_exact(size):
+                            result = b""
+                            while len(result) < size:
+                                part = channel.recv(size - len(result))
+                                if not part:
+                                    raise OSError("Private recovery connection closed.")
+                                result += part
+                            return result
+                        channel.sendall(b"RWH1")
+                        if read_exact(4) != b"RWR1":
+                            raise OSError("Private recovery handshake was invalid.")
+                        channel.sendall(b"RWS1")
+                        status = read_exact(12)
+                        if status[:4] != b"STAT":
+                            raise OSError("Private recovery status was invalid.")
+                        return struct.unpack("<Q", status[4:])[0]
+                except OSError:
+                    return None
+
+            application = spawn([str(ROOT / "scripts/env.sh"), str(ROOT / "build/reword")], "application")
+            time.sleep(.5)
+            if application.poll() is not None:
+                raise RuntimeError("The private Reword application exited during startup.")
+            wait_for(lambda: recovery_generation() is not None, "The private recovery channel did not start.")
             plugins = str(ROOT / ".deps/usr/lib/x86_64-linux-gnu/qt6/plugins") + ":" + str(libdir / "qt6/plugins")
             fixture = spawn([str(ROOT / "scripts/env.sh"), "env", "QT_PLUGIN_PATH=" + plugins,
                              str(ROOT / "build" / fixture_name)], "fixture",
@@ -281,6 +315,8 @@ def main():
                      "Pause shortcut did not persist the paused state.")
             type_word(); expect("teh "); chord("p", shift=True)
             print("PASS: pause and resume.", flush=True)
+            if recovery_generation() != 0:
+                raise RuntimeError("Everyday word corrections entered passage recovery.")
             original = "im here with teh book"
             command("text:" + original); command("select-all"); chord("r")
             if args.fixture == "qt":
@@ -289,6 +325,21 @@ def main():
                          "Confirmed passage history was not saved.")
                 chord("z"); expect(original)
                 print("PASS: selected correction, confirmed history and selected Undo.", flush=True)
+                wait_for(lambda: (recovery_generation() or 0) > 0, "Confirmed passage did not reach Reword.")
+                generation = recovery_generation()
+                with database:
+                    database.execute("INSERT OR REPLACE INTO settings VALUES('history','[false]')")
+                second = "im here with teh book again"
+                command("text:" + second); command("select-all"); chord("r")
+                expect("I am here with the book again")
+                wait_for(lambda: (recovery_generation() or 0) > generation,
+                         "History-off passage did not reach the running application.")
+                if database.execute("SELECT count(*) FROM history").fetchone()[0] != 1:
+                    raise RuntimeError("History-off passage was persisted.")
+                chord("z"); expect(second)
+                with database:
+                    database.execute("DELETE FROM settings WHERE key='history'")
+                print("PASS: confirmed History-off recovery delivery to the actual app and Undo.", flush=True)
             else:
                 expect(original)
                 if database.execute("SELECT count(*) FROM history").fetchone()[0]:
@@ -309,6 +360,32 @@ def main():
                      "Pause shortcut failed after the idle interval.")
             type_word(); expect("teh "); chord("p", shift=True)
             print("PASS: pause remains usable after the idle interval.", flush=True)
+            # Only our two private windows exist. Alt+Tab returns to Reword; no tray
+            # is provided by this compositor, so closing it invokes Controller::quit.
+            key_state(0xffe9, True); key(0xff09); key_state(0xffe9, False)
+            time.sleep(.5)
+            key_state(0xffe9, True); key(0xffc1); key_state(0xffe9, False)  # Alt+F4
+            wait_for(lambda: application.poll() is not None, "Reword did not quit from its private window.")
+            if application.returncode:
+                raise RuntimeError("The private Reword application did not exit cleanly.")
+            time.sleep(.2)
+            type_word(); expect("teh ")
+            print("PASS: no addon correction after application Quit.", flush=True)
+            application = spawn([str(ROOT / "scripts/env.sh"), str(ROOT / "build/reword")], "application-restart")
+            wait_for(lambda: recovery_generation() is not None, "Reword recovery did not restart.")
+            time.sleep(.5)
+            key_state(0xffe9, True); key(0xff09); key_state(0xffe9, False)
+            time.sleep(.3)
+            type_word(); expect("the ")
+            print("PASS: addon reconnects after Reword restarts.", flush=True)
+            application.terminate()
+            application.wait(timeout=5)
+            time.sleep(.2)
+            type_word(); expect("teh ")
+            print("PASS: no addon correction after abrupt application exit.", flush=True)
+            application = spawn([str(ROOT / "scripts/env.sh"), str(ROOT / "build/reword")], "application-after-crash")
+            wait_for(lambda: recovery_generation() == 0, "Reword could not reclaim its channel after a crash.")
+            print("PASS: restart after crash reclaims the private channel with empty session recovery.", flush=True)
             database.close()
             selector.close()
         finally:

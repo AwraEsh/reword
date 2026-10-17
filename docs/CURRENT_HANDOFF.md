@@ -1,4 +1,4 @@
-# Current handoff — 2026-10-16
+# Current handoff — 2026-10-17
 
 The approved scope is in [REQUIREMENTS.md](REQUIREMENTS.md). The repository is
 intentionally public at the user's later request. Do not change visibility back
@@ -158,9 +158,10 @@ The new regression merged in PR #5 as 69b206d after source 4df50e4 passed both
 platforms in runs 39029896682 and 39029916494.
 
 
-## Host-addon metadata branch
+## Host-addon metadata integration
 
-`codex/addon-dependencies` reuses the managed `linux-distribution` worktree.
+[PR #6](https://github.com/AwraEsh/reword/pull/6) merged as 7db0555 after source
+3343102 passed Linux/Windows runs 39030487255 and 39030511674.
 Fourteen packaging regressions pass; four new failures were observed before the
 fix. Actual dpkg-shlibdeps inspection includes previously omitted libstdc++6
 >=13.1 and Fcitx core/utils >=5.1.12. A private real staging run contains 240 ELF
@@ -168,4 +169,32 @@ objects, builds .deb metadata with libc6 >=2.39 and launches AppRun with no inhe
 developer paths. Existing development packages were preserved; no new release is
 published. Independent review has no Important finding. See
 [package checks](LINUX_PACKAGING_CHECKS.md) for exact constraints and remaining
-notices/source-delivery/final-installation gates. Fresh CI/integration is pending.
+notices/source-delivery/final-installation gates. The primary packaging CTest
+passes after integration (1.76 seconds).
+
+
+## Original recovery draft
+
+`codex/original-recovery` reuses the managed `shortcut-conflicts` worktree. It
+implements bounded in-memory recovery for workspace/native Service passages,
+independent of saved History, plus explicit Copy/Clear controls. Actual stale
+workspace Undo with History off was RED before the Copy action/cache existed.
+Native Service delivery, Unicode bounds, non-persistence and a 50k ceiling bypass
+also have RED/GREEN evidence. Six local suites pass (17.86 seconds). Reviewed
+Overview/History screenshots at 880x620 logical/150% scale are readable.
+
+The second phase implements framed Fcitx delivery with account-authenticated
+peers, bounded buffers/clients/deadlines and no disk mailbox. A live app handshake
+now gates addon input; disconnect clears pending state. Actual GUI Quit initially
+failed the native probe, then Quit/crash/restart pass with both Qt and GTK.
+History-off passage delivery is confirmed on Qt; unsupported GTK selection stays
+unchanged. Seven local suites pass (23.42 seconds). Review found an endpoint
+impersonation risk and a destructor callback lifetime defect; both are fixed with
+OS peer checks, signal suppression and callback guards. Independent final source
+review has no Important finding. Final Qt/GTK reruns after authentication pass. Linux/Windows workflows
+39033895148/39033897846 pass for dabeda4, including the separate foreign-UID
+impostor probe with no skip. That probe has now been tightened to require EOF
+and clean up on early failure; fresh checks for this test-only change are pending,
+so PR #7 stays draft. Current engine probe: 1,400 synthetic word calls, p95 19.67ms;
+50k-character repeated passage 104ms. This is not end-to-end input latency. See [recovery evidence](ORIGINAL_RECOVERY.md).
+No production claim or secure-memory-erasure claim is made by this draft.

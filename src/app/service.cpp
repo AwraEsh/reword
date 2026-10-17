@@ -190,6 +190,7 @@ void Service::tick() {
                 retry_ = savedRetry;
                 break;
             }
+            undoPassage_ = false;
             undoBefore_ = f.text;
             undoCaret_ = f.caret;
             undoAfter_ = adapter_->inspect(true);
@@ -277,10 +278,12 @@ void Service::runText(QString input, bool native, Field field) {
                                  "before continuing.");
                     return;
                 }
+                undoPassage_ = true;
                 undoBefore_ = field.text;
                 undoCaret_ = field.caret;
                 undoAfter_ = adapter_->inspect(true);
                 previous_ = undoAfter_;
+                emit passageApplied(input, change.corrected);
                 store_->history(input, change.corrected, store_->options());
                 emit result(input, change.corrected, {}, true);
             } catch (...) {
@@ -331,8 +334,9 @@ void Service::fixSelection() {
 void Service::undo() {
     auto f = permitted();
     if (undoBefore_.isEmpty() || !sameTarget(undoAfter_, f)) {
-        emit message("Undo is no longer safe. Copy the original from History if this was a "
-                     "selected-text correction.");
+        emit message(undoPassage_ ? "Undo is no longer safe. Copy the latest passage original from "
+                                    "session recovery in Reword."
+                                  : "Undo is no longer safe. Nothing was replaced.");
         return;
     }
     if (adapter_->replace(f, undoBefore_, undoCaret_)) {

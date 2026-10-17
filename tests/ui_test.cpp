@@ -1,5 +1,6 @@
 #include <QtTest>
 #include <QApplication>
+#include <QClipboard>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -12,6 +13,7 @@
 #include <QTimer>
 #include <atomic>
 #include "app/controller.h"
+#include "platform/recovery_channel.h"
 class BlockedReply : public QNetworkReply {
   public:
     BlockedReply(const QNetworkRequest &request, QObject *parent) : QNetworkReply(parent) {
@@ -66,6 +68,88 @@ class UiTest : public QObject {
         engine.rootObjects().first()->setProperty("page", 4);
         QTest::qWait(300);
         QCOMPARE(requests.load(), 0);
+    }
+    void originalCopySurvivesStaleWorkspaceUndoWithHistoryOff() {
+        if (QGuiApplication::platformName() != "offscreen")
+            QSKIP("Clipboard testing requires the isolated offscreen platform.");
+        QTemporaryDir data;
+        reword::Controller controller(data.path());
+        controller.set("history", false);
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        auto editor = root->findChild<QObject *>("workspaceEditor");
+        QVERIFY(editor);
+        editor->setProperty("text", "im here with teh book");
+        controller.fix("im here with teh book");
+        QTRY_COMPARE_WITH_TIMEOUT(editor->property("text").toString(),
+                                  QString("I am here with the book"), 12000);
+        editor->setProperty("text", "my subsequent edits");
+        QCOMPARE(controller.history().size(), 0);
+        auto copy = root->findChild<QObject *>("copyRecoveryOriginal");
+        QVERIFY2(copy, "The original needs an explicit Copy action after Undo becomes stale.");
+        QVERIFY(copy->property("enabled").toBool());
+        QVERIFY(QMetaObject::invokeMethod(copy, "clicked"));
+        QCOMPARE(QApplication::clipboard()->text(), QString("im here with teh book"));
+        QCOMPARE(editor->property("text").toString(), QString("my subsequent edits"));
+        QCOMPARE(controller.history().size(), 0);
+    }
+    void privateRecoveryReachesControllerWithoutHistoryOrClipboard() {
+        if (QGuiApplication::platformName() != "offscreen")
+            QSKIP("Clipboard testing requires the isolated offscreen platform.");
+        QGuiApplication::clipboard()->setText("unrelated clipboard sentinel");
+        QTemporaryDir data;
+        reword::RecoveryClient client;
+        {
+            reword::Controller controller(data.path());
+            controller.set("history", false);
+            client.start(data.path());
+            QTRY_VERIFY_WITH_TIMEOUT(client.active(), 2500);
+            auto original = QString::fromUtf8("im here متن فارسی");
+            QVERIFY(client.submit(original, "corrected"));
+            QTRY_COMPARE(controller.recoveryOriginal(), original);
+            QCOMPARE(controller.recoveryCorrected(), QString("corrected"));
+            QCOMPARE(controller.history().size(), 0);
+            QCOMPARE(QGuiApplication::clipboard()->text(), QString("unrelated clipboard sentinel"));
+        }
+        QTRY_VERIFY(!client.active());
+        QVERIFY(!client.submit("after app closes", "result"));
+    }
+    void operationLimitCannotBeRaisedAboveFiftyThousand() {
+        QTemporaryDir data;
+        reword::Controller controller(data.path());
+        controller.set("maxCharacters", 100000);
+        QCOMPARE(controller.settings()["maxCharacters"].toInt(), 50000);
+        QSignalSpy corrected(&controller, &reword::Controller::correctedText);
+        controller.fix(QString(50001, 'x'));
+        QVERIFY(!controller.busy());
+        QCOMPARE(corrected.count(), 0);
+        QVERIFY(controller.notice().contains("limit"));
+    }
+    void sessionRecoveryIsBoundedAndNotPersisted() {
+        QTemporaryDir data;
+        {
+            reword::Controller controller(data.path());
+            controller.set("history", false);
+            controller.recordApplied("teh", "the");
+            QCOMPARE(controller.property("recoveryOriginal").toString(), QString("teh"));
+            controller.recordApplied(QString(50001, 'x'), "short");
+            QCOMPARE(controller.property("recoveryOriginal").toString(), QString("teh"));
+            auto unicode = QString::fromUcs4(U"🙂").repeated(50000);
+            controller.recordApplied(unicode, QString(50000, 'a'));
+            QCOMPARE(controller.property("recoveryOriginal").toString(), unicode);
+            controller.recordApplied("short", unicode + "x");
+            QCOMPARE(controller.property("recoveryOriginal").toString(), unicode);
+            QCOMPARE(controller.history().size(), 0);
+            QVERIFY(QMetaObject::invokeMethod(&controller, "clearRecovery"));
+            QVERIFY(controller.property("recoveryOriginal").toString().isEmpty());
+            controller.recordApplied("new original", "new result");
+        }
+        reword::Controller reopened(data.path());
+        QVERIFY(reopened.property("recoveryOriginal").toString().isEmpty());
+        QCOMPARE(reopened.history().size(), 0);
     }
     void passageLockRejectsConcurrentWork() {
         QTemporaryDir data;

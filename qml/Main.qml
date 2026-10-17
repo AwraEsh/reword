@@ -53,6 +53,10 @@ ApplicationWindow {
             root.show();
             pauseDialog.open();
         }
+        function onRecoveryCleared() {
+            root.undoOriginal = "";
+            root.undoResult = "";
+        }
         function onCorrectedText(original, corrected) {
             if (editor.text !== original)
                 return;
@@ -349,6 +353,29 @@ ApplicationWindow {
                             text: Backend.characterCount(editor.text).toLocaleString() + " / " + Backend.settings.maxCharacters.toLocaleString()
                             color: Backend.characterCount(editor.text) > Backend.settings.maxCharacters ? "#e48c80" : root.muted
                             font.pixelSize: 12
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: Backend.recoveryAvailable
+                        Label {
+                            Layout.fillWidth: true
+                            text: "Latest passage original is kept in memory for this session."
+                            textFormat: Text.PlainText
+                            wrapMode: Text.WordWrap
+                            color: root.muted
+                            font.pixelSize: 12
+                        }
+                        Button {
+                            objectName: "copyRecoveryOriginal"
+                            text: "Copy original"
+                            enabled: Backend.recoveryAvailable
+                            onClicked: Backend.copyRecoveryOriginal()
+                        }
+                        Button {
+                            text: "Clear"
+                            onClicked: Backend.clearRecovery()
+                            Accessible.name: "Clear session recovery"
                         }
                     }
                     Label {
@@ -764,6 +791,26 @@ ApplicationWindow {
                     spacing: 16
                     RowLayout {
                         Layout.fillWidth: true
+                        visible: Backend.recoveryAvailable
+                        Label {
+                            Layout.fillWidth: true
+                            text: "Session recovery · latest passage"
+                            textFormat: Text.PlainText
+                            color: root.muted
+                            wrapMode: Text.WordWrap
+                        }
+                        Button {
+                            text: "Copy original"
+                            onClicked: Backend.copyRecoveryOriginal()
+                        }
+                        Button {
+                            text: "Clear"
+                            Accessible.name: "Clear session recovery"
+                            onClicked: Backend.clearRecovery()
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
                         Label {
                             textFormat: Text.PlainText
                             text: Backend.history.length + " saved corrections"
@@ -975,7 +1022,7 @@ ApplicationWindow {
                                         key: "maxCharacters",
                                         title: "Characters per correction",
                                         min: 100,
-                                        max: 100000
+                                        max: 50000
                                     }
                                 ]
                                 delegate: RowLayout {

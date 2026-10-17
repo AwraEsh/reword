@@ -1,12 +1,14 @@
 #include "core/core.h"
 #include "core/store.h"
 #include "platform/adapter.h"
+#include "platform/recovery_channel.h"
 #include <QCoreApplication>
 #include <QStandardPaths>
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QRegularExpression>
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QCryptographicHash>
 #include <QLockFile>
 #include <future>
@@ -30,6 +32,7 @@ class RewordAddon final : public fcitx::AddonInstance {
     std::unique_ptr<QCoreApplication> qt_;
     std::unique_ptr<reword::Store> store_;
     std::unique_ptr<reword::Engine> engine_;
+    std::unique_ptr<reword::RecoveryClient> recovery_;
     std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>> key_, focus_, surrounding_,
         capability_, reset_;
     std::unique_ptr<fcitx::EventSourceTime> timer_;
@@ -70,6 +73,7 @@ class RewordAddon final : public fcitx::AddonInstance {
     void observeRetry(fcitx::InputContext *ic) {
         if (qEnvironmentVariable("XDG_SESSION_TYPE") != "wayland")
             return;
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
         const auto app = ic ? QString::fromStdString(ic->program()) : QString{};
         if (app.isEmpty() || !permitted(ic, "fcitx:" + app) || !unlocked()) {
             resetRetry();
@@ -139,7 +143,7 @@ class RewordAddon final : public fcitx::AddonInstance {
             flags.test(fcitx::CapabilityFlag::Sensitive) ||
             !flags.test(fcitx::CapabilityFlag::SurroundingText))
             return false;
-        return !store_->paused() && store_->allowed(id) &&
+        return recovery_ && recovery_->active() && !store_->paused() && store_->allowed(id) &&
                (!reword::browserApp(id.mid(6)) || store_->options().browsers);
     }
     bool hotkey(const fcitx::Key &key, QString setting, QString fallback) {
@@ -151,6 +155,12 @@ class RewordAddon final : public fcitx::AddonInstance {
     void observe(fcitx::InputContext *ic) {
         if (!pending_.valid || pending_.context.get() != ic)
             return;
+        if (!permitted(ic, pending_.app) || !unlocked()) {
+            pending_ = {};
+            resetRetry();
+            cancel_.store(true);
+            return;
+        }
         const auto &st = ic->surroundingText();
         if (QDateTime::currentMSecsSinceEpoch() > pending_.expires) {
             pending_ = {};
@@ -160,9 +170,10 @@ class RewordAddon final : public fcitx::AddonInstance {
             st.cursor() == pending_.cursor && st.anchor() == pending_.cursor) {
             if (!pending_.confirmed) {
                 auto o = store_->options();
-                if (pending_.passage)
+                if (pending_.passage) {
+                    recovery_->submit(pending_.original, pending_.corrected);
                     store_->history(pending_.original, pending_.corrected, o);
-                else {
+                } else {
                     retry_ = pending_.retryAfter;
                     store_->count(pending_.original, pending_.corrected, o);
                 }
@@ -215,6 +226,9 @@ class RewordAddon final : public fcitx::AddonInstance {
     void handle(fcitx::Event &event) {
         // X11 is owned by the accessibility service. Never run two correction cycles.
         if (qEnvironmentVariable("XDG_SESSION_TYPE") != "wayland")
+            return;
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
+        if (!recovery_ || !recovery_->active())
             return;
         auto &e = static_cast<fcitx::KeyEvent &>(event);
         auto *ic = e.inputContext();
@@ -415,6 +429,33 @@ class RewordAddon final : public fcitx::AddonInstance {
         directory_ = dir;
         store_ = std::make_unique<reword::Store>(dir);
         engine_ = std::make_unique<reword::Engine>();
+        recovery_ = std::make_unique<reword::RecoveryClient>();
+        QObject::connect(recovery_.get(), &reword::RecoveryClient::activeChanged, recovery_.get(),
+                         [this](bool active) {
+                             if (!active) {
+                                 cancel_.store(true);
+                                 resetRetry();
+                                 pending_ = {};
+                                 job_ = {};
+                                 context_.clear();
+                                 observedContext_.clear();
+                                 observedHash_.clear();
+                                 deletionKey_ = false;
+                                 deletionContext_ = {};
+                             }
+                         });
+        QObject::connect(recovery_.get(), &reword::RecoveryClient::deliveryFailed, recovery_.get(),
+                         [] {
+                             QDBusInterface notifications(
+                                 "org.freedesktop.Notifications", "/org/freedesktop/Notifications",
+                                 "org.freedesktop.Notifications", QDBusConnection::sessionBus());
+                             notifications.asyncCall("Notify", "Reword", uint(0), "",
+                                                     "Original recovery interrupted",
+                                                     "Check the latest original before copying. "
+                                                     "Undo or History may still be available.",
+                                                     QStringList{}, QVariantMap{}, 5000);
+                         });
+        recovery_->start(dir);
         key_ = instance->watchEvent(fcitx::EventType::InputContextKeyEvent,
                                     fcitx::EventWatcherPhase::PreInputMethod,
                                     [this](fcitx::Event &e) { handle(e); });
@@ -468,6 +509,7 @@ class RewordAddon final : public fcitx::AddonInstance {
             CLOCK_MONOTONIC, fcitx::now(CLOCK_MONOTONIC) + 40000, 0,
             [this](fcitx::EventSourceTime *timer, uint64_t) {
                 try {
+                    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
                     completed();
                     if (pending_.valid) {
                         auto ic = pending_.context.get();

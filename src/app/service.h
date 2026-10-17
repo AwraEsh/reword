@@ -16,6 +16,7 @@ class Service : public QObject {
     Field previous_, undoAfter_;
     QString undoBefore_;
     int undoCaret_ = 0;
+    bool undoPassage_ = false;
     RetryCycle retry_;
     QString retryPrefix_, retryWord_;
     int retryStart_ = -1;
@@ -55,5 +56,6 @@ class Service : public QObject {
     void message(QString message);
     void state(QString description, bool shortcutsOK);
     void corrected(QString original, QString corrected);
+    void passageApplied(QString original, QString corrected);
 };
 } // namespace reword
