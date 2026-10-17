@@ -79,6 +79,20 @@ class DebianProvenance:
         self.archive_owners = {}
         self.verified = {}
         self.owners = {}
+        self.diversions = {}
+        diversion_file = self.admin_dir / 'diversions'
+        if diversion_file.exists():
+            lines = diversion_file.read_text().splitlines()
+            if len(lines) % 3:
+                raise RuntimeError('Invalid Debian diversion metadata.')
+            for offset in range(0, len(lines), 3):
+                original, diverted = lines[offset:offset + 2]
+                if (not original.startswith('/') or not diverted.startswith('/') or
+                        not safe_relative(original[1:]) or not safe_relative(diverted[1:])):
+                    raise RuntimeError('Invalid Debian diversion paths.')
+                if diverted[1:] in self.diversions:
+                    raise RuntimeError('Ambiguous Debian diversion metadata.')
+                self.diversions[diverted[1:]] = original[1:]
         output = self._run(['dpkg-query', '--admindir=' + str(self.admin_dir), '-W',
                             '-f=${Package}\t${Architecture}\t${Version}\t${source:Package}'
                             '\t${source:Version}\t${db:Status-Status}\n']).decode()
@@ -131,35 +145,67 @@ class DebianProvenance:
 
     def _system_owners(self, relative):
         if relative not in self.owners:
-            try:
-                output = self._run(['dpkg-query', '--admindir=' + str(self.admin_dir),
-                                    '-S', '--', '/' + relative]).decode()
-            except subprocess.CalledProcessError as error:
-                raise RuntimeError('No verified package origin for a runtime file.') from error
-            identifiers = []
-            for line in output.splitlines():
-                owners, separator, path = line.rpartition(': ')
-                if separator and path == '/' + relative:
-                    identifiers.extend(owners.split(', '))
-            candidates = []
-            for identifier in identifiers:
-                if identifier in self.installed:
-                    candidates.append(self.installed[identifier])
-                else:
-                    candidates.extend(p for p in self.installed.values() if p.name == identifier)
-            self.owners[relative] = candidates
+            self._query_system_owners([relative])
         return self.owners[relative]
 
-    def _resolve(self, path):
+    def _metadata_relative(self, relative):
+        seen = set()
+        while relative in self.diversions:
+            if relative in seen:
+                raise RuntimeError('Cyclic Debian diversion metadata.')
+            seen.add(relative)
+            relative = self.diversions[relative]
+        return relative
+
+    def _query_system_owners(self, relatives):
+        missing = sorted(set(relatives) - self.owners.keys())
+        for offset in range(0, len(missing), 128):
+            batch = missing[offset:offset + 128]
+            for relative in batch:
+                self.owners[relative] = []
+            result = subprocess.run(
+                ['dpkg-query', '--admindir=' + str(self.admin_dir), '-S', '--'] +
+                ['/' + name for name in batch], capture_output=True,
+                env=dict(os.environ, LC_ALL='C'))
+            # Exit 1 also means an individual path has no owner. Keep those empty;
+            # _resolve will reject them without losing valid matches from this batch.
+            if result.returncode not in (0, 1):
+                raise RuntimeError('Cannot inspect package origins.')
+            for line in result.stdout.decode().splitlines():
+                identifiers, separator, path = line.rpartition(': ')
+                if not separator or path.removeprefix('/') not in batch:
+                    continue
+                candidates = self.owners[path.removeprefix('/')]
+                for identifier in identifiers.split(', '):
+                    if identifier in self.installed:
+                        candidates.append(self.installed[identifier])
+                    else:
+                        candidates.extend(p for p in self.installed.values() if p.name == identifier)
+
+    def _prime_system_paths(self, paths):
+        relatives = []
+        for path in paths:
+            try:
+                path = Path(path).resolve(strict=True)
+            except OSError:
+                continue
+            if self.extracted_root and path.is_relative_to(self.extracted_root):
+                continue
+            if path.is_relative_to(self.system_root):
+                relatives.append(self._metadata_relative(path.relative_to(self.system_root).as_posix()))
+        self._query_system_owners(relatives)
+
+    def _resolve(self, path, shared_notice=False):
         path = Path(path).resolve(strict=True)
-        if path in self.verified:
-            return self.verified[path]
+        cache_key = (path, shared_notice)
+        if cache_key in self.verified:
+            return self.verified[cache_key]
         md5, sha256 = fingerprint(path)
         if self.extracted_root and path.is_relative_to(self.extracted_root):
             relative = path.relative_to(self.extracted_root).as_posix()
             candidates = self.archive_owners.get(relative, [])
         elif path.is_relative_to(self.system_root):
-            relative = path.relative_to(self.system_root).as_posix()
+            relative = self._metadata_relative(path.relative_to(self.system_root).as_posix())
             candidates = [(p, self._installed_sums(p).get(relative))
                           for p in self._system_owners(relative)]
         else:
@@ -167,29 +213,32 @@ class DebianProvenance:
         if not candidates:
             raise RuntimeError('No verified package origin for a runtime file.')
         matches = {p.key: p for p, digest in candidates if digest == md5}
-        if len(matches) != 1:
+        equivalent = {(p.name, p.version, p.source, p.source_version) for p in matches.values()}
+        if not matches or (len(matches) > 1 and (not shared_notice or len(equivalent) != 1)):
             raise RuntimeError('Runtime package checksum mismatch or ambiguous origin.')
-        result = next(iter(matches.values())).validate(), sha256
-        self.verified[path] = result
+        # Multi-Arch: same packages legitimately share one identical copyright file.
+        # Accept equivalent notice owners only; never use this to guess runtime origin.
+        result = matches[sorted(matches)[0]].validate(), sha256
+        self.verified[cache_key] = result
         return result
 
     def _notice(self, package):
-        candidates = [package] + [p for p in self.archived + list(self.installed.values())
-                                  if p is not package and (p.source, p.source_version) ==
-                                  (package.source, package.source_version)]
         roots = ([self.extracted_root] if self.extracted_root else []) + [self.system_root]
-        for candidate in candidates:
-            for root in roots:
-                path = root / 'usr/share/doc' / candidate.name / 'copyright'
-                try:
-                    owner, sha256 = self._resolve(path)
-                except (OSError, RuntimeError):
-                    continue
-                if (owner.source, owner.source_version) == (package.source, package.source_version):
-                    data = path.read_bytes()
-                    if data and hashlib.sha256(data).hexdigest() == sha256:
-                        return data, sha256
-        raise RuntimeError('No verified copyright notice for the exact source version.')
+        for root in roots:
+            # Follow an explicit shared-document symlink, but never substitute an
+            # arbitrary sibling package's notice merely because its source matches.
+            path = root / 'usr/share/doc' / package.name / 'copyright'
+            try:
+                owner, sha256 = self._resolve(path, shared_notice=True)
+            except (OSError, RuntimeError):
+                continue
+            if (owner.source, owner.source_version) == (package.source, package.source_version):
+                data = path.read_bytes()
+                expected = package.sums.get('usr/share/doc/' + package.name + '/copyright')
+                if (data and hashlib.sha256(data).hexdigest() == sha256 and
+                        (not expected or hashlib.md5(data).hexdigest() == expected)):
+                    return data, sha256
+        raise RuntimeError('No verified copyright notice for the exact source version: ' + package.key)
 
     def stage(self, origins, bundle):
         bundle = Path(bundle).resolve()
@@ -202,15 +251,24 @@ class DebianProvenance:
                 if path.is_file() and path.relative_to(bundle).as_posix() not in recorded:
                     raise RuntimeError('An unrecorded runtime file has no package origin.')
         records, packages = [], {}
+        self._prime_system_paths(origins.values())
         for name, original in sorted(origins.items()):
-            package, sha256 = self._resolve(original)
+            try:
+                package, sha256 = self._resolve(original)
+            except (OSError, RuntimeError) as error:
+                raise RuntimeError(str(error) + ' Destination: ' + name) from error
             staged = (bundle / name).resolve(strict=True)
             if not staged.is_relative_to(bundle) or fingerprint(staged)[1] != sha256:
                 raise RuntimeError('The staged file differs from its verified package origin.')
             packages[package.key] = package
             records.append({'path': name, 'sha256': sha256, 'component': package.key})
-        notices = {key: self._notice(package) for key, package in packages.items()}
         common = self.system_root / 'usr/share/common-licenses'
+        roots = ([self.extracted_root] if self.extracted_root else []) + [self.system_root]
+        notice_paths = [root / 'usr/share/doc' / p.name / 'copyright'
+                        for p in packages.values() for root in roots]
+        common_paths = list(common.iterdir()) if packages and common.is_dir() else []
+        self._prime_system_paths(notice_paths + common_paths)
+        notices = {key: self._notice(package) for key, package in packages.items()}
         for data, _ in notices.values():
             for name in re.findall(rb'/usr/share/common-licenses/([A-Za-z0-9.+-]+)', data):
                 path = common / name.decode('ascii').rstrip('.,;:')

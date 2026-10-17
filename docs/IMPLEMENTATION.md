@@ -347,3 +347,19 @@ Qt/GTK native lifecycle probes also pass after authentication. Linux/Windows CI 
 39034184071/39034186219. PR #7 merged as b48cdc5. The next distribution worktree
 branch is codex/distribution-notices; binary notice/source delivery remains open. Read ORIGINAL_RECOVERY.md for protocol and limits. PR #6 packaging metadata has
 merged as 7db0555; primary packaging CTest passes (1.76 seconds).
+
+
+## Distribution provenance — 2026-10-17
+
+`codex/distribution-notices` verifies copied runtime bytes against exact Debian
+binary/source metadata, writes relative-path SHA256 manifests and includes the
+actual package/common license texts. QML deployment now uses the build SDK's
+scanner and excludes unused nested modules/designer files and unrelated input
+providers. Real host GLX diversions and shared multiarch notices have regression
+coverage. Review found a required QML import hidden by another optional import;
+the RED cases now pass with required transitive imports overriding optional use.
+
+47 functional checks pass, CTest packaging passes, and a real temporary package
+with 524 runtime files/134 components/197 ELFs launches cleanly. No prior installer
+was replaced. Corresponding source archives, Windows notices and final platform/
+installation/stability acceptance remain open. See LINUX_PACKAGING_CHECKS.md.

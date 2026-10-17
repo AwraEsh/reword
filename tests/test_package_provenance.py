@@ -34,8 +34,8 @@ class ProvenanceTest(unittest.TestCase):
             'usr/share/doc/libfixture1/copyright': self.notice,
         })
 
-    def install(self, name, version, source, files):
-        control = (f'Package: {name}\nStatus: install ok installed\nArchitecture: amd64\nMulti-Arch: same\n'
+    def install(self, name, version, source, files, architecture='amd64'):
+        control = (f'Package: {name}\nStatus: install ok installed\nArchitecture: {architecture}\nMulti-Arch: same\n'
                    f'Version: {version}\nSource: {source}\nMaintainer: Fixture <fixture@example.invalid>\nDescription: synthetic fixture\n\n')
         with (self.admin / 'status').open('a') as stream:
             stream.write(control)
@@ -45,7 +45,7 @@ class ProvenanceTest(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
             sums.append(hashlib.md5(data).hexdigest() + '  ' + relative)
-        info = self.admin / 'info' / (name + ':amd64')
+        info = self.admin / 'info' / (name + ':' + architecture)
         info.with_suffix(info.suffix + '.md5sums').write_text('\n'.join(sums) + '\n')
         info.with_suffix(info.suffix + '.list').write_text(''.join('/' + p + '\n' for p in files))
 
@@ -121,6 +121,24 @@ class ProvenanceTest(unittest.TestCase):
         self.assertEqual(component['version'], '2:1.2-3+b1')
         self.assertEqual(component['sourceVersion'], '2:1.2-3')
 
+    def test_registered_diversion_uses_original_package_checksum(self):
+        original = self.system / 'usr/lib/libfixture.so.1'
+        diverted = self.system / 'usr/lib/diverted/libfixture.so.1'
+        diverted.parent.mkdir()
+        original.rename(diverted)
+        (self.admin / 'diversions').write_text(
+            '/usr/lib/libfixture.so.1\n/usr/lib/diverted/libfixture.so.1\nfixture-diversions\n')
+        self.assertEqual(self.stage(diverted)['components'][0]['package'], 'libfixture1:amd64')
+        diverted.write_bytes(b'unverified diverted replacement')
+        with self.assertRaisesRegex(RuntimeError, 'checksum'):
+            self.stage(diverted)
+
+    def test_identical_multiarch_copyright_has_equivalent_verified_owners(self):
+        self.install('libfixture1', '1.2-3+b1', 'fixture (1.2-3)', {
+            'usr/lib/i386-linux-gnu/libfixture.so.1': b'32-bit synthetic library',
+            'usr/share/doc/libfixture1/copyright': self.notice}, architecture='i386')
+        self.assertEqual(self.stage()['components'][0]['package'], 'libfixture1:amd64')
+
     def test_ambiguous_rootless_versions_are_rejected(self):
         archive = self.archive()
         first = self.root / 'first-version.deb'
@@ -156,6 +174,13 @@ class ProvenanceTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'notice'):
             self.stage(self.extracted / 'usr/lib/libfixture.so.1', self.collector([archive]))
 
+    def test_missing_notice_is_not_replaced_by_an_unrelated_same_source_notice(self):
+        self.install('fixture-other', '1.2-3', 'fixture (1.2-3)', {
+            'usr/share/doc/fixture-other/copyright': b'Only covers a different component.\n'})
+        (self.system / 'usr/share/doc/libfixture1/copyright').unlink()
+        with self.assertRaisesRegex(RuntimeError, 'notice'):
+            self.stage()
+
     def test_symlinked_library_and_shared_source_notice_are_verified(self):
         self.install('fixture-common', '1.2-3', 'fixture (1.2-3)', {
             'usr/share/doc/fixture-common/copyright': self.notice})
@@ -165,6 +190,15 @@ class ProvenanceTest(unittest.TestCase):
         link = self.system / 'usr/lib/libfixture.so'
         link.symlink_to('libfixture.so.1')
         self.assertEqual(self.stage(link)['components'][0]['sourceVersion'], '1.2-3')
+
+    def test_modified_notice_symlink_cannot_substitute_different_copyright_bytes(self):
+        self.install('fixture-other', '1.2-3', 'fixture (1.2-3)', {
+            'usr/share/doc/fixture-other/copyright': b'Only a different component.\n'})
+        notice = self.system / 'usr/share/doc/libfixture1/copyright'
+        notice.unlink()
+        notice.symlink_to('../fixture-other/copyright')
+        with self.assertRaisesRegex(RuntimeError, 'notice'):
+            self.stage()
 
     def test_missing_referenced_common_license_is_rejected(self):
         (self.system / 'usr/share/common-licenses/LGPL-3').unlink()

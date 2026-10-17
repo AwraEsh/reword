@@ -39,14 +39,16 @@
 
 ### Task 2: Integrate actual staging
 
-**Files:** Modify scripts/package-linux.py, tests/test_linux_packaging.py and CMakeLists.txt.
+**Files:** Create scripts/package_qml.py; modify scripts/package-linux.py, tests/test_linux_packaging.py and CMakeLists.txt.
 
 **Interfaces:** Task 1 stage() consumes the destination-to-source map from all copied Qt/QML/plugin/transitive library files. Add thirdParty to runtime-manifest.json and licenses/debian plus common text files.
 
-- [ ] Extend whole-command fixtures with genuine synthetic package metadata. Assert a copied plugin and its closure have matching notices/manifest; missing origin/notice rejects before output installation artifact.
-- [ ] Observe new whole-command failures. Record provenance during tree/file copying and call stage() before constructing .deb/AppImage.
-- [ ] Run both packaging suites in CTest. Review final manifest for relative paths only.
-- [ ] In a temporary staging root, use the current primary binary and real Qt/runtime closure; build a temporary .deb, inspect all provenance and notice records, smoke-launch AppRun with a clean environment. Preserve prior dist outputs.
+- [x] Extend whole-command fixtures with genuine synthetic package metadata. Assert a copied plugin and its closure have matching notices/manifest; missing origin/notice rejects before output installation artifact.
+- [x] Observe new whole-command failures. Record provenance during tree/file copying and call stage() before constructing .deb/AppImage.
+- [x] Use qmlimportscanner to copy only resolved imported module roots and their own assets, excluding nested formal modules unless independently scanned. Skip only absent optional imports declared in qmldir, never missing direct app imports. Validate scanner paths against the requested import root. Test unused VirtualKeyboard exclusion, nested required modules, assets and malformed/missing scan output.
+- [x] Bundle compose, IBus and Fcitx5 input contexts when available; exclude unrelated legacy/UIM/virtual-keyboard providers. Test the actual copied set and preserve current native input acceptance.
+- [x] Run both packaging suites in CTest. Review final manifest for relative paths only.
+- [x] In a temporary staging root, use the current primary binary and real Qt/runtime closure; build a temporary .deb, inspect all provenance and notice records, smoke-launch AppRun with a clean environment. Preserve prior dist outputs.
 - [ ] Document actual source identities, limitations and checks. Obtain independent review, commit and open a draft PR with fresh Linux/Windows CI.
 
 ## Remaining distribution gates

@@ -226,3 +226,22 @@ coverage; general Fcitx/compositor shortcut conflict reporting. The documented
 250ms deletion/Reset compatibility bound remains. Run a multi-hour ACTIVE
 workload on the final packaged binary, measuring helper CPU and private memory/
 VmSwap as well as RSS. The old two-hour idle run is not that acceptance.
+
+
+## Distribution notices branch
+
+The provenance resolver and Qt deployment integration are implemented on
+`codex/distribution-notices`. It checks each staged runtime file, includes verified
+package/common notices and emits relative-path metadata. Registered GLX diversions
+and equivalent multiarch copyright ownership have real-host evidence and tests.
+The QML scanner now determines runtime modules; unneeded virtual-keyboard/SCXML/
+timeline trees, designer files and legacy input providers are excluded. Required
+transitive QML imports override optional uses; review caught this defect and RED
+regressions cover both qmldir and runtime-QML cases.
+
+47 functional checks and packaging CTest pass. Final temporary staging reports
+524 runtime files, 134 components, 78 source identities, 197 ELFs and clean AppRun
+exit 0. Existing installers are intact. Fresh review/CI and PR integration remain
+pending. Then consume the runtime manifest's sourcePackage/sourceVersion pairs
+for exact corresponding source archives and Windows materials. A license overview
+or a source URL alone does not complete that distribution gate.
