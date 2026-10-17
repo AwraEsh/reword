@@ -71,4 +71,14 @@ independent source review. A separate Linux CI probe runs a synthetic server as
 UID 65534 and the client as root, with the socket deliberately world-writable;
 it must receive no greeting. The privilege is solely for disposable test-account
 separation, never required by Reword. Local unprivileged CTest skips this probe.
-Fresh Windows CI and the cross-account CI execution are pending at this edit.
+Both Linux/Windows workflows passed for 6198556 (39033638702/39033642703)
+and dabeda4 (39033895148/39033897846). The foreign-UID test ran without skips
+in the disposable Linux runner and passed. Review then tightened that probe to
+require EOF rather than accepting a receive timeout, and added parent-side
+socket cleanup on early assertion failure; its fresh CI is pending at this edit.
+The local recovery suite still passes (4.91s).
+
+The current engine probe measures 1,400 word calls over fourteen fixed English/
+Persian samples: p95 19.67ms, maximum 33.35ms. A 50,000-character repeated passage
+completes in 104ms. This is engine timing for that synthetic workload, not an
+end-to-end keyboard latency measurement or a broad spelling-quality benchmark.

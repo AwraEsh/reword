@@ -191,7 +191,10 @@ History-off passage delivery is confirmed on Qt; unsupported GTK selection stays
 unchanged. Seven local suites pass (23.42 seconds). Review found an endpoint
 impersonation risk and a destructor callback lifetime defect; both are fixed with
 OS peer checks, signal suppression and callback guards. Independent final source
-review has no Important finding. Final Qt/GTK reruns after authentication pass. Fresh Windows CI and a separate
-foreign-UID impostor probe in the disposable Linux runner remain pending, so
-PR #7 stays draft. See [recovery evidence](ORIGINAL_RECOVERY.md).
+review has no Important finding. Final Qt/GTK reruns after authentication pass. Linux/Windows workflows
+39033895148/39033897846 pass for dabeda4, including the separate foreign-UID
+impostor probe with no skip. That probe has now been tightened to require EOF
+and clean up on early failure; fresh checks for this test-only change are pending,
+so PR #7 stays draft. Current engine probe: 1,400 synthetic word calls, p95 19.67ms;
+50k-character repeated passage 104ms. This is not end-to-end input latency. See [recovery evidence](ORIGINAL_RECOVERY.md).
 No production claim or secure-memory-erasure claim is made by this draft.

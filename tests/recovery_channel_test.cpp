@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QtEndian>
 #include <QProcess>
+#include <QScopeGuard>
 #ifndef _WIN32
 #include <grp.h>
 #include <unistd.h>
@@ -30,6 +31,7 @@ class RecoveryChannelTest : public QObject {
             QSKIP("Run only in the disposable Linux CI runner with root for UID separation.");
         QTemporaryDir data;
         const auto endpoint = QDir::tempPath() + '/' + recoveryEndpoint(data.path());
+        const auto cleanup = qScopeGuard([&] { QFile::remove(endpoint); });
         QProcess impostor;
         impostor.setChildProcessModifier([] {
             if (::setgroups(0, nullptr) || ::setgid(65534) || ::setuid(65534))
@@ -46,10 +48,7 @@ print('READY', flush=True)
 try:
     c, _ = s.accept()
     c.settimeout(1)
-    try:
-        data = c.recv(16)
-    except TimeoutError:
-        data = b''
+    data = c.recv(16)  # Require EOF; timeout must fail instead of masquerading as rejection.
     print('GREETING' if data else 'EMPTY', flush=True)
     c.close()
 finally:

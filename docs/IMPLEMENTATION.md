@@ -342,6 +342,6 @@ old 100,000 bypass. The bounded Fcitx local channel now forwards confirmed passa
 on a live app connection. Quit/crash stops addon processing; reconnect resumes
 only after a fresh authenticated handshake. OS peer-account checks prevent
 cross-account endpoint impersonation. Seven suites pass locally (23.42 seconds);
-Qt/GTK native lifecycle probes also pass after authentication. Fresh Windows CI
-and the foreign-UID Linux CI regression remain pending. Read ORIGINAL_RECOVERY.md for protocol and limits. PR #6 packaging metadata has
+Qt/GTK native lifecycle probes also pass after authentication. Linux/Windows CI and the foreign-UID regression pass for dabeda4 in runs
+39033895148/39033897846. A final test-only EOF/cleanup tightening awaits its CI. Read ORIGINAL_RECOVERY.md for protocol and limits. PR #6 packaging metadata has
 merged as 7db0555; primary packaging CTest passes (1.76 seconds).
