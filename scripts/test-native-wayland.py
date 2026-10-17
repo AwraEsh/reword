@@ -229,7 +229,22 @@ def main():
                 rejected = fixture.stdout.readline().decode().strip()
                 if not rejected.startswith("REJECTED:") or int(rejected[9:]) < 1:
                     raise RuntimeError("Fixture did not reject an actual IME write.")
+                # Keep an unconfirmed correction alive, then change only field capability.
+                with database:
+                    database.execute("INSERT OR REPLACE INTO settings VALUES('statistics','[true]')")
+                before = database.execute("SELECT coalesce(sum(count),0) FROM statistics").fetchone()[0]
+                command("password"); command("plain")
+                # A late client snapshot matching the abandoned result must not confirm it.
+                command("text:the ")
+                time.sleep(.2)
+                if database.execute("SELECT coalesce(sum(count),0) FROM statistics").fetchone()[0] != before:
+                    raise RuntimeError("A correction invalidated by a password transition was counted.")
+                if database.execute("SELECT count(*) FROM history").fetchone()[0]:
+                    raise RuntimeError("An unconfirmed protected transition entered history.")
+                with database:
+                    database.execute("DELETE FROM settings WHERE key='statistics'")
                 command("accept-native")
+                print("PASS: password capability transition discards an unconfirmed correction.", flush=True)
             type_word(); expect("the ")
             if args.fixture == "qt":
                 print("PASS: rejected native write does not consume the correction attempt.", flush=True)
