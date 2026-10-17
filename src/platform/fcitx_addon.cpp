@@ -7,6 +7,7 @@
 #include <QDBusReply>
 #include <QRegularExpression>
 #include <QElapsedTimer>
+#include <QCryptographicHash>
 #include <QLockFile>
 #include <future>
 #undef emit
@@ -29,10 +30,17 @@ class RewordAddon final : public fcitx::AddonInstance {
     std::unique_ptr<QCoreApplication> qt_;
     std::unique_ptr<reword::Store> store_;
     std::unique_ptr<reword::Engine> engine_;
-    std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>> key_, focus_;
+    std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>> key_, focus_, surrounding_,
+        capability_, reset_;
     std::unique_ptr<fcitx::EventSourceTime> timer_;
     reword::RetryCycle retry_;
-    QString context_, prefix_;
+    QString context_, prefix_, observedContext_;
+    QByteArray observedHash_;
+    unsigned observedCursor_ = 0, observedAnchor_ = 0;
+    int retryStart_ = -1;
+    bool deletionKey_ = false;
+    uint64_t deletionDeadline_ = 0;
+    fcitx::TrackableObjectReference<fcitx::InputContext> deletionContext_;
     qint64 heartbeat_ = 0;
     QString directory_;
     std::unique_ptr<QLockFile> operationLock_;
@@ -47,6 +55,69 @@ class RewordAddon final : public fcitx::AddonInstance {
         qint64 revision = 0, expires = 0;
         bool passage = false, valid = false, confirmed = false;
     } pending_, job_;
+    void resetRetry() {
+        retry_.reset();
+        retryStart_ = -1;
+        prefix_.clear();
+    }
+    void resetIfContinued(const QString &before) {
+        static const QRegularExpression continued(R"([\s.,!?،؛؟]+[^\s.,!?،؛؟])");
+        if (retryStart_ >= 0 &&
+            (before.size() < retryStart_ || before.left(retryStart_) != prefix_ ||
+             continued.match(before.mid(retryStart_)).hasMatch()))
+            resetRetry();
+    }
+    void observeRetry(fcitx::InputContext *ic) {
+        if (qEnvironmentVariable("XDG_SESSION_TYPE") != "wayland")
+            return;
+        const auto app = ic ? QString::fromStdString(ic->program()) : QString{};
+        if (app.isEmpty() || !permitted(ic, "fcitx:" + app) || !unlocked()) {
+            resetRetry();
+            observedContext_.clear();
+            observedHash_.clear();
+            pending_ = {};
+            cancel_.store(true);
+            return;
+        }
+        const auto &st = ic->surroundingText();
+        if (!st.isValid() || st.text().size() > 400000) {
+            resetRetry();
+            observedContext_.clear();
+            observedHash_.clear();
+            pending_ = {};
+            cancel_.store(true);
+            return;
+        }
+        const auto text = QString::fromStdString(st.text());
+        const auto points = text.toUcs4();
+        if (st.cursor() > unsigned(points.size()) || st.anchor() > unsigned(points.size())) {
+            resetRetry();
+            observedContext_.clear();
+            observedHash_.clear();
+            pending_ = {};
+            cancel_.store(true);
+            return;
+        }
+        const auto hash = QCryptographicHash::hash(QByteArray::fromStdString(st.text()),
+                                                   QCryptographicHash::Sha256);
+        const auto current = QString::number(reinterpret_cast<quintptr>(ic), 16);
+        if (hash != observedHash_ && deletionContext_.get() == ic)
+            deletionKey_ = false;
+        // Confirm our write before classifying subsequent client updates.
+        observe(ic);
+        if (current != observedContext_ ||
+            (hash == observedHash_ &&
+             (st.cursor() != observedCursor_ || st.anchor() != observedAnchor_) &&
+             (!pending_.valid || pending_.confirmed)))
+            resetRetry();
+        if (retryStart_ >= 0)
+            resetIfContinued(QString::fromUcs4(
+                reinterpret_cast<const char32_t *>(points.constData()), st.cursor()));
+        observedContext_ = current;
+        observedHash_ = hash;
+        observedCursor_ = st.cursor();
+        observedAnchor_ = st.anchor();
+    }
     bool unlocked() {
         for (auto spec : {QStringList{"org.gnome.ScreenSaver", "/org/gnome/ScreenSaver",
                                       "org.gnome.ScreenSaver"},
@@ -147,9 +218,13 @@ class RewordAddon final : public fcitx::AddonInstance {
             return;
         auto &e = static_cast<fcitx::KeyEvent &>(event);
         auto *ic = e.inputContext();
-        if (!ic || !ic->hasFocus() || e.isRelease())
+        if (e.isRelease())
+            return;
+        if (!ic || !ic->hasFocus())
             return;
         try {
+            deletionKey_ = false;
+            deletionContext_ = ic->watch();
             auto app = QString::fromStdString(ic->program());
             if (app.isEmpty())
                 return;
@@ -160,14 +235,14 @@ class RewordAddon final : public fcitx::AddonInstance {
                 store_->setValue("fcitxHeartbeat", now);
                 heartbeat_ = now;
             }
-            if (hotkey(e.key(), "pauseShortcut", "Ctrl+Alt+P")) {
+            if (hotkey(e.key(), "pauseShortcut", "Ctrl+Alt+Shift+P")) {
                 cancel_.store(true);
                 store_->pause(store_->paused() ? 0 : -1);
                 e.filterAndAccept();
                 return;
             }
             if (!permitted(ic, id)) {
-                retry_.reset();
+                resetRetry();
                 pending_ = {};
                 cancel_.store(true);
                 return;
@@ -182,7 +257,24 @@ class RewordAddon final : public fcitx::AddonInstance {
             auto points = text.toUcs4();
             if (st.cursor() > unsigned(points.size()) || st.anchor() > unsigned(points.size()))
                 return;
+            const bool backspace = e.key().sym() == FcitxKey_BackSpace;
+            const bool forwardDelete = e.key().sym() == FcitxKey_Delete;
+            deletionKey_ = (backspace || forwardDelete) &&
+                           (st.cursor() != st.anchor() || (backspace && st.cursor() > 0) ||
+                            (forwardDelete && st.cursor() < unsigned(points.size())));
+            deletionDeadline_ = fcitx::now(CLOCK_MONOTONIC) + 250000;
             observe(ic);
+            // Some clients refresh surrounding text only before the next key.
+            // Recognize continuation now so deleting it before a delimiter still resets.
+            if (retryStart_ >= 0 && code >= 0x20 && code != 0x7f && !selection && !undo &&
+                !e.key().states().test(fcitx::KeyState::Ctrl) &&
+                !e.key().states().test(fcitx::KeyState::Alt) && unlocked()) {
+                auto before = QString::fromUcs4(
+                    reinterpret_cast<const char32_t *>(points.constData()), st.cursor());
+                char32_t character = code;
+                before += QString::fromUcs4(&character, 1);
+                resetIfContinued(before);
+            }
             if (undo) {
                 if (!unlocked() || !pending_.valid || !pending_.confirmed ||
                     pending_.context.get() != ic || text != pending_.after ||
@@ -251,7 +343,7 @@ class RewordAddon final : public fcitx::AddonInstance {
                 return;
             auto current = QString::number(reinterpret_cast<quintptr>(ic), 16);
             if (current != context_) {
-                retry_.reset();
+                resetRetry();
                 context_ = current;
                 prefix_.clear();
             }
@@ -273,7 +365,7 @@ class RewordAddon final : public fcitx::AddonInstance {
             const auto &word = words.back();
             auto token = word.token, prefix = before.left(word.start);
             if (prefix != prefix_) {
-                retry_.reset();
+                resetRetry();
                 prefix_ = prefix;
             }
             auto options = store_->options();
@@ -282,6 +374,7 @@ class RewordAddon final : public fcitx::AddonInstance {
             auto corrected = engine_->word(token, options, prefix.right(128));
             if (corrected == token)
                 return;
+            retryStart_ = word.start;
             auto tentativeRetry = retry_;
             if (!tentativeRetry.shouldCorrect(current, word.start, token,
                                               QDateTime::currentMSecsSinceEpoch())) {
@@ -306,7 +399,7 @@ class RewordAddon final : public fcitx::AddonInstance {
             ic->deleteSurroundingText(-int(token.toUcs4().size()), token.toUcs4().size());
             ic->commitString(corrected.toStdString());
         } catch (...) {
-            retry_.reset();
+            resetRetry();
             pending_ = {};
             cancel_.store(true);
         }
@@ -325,9 +418,47 @@ class RewordAddon final : public fcitx::AddonInstance {
         key_ = instance->watchEvent(fcitx::EventType::InputContextKeyEvent,
                                     fcitx::EventWatcherPhase::PreInputMethod,
                                     [this](fcitx::Event &e) { handle(e); });
+        auto trackSurrounding = [this](fcitx::Event &e) {
+            try {
+                observeRetry(static_cast<fcitx::InputContextEvent &>(e).inputContext());
+            } catch (...) {
+                resetRetry();
+                observedContext_.clear();
+                observedHash_.clear();
+                pending_ = {};
+                cancel_.store(true);
+            }
+        };
+        surrounding_ = instance->watchEvent(fcitx::EventType::InputContextSurroundingTextUpdated,
+                                            fcitx::EventWatcherPhase::Default, trackSurrounding);
+        capability_ = instance->watchEvent(fcitx::EventType::InputContextCapabilityChanged,
+                                           fcitx::EventWatcherPhase::Default, trackSurrounding);
+        reset_ = instance->watchEvent(
+            fcitx::EventType::InputContextReset, fcitx::EventWatcherPhase::Default,
+            [this, trackSurrounding](fcitx::Event &e) {
+                if (qEnvironmentVariable("XDG_SESSION_TYPE") != "wayland")
+                    return;
+                auto *ic = static_cast<fcitx::InputContextEvent &>(e).inputContext();
+                // GTK sends Reset for deletion and for cursor changes without updated text.
+                // Async clients can send it after key release. Bound the exemption,
+                // reject no-op deletions, and invalidate it on text updates.
+                const bool deleting = deletionKey_ && deletionContext_.get() == ic &&
+                                      fcitx::now(CLOCK_MONOTONIC) <= deletionDeadline_;
+                deletionKey_ = false;
+                trackSurrounding(e);
+                if (!deleting) {
+                    resetRetry();
+                    // A late confirmation must not reinstall the pre-navigation cycle.
+                    pending_.retryAfter.reset();
+                }
+            });
         focus_ = instance->watchEvent(fcitx::EventType::InputContextFocusOut,
                                       fcitx::EventWatcherPhase::Default, [this](fcitx::Event &) {
-                                          retry_.reset();
+                                          deletionKey_ = false;
+                                          deletionContext_ = {};
+                                          resetRetry();
+                                          observedContext_.clear();
+                                          observedHash_.clear();
                                           context_.clear();
                                           prefix_.clear();
                                           pending_ = {};

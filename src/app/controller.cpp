@@ -131,7 +131,7 @@ QVariantMap Controller::settings() const {
 #undef SET
     m["fixShortcut"] = read([&] { return store_.value("fixShortcut", "Ctrl+Alt+R"); });
     m["undoShortcut"] = read([&] { return store_.value("undoShortcut", "Ctrl+Alt+Z"); });
-    m["pauseShortcut"] = read([&] { return store_.value("pauseShortcut", "Ctrl+Alt+P"); });
+    m["pauseShortcut"] = read([&] { return store_.value("pauseShortcut", "Ctrl+Alt+Shift+P"); });
     m["shortcutsAvailable"] = shortcuts_;
     return m;
 }

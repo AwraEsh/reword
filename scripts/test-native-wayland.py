@@ -213,11 +213,12 @@ def main():
                     key(ord(char))
                 time.sleep(.3)
 
-            def chord(letter):
-                for symbol in (0xffe3, 0xffe9):
+            def chord(letter, shift=False):
+                modifiers = (0xffe3, 0xffe9, 0xffe1) if shift else (0xffe3, 0xffe9)
+                for symbol in modifiers:
                     key_state(symbol, True)
-                key(ord(letter))
-                for symbol in (0xffe9, 0xffe3):
+                key(ord(letter.upper() if shift else letter))
+                for symbol in reversed(modifiers):
                     key_state(symbol, False)
 
             if args.fixture == "qt":
@@ -235,12 +236,35 @@ def main():
             type_word(); expect("teh ")
             type_word(); expect("the ")
             print("PASS: first/second/third correction.", flush=True)
+            for expected in ("teh ", "the "):
+                for _ in range(4):
+                    key(0xff08)  # Actual Backspace, preserving the same word location.
+                expect("")
+                for char in "teh ":
+                    key(ord(char))
+                expect(expected)
+            print("PASS: Backspace rewriting preserves alternate attempts.", flush=True)
             chord("z"); expect("teh ")
             print("PASS: live Undo.", flush=True)
+            key(0xff51)  # Left, then return to the same location.
+            key(0xff53)
+            type_word(); expect("the ")
+            print("PASS: cursor movement resets the retry cycle.", flush=True)
+            key(ord("x")); expect("the x")
+            type_word(); expect("the ")
+            print("PASS: continuing text resets the retry cycle.", flush=True)
+            key(0xffff)  # No-op Delete at end must not exempt a later cursor reset.
+            expect("the ")
+            command("cursor:0"); command("cursor:4")
+            type_word(); expect("the ")
+            print("PASS: client cursor updates reset the retry cycle without key navigation.", flush=True)
             command("text:`foo teh")
             key(ord(" ")); expect("`foo teh ")
             print("PASS: code-span protection.", flush=True)
-            chord("p"); type_word(); expect("teh "); chord("p")
+            chord("p", shift=True)
+            wait_for(lambda: database.execute("SELECT value FROM settings WHERE key='pauseUntil'").fetchone() == ('[-1]',),
+                     "Pause shortcut did not persist the paused state.")
+            type_word(); expect("teh "); chord("p", shift=True)
             print("PASS: pause and resume.", flush=True)
             original = "im here with teh book"
             command("text:" + original); command("select-all"); chord("r")
@@ -261,6 +285,15 @@ def main():
             if database.execute("SELECT count(*) FROM history").fetchone()[0] != history_count:
                 raise RuntimeError("Protected operation was recorded.")
             print("PASS: password exclusion.", flush=True)
+            command("plain"); type_word(); expect("the ")
+            time.sleep(31)
+            type_word(); expect("the ")
+            print("PASS: retry cycle expires after 30 seconds.", flush=True)
+            chord("p", shift=True)
+            wait_for(lambda: database.execute("SELECT value FROM settings WHERE key='pauseUntil'").fetchone() == ('[-1]',),
+                     "Pause shortcut failed after the idle interval.")
+            type_word(); expect("teh "); chord("p", shift=True)
+            print("PASS: pause remains usable after the idle interval.", flush=True)
             database.close()
             selector.close()
         finally:

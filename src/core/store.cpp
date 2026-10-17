@@ -94,7 +94,7 @@ void Store::setValue(const QString &key, const QVariant &value) {
 QStringList Store::shortcuts() const {
     return {value("fixShortcut", "Ctrl+Alt+R").toString(),
             value("undoShortcut", "Ctrl+Alt+Z").toString(),
-            value("pauseShortcut", "Ctrl+Alt+P").toString()};
+            value("pauseShortcut", "Ctrl+Alt+Shift+P").toString()};
 }
 bool Store::restoreShortcuts(const QStringList &expected, qint64 revision,
                              const QStringList &previous) {
