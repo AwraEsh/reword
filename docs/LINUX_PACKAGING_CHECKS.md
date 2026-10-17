@@ -67,3 +67,58 @@ A staged AppRun smoke launch exits 0 with empty inherited environment, private
 D-Bus and synthetic data. Temporary staging was removed; previous development
 packages were preserved. This does not prove dpkg installation or final-source
 release/notice acceptance. Evidence is in ignored .deps/addon-real-package-audit.json.
+
+
+## Runtime provenance and QML deployment — 2026-10-17
+
+Every copied runtime file now has a package origin verified against installed
+Debian md5sums or downloaded .deb control metadata; staged bytes receive an
+independent SHA256 check. Rootless files cannot borrow an installed package's
+version. Exact Source fields preserve epochs and binary-rebuild differences.
+Registered GPU-library diversions resolve to original package metadata, still
+requiring the original checksum. Equivalent multiarch owners are allowed only
+for a shared copyright notice, never to guess the origin of a runtime file.
+
+The packager copies the package's own verified copyright path (including an
+explicit shared-document link), not an arbitrary sibling notice. A checksum for
+that path must still match through a link. Common license texts are also verified
+against package metadata and fingerprinted. Missing origin, modified bytes,
+missing notice or an escaping/conflicting destination stops installer creation.
+All published manifest paths are relative to the bundle.
+
+QML deployment uses qmlimportscanner from the build Qt SDK, rather than copying
+the entire QtQuick tree. Nested formal modules are copied only when scanned;
+Qt Creator designer assets are excluded. A required import from the app, a
+module's qmldir or its deployed QML/JS overrides optional uses elsewhere. Absent
+optional platform styles are allowed; malformed results, missing required
+imports and paths outside the import root fail. Input context plugins are limited
+to compose, IBus and Fcitx5 when present. Legacy Fcitx/UIM/unused virtual-keyboard
+providers are excluded from this English/Persian desktop bundle.
+
+Build tooling needs Python 3.10+, dpkg-query/dpkg-deb, package checksum metadata
+and qmlimportscanner; end users do not need Python or the build tools. Corresponding
+source archive delivery and Windows-specific materials remain separate gates.
+The provenance resolver trusts the build host's package database and downloaded
+package archives; it is not an authentication boundary against a compromised
+build host. No library is modified by this audit.
+
+Forty-seven functional checks pass (8.59 seconds), including four initial missing
+origin/notice/modified-file/manifest regressions, real tiny .deb fixtures,
+source epochs, shared multiarch copyright, diversions and required QML imports
+masked by optional use. The QML/transitive cases were observed failing before
+fixes. CTest packaging passes (8.82 seconds). Independent review caught the
+transitive-import issue; final follow-up review is pending at this edit.
+
+A final isolated real staging run uses primary source b48cdc5 (application SHA256
+f82346c50b0dd14f582064706f8fc9a08a9284122066136fbcd62d3bb3f874f9).
+It records 524 runtime files, 134 binary package components, 78 source identities,
+21 QML modules and 17 common license texts. There are 197 ELF objects including
+the application/helper/addon, down from the earlier unfiltered inventory's 240.
+The old inventory had 861 runtime files and 155 components. The temporary .deb
+builds, and AppRun launches with an empty inherited environment, bundled runtime,
+private D-Bus and synthetic data (exit 0). Prior development installers were
+preserved; temporary staging was removed. These are not dpkg installation,
+all-page interaction, final AppImage acceptance or completed source delivery.
+
+Evidence: ignored `.deps/provenance-final-tests.log`, `provenance-final-ctest.log`,
+`provenance-final-real-audit.log` and `provenance-real-package-audit.json`.
