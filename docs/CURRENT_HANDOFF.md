@@ -173,7 +173,7 @@ notices/source-delivery/final-installation gates. The primary packaging CTest
 passes after integration (1.76 seconds).
 
 
-## Original recovery draft
+## Original recovery integration
 
 `codex/original-recovery` reuses the managed `shortcut-conflicts` worktree. It
 implements bounded in-memory recovery for workspace/native Service passages,
@@ -193,8 +193,36 @@ impersonation risk and a destructor callback lifetime defect; both are fixed wit
 OS peer checks, signal suppression and callback guards. Independent final source
 review has no Important finding. Final Qt/GTK reruns after authentication pass. Linux/Windows workflows
 39033895148/39033897846 pass for dabeda4, including the separate foreign-UID
-impostor probe with no skip. That probe has now been tightened to require EOF
-and clean up on early failure; fresh checks for this test-only change are pending,
-so PR #7 stays draft. Current engine probe: 1,400 synthetic word calls, p95 19.67ms;
+impostor probe with no skip. The final EOF/cleanup tightening (46b54e0) passes all four Linux/Windows jobs
+in workflows 39034184071/39034186219. The foreign-account probe runs without
+skips and requires connection EOF before greeting. PR #7 merged as b48cdc5;
+primary develop is updated and clean. Current engine probe: 1,400 synthetic word calls, p95 19.67ms;
 50k-character repeated passage 104ms. This is not end-to-end input latency. See [recovery evidence](ORIGINAL_RECOVERY.md).
-No production claim or secure-memory-erasure claim is made by this draft.
+No production claim or secure-memory-erasure claim is made by this integration.
+
+
+## Next acceptance work
+
+The next branch is `codex/distribution-notices` in the existing managed
+`linux-distribution` worktree, based on b48cdc5. No release has been accepted.
+Start with the binary-distribution gate: inventory every shipped dependency,
+include its actual notices/license text, and provide matching corresponding
+sources plus build/replacement instructions for the shipped libraries under
+our distribution control. THIRD_PARTY.md links alone are incomplete. Preserve
+the user's current project license choice; public visibility is not an
+open-source license grant. Plan the source/archive size before fetching because
+the current filesystem has about 2.4 GiB available. Do not remove user files.
+
+Then rebuild final-source .exe/AppImage/.deb with matching source manifests and
+checksums. Validate installation and clean-environment launch; extracted .deb
+launch is not dpkg installation evidence. Wayland's Fcitx host setup remains an
+explicit dependency. CI Windows Server 2022 evidence does not replace normal
+Windows 10/11 desktop/UI testing.
+
+Other acceptance remains: populated Applications/History/Insights and dialogs,
+keyboard-only navigation, Windows-rendered UI; physical lock/unlock and focused
+selection/settings/permission races; broader real browser/GTK/Qt/Windows editor
+coverage; general Fcitx/compositor shortcut conflict reporting. The documented
+250ms deletion/Reset compatibility bound remains. Run a multi-hour ACTIVE
+workload on the final packaged binary, measuring helper CPU and private memory/
+VmSwap as well as RSS. The old two-hour idle run is not that acceptance.

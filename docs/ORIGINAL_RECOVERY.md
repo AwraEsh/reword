@@ -75,8 +75,11 @@ Both Linux/Windows workflows passed for 6198556 (39033638702/39033642703)
 and dabeda4 (39033895148/39033897846). The foreign-UID test ran without skips
 in the disposable Linux runner and passed. Review then tightened that probe to
 require EOF rather than accepting a receive timeout, and added parent-side
-socket cleanup on early assertion failure; its fresh CI is pending at this edit.
-The local recovery suite still passes (4.91s).
+socket cleanup on early assertion failure. Final source 46b54e0 passes both
+platforms in workflows 39034184071 and 39034186219, including the unskipped
+foreign-account EOF probe and Windows native probe/installer acceptance on the
+CI runner. The local recovery suite passes (4.91s). PR #7 merged as b48cdc5.
+Ordinary Windows desktop acceptance remains separate from runner evidence.
 
 The current engine probe measures 1,400 word calls over fourteen fixed English/
 Persian samples: p95 19.67ms, maximum 33.35ms. A 50,000-character repeated passage

@@ -343,5 +343,7 @@ on a live app connection. Quit/crash stops addon processing; reconnect resumes
 only after a fresh authenticated handshake. OS peer-account checks prevent
 cross-account endpoint impersonation. Seven suites pass locally (23.42 seconds);
 Qt/GTK native lifecycle probes also pass after authentication. Linux/Windows CI and the foreign-UID regression pass for dabeda4 in runs
-39033895148/39033897846. A final test-only EOF/cleanup tightening awaits its CI. Read ORIGINAL_RECOVERY.md for protocol and limits. PR #6 packaging metadata has
+39033895148/39033897846. The final EOF/cleanup tightening (46b54e0) passes both platforms in
+39034184071/39034186219. PR #7 merged as b48cdc5. The next distribution worktree
+branch is codex/distribution-notices; binary notice/source delivery remains open. Read ORIGINAL_RECOVERY.md for protocol and limits. PR #6 packaging metadata has
 merged as 7db0555; primary packaging CTest passes (1.76 seconds).
