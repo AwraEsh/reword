@@ -5,6 +5,17 @@ using namespace reword;
 class CoreTest : public QObject {
     Q_OBJECT
   private slots:
+    void oversizedOptionsDoNotBypassOperationCeiling() {
+        Engine engine;
+        Options options;
+        options.maxCharacters = 100000;
+        const QString text(50001, 'x');
+        auto result = engine.text(text, options);
+        QVERIFY(!result.error.isEmpty());
+        QVERIFY(!result.changed);
+        QCOMPARE(result.corrected, text);
+    }
+
     void engineLanguageAndProtection() {
         Engine e;
         Options o;

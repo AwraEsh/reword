@@ -329,3 +329,16 @@ whole-command tests pass, with real staging and clean-environment launch evidenc
 in LINUX_PACKAGING_CHECKS.md. This fixes omitted libstdc++ and Fcitx library
 requirements as well as the incorrect fixed Qt version. Binary release notices,
 source delivery and final install acceptance remain open.
+
+
+## Session recovery draft — 2026-10-17
+
+Original-copy access after stale Undo now works in the workspace and shared
+native Service path with History off. One bounded pair stays in memory; Copy is
+explicit and Clear resets the recovery/explicit workspace Undo buffers. Service
+emits the confirmed passage before optional History persistence. The hard
+operation ceiling is now 50,000 in Engine/Store/Settings; tests reproduced the
+old 100,000 bypass. Six suites pass (17.86 seconds), and compact UI captures were
+reviewed. Fcitx transport and app-lifecycle gating remain unfinished; read
+ORIGINAL_RECOVERY.md before continuing this draft. PR #6 packaging metadata has
+merged as 7db0555; primary packaging CTest passes (1.76 seconds).

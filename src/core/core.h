@@ -8,6 +8,7 @@
 #include <functional>
 
 namespace reword {
+inline constexpr int MaxPassageCharacters = 50000;
 struct Options {
     bool english = true, persian = true, spelling = true, abbreviations = true;
     bool capitalization = false, normalizePersian = false, halfSpace = false;
@@ -16,7 +17,7 @@ struct Options {
          exclamationMarks = false, semicolons = false, colons = false;
     bool history = true, statistics = false, notifications = false, browsers = true;
     int sensitivity = 0, historyCount = 100, historyMiB = 20, historyDays = 30,
-        maxCharacters = 50000;
+        maxCharacters = MaxPassageCharacters;
 };
 struct Field {
     QString app, id, text;

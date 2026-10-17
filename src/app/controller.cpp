@@ -39,6 +39,8 @@ Controller::Controller(const QString &directory, QObject *parent)
                                3000);
         emit updated();
     });
+    connect(service_, &Service::passageApplied, this,
+            [this](QString original, QString corrected) { rememberPassage(original, corrected); });
     connect(
         service_, &Service::result, this,
         [this](QString original, QString corrected, QString error, bool native) {
@@ -47,7 +49,7 @@ Controller::Controller(const QString &directory, QObject *parent)
                 notice_ = error;
             else if (native)
                 notice_ =
-                    "Selected text corrected. The original is in History when history is enabled.";
+                    "Selected text corrected. Copy its original from session recovery in Reword.";
             else
                 emit correctedText(original, corrected);
             emit updated();
@@ -251,7 +253,30 @@ void Controller::fix(QString text) {
             service_, [this, text] { service_->processText(text); }, Qt::QueuedConnection);
     });
 }
+bool Controller::rememberPassage(const QString &original, const QString &corrected) {
+    if (original.isEmpty() || original == corrected || original.size() > 2 * MaxPassageCharacters ||
+        corrected.size() > 2 * MaxPassageCharacters ||
+        original.toUcs4().size() > MaxPassageCharacters ||
+        corrected.toUcs4().size() > MaxPassageCharacters)
+        return false;
+    recoveryOriginal_ = original;
+    recoveryCorrected_ = corrected;
+    emit updated();
+    return true;
+}
+void Controller::clearRecovery() {
+    recoveryOriginal_.clear();
+    recoveryCorrected_.clear();
+    emit recoveryCleared();
+    emit updated();
+}
+void Controller::copyRecoveryOriginal() {
+    if (!recoveryOriginal_.isEmpty())
+        copy(recoveryOriginal_);
+}
 void Controller::recordApplied(QString original, QString corrected) {
+    if (!rememberPassage(original, corrected))
+        return;
     guard([&] {
         store_.history(original, corrected, store_.options());
         emit updated();

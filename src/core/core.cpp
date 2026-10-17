@@ -342,8 +342,8 @@ QString Engine::word(const QString &w, const Options &o, const QString &context)
 Change Engine::text(const QString &input, const Options &o, const std::atomic_bool *cancel,
                     qint64 timeoutMs) {
     Change out{input, input, false, {}};
-    if (input.size() > 2 * std::clamp(o.maxCharacters, 1, 100000) ||
-        input.toUcs4().size() > std::clamp(o.maxCharacters, 1, 100000)) {
+    if (input.size() > 2 * std::clamp(o.maxCharacters, 1, MaxPassageCharacters) ||
+        input.toUcs4().size() > std::clamp(o.maxCharacters, 1, MaxPassageCharacters)) {
         out.error = "Text exceeds the operation limit. Nothing was changed.";
         return out;
     }
@@ -532,7 +532,7 @@ Change Engine::text(const QString &input, const Options &o, const std::atomic_bo
         out.error = "Operation cancelled or timed out.";
         return out;
     }
-    if (result.toUcs4().size() > std::clamp(o.maxCharacters, 1, 100000)) {
+    if (result.toUcs4().size() > std::clamp(o.maxCharacters, 1, MaxPassageCharacters)) {
         out.error = "Corrected text exceeds the operation limit.";
         return out;
     }

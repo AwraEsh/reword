@@ -15,6 +15,9 @@ class Controller : public QObject {
     Q_PROPERTY(QString status READ status NOTIFY updated)
     Q_PROPERTY(QString platform READ platform NOTIFY updated)
     Q_PROPERTY(QString notice READ notice NOTIFY updated)
+    Q_PROPERTY(QString recoveryOriginal READ recoveryOriginal NOTIFY updated)
+    Q_PROPERTY(QString recoveryCorrected READ recoveryCorrected NOTIFY updated)
+    Q_PROPERTY(bool recoveryAvailable READ recoveryAvailable NOTIFY updated)
     Q_PROPERTY(QString pendingName READ pendingName NOTIFY updated)
     Q_PROPERTY(bool busy READ busy NOTIFY updated)
     Q_PROPERTY(bool dark READ dark NOTIFY updated)
@@ -26,6 +29,7 @@ class Controller : public QObject {
     QSystemTrayIcon *tray_ = nullptr;
     QString platform_ = "Checking desktop integration…", notice_, pendingId_, pendingName_;
     QVariantList queue_;
+    QString recoveryOriginal_, recoveryCorrected_;
     bool busy_ = false, shortcuts_ = false;
     mutable bool storageFailed_ = false;
     template <class F> auto read(F getter) const {
@@ -52,6 +56,7 @@ class Controller : public QObject {
     QTimer refresh_;
     void refreshTray();
     void nextApplication();
+    bool rememberPassage(const QString &original, const QString &corrected);
 
   public:
     explicit Controller(const QString &directory, QObject *parent = nullptr);
@@ -123,6 +128,17 @@ class Controller : public QObject {
     Q_INVOKABLE void pause(int minutes);
     Q_INVOKABLE void fix(QString text);
     Q_INVOKABLE void cancel();
+    QString recoveryOriginal() const {
+        return recoveryOriginal_;
+    }
+    QString recoveryCorrected() const {
+        return recoveryCorrected_;
+    }
+    bool recoveryAvailable() const {
+        return !recoveryOriginal_.isEmpty();
+    }
+    Q_INVOKABLE void clearRecovery();
+    Q_INVOKABLE void copyRecoveryOriginal();
     Q_INVOKABLE void recordApplied(QString original, QString corrected);
     Q_INVOKABLE void copy(QString text);
     Q_INVOKABLE QVariantMap historyDetail(qint64 id) const {
@@ -144,5 +160,6 @@ class Controller : public QObject {
     void showWindow();
     void pauseDialog();
     void correctedText(QString original, QString corrected);
+    void recoveryCleared();
 };
 } // namespace reword
