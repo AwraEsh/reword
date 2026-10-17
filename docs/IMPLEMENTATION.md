@@ -318,3 +318,14 @@ integration on the primary checkout (16.33 seconds). The follow-up protected
 transition probe passes on Qt: rejected/unconfirmed correction, Password/Normal
 change, late matching snapshot, unchanged statistics/history and fresh retry.
 This tests the combined real capability/Reset/timer path.
+
+
+## Host-addon Debian metadata — 2026-10-17
+
+The addon-dependencies branch replaces hardcoded host versions with a strict
+actual-addon dpkg-shlibdeps audit. It preserves the stronger ELF/Debian libc
+minimum and records host package constraints in the runtime manifest. Fourteen
+whole-command tests pass, with real staging and clean-environment launch evidence
+in LINUX_PACKAGING_CHECKS.md. This fixes omitted libstdc++ and Fcitx library
+requirements as well as the incorrect fixed Qt version. Binary release notices,
+source delivery and final install acceptance remain open.

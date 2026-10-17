@@ -32,6 +32,7 @@ class LinuxPackagingTest(unittest.TestCase):
         self.env["PATH"] = str(self.root / "tools") + os.pathsep + os.environ["PATH"]
         self.env.pop("APPIMAGETOOL", None)
         self.tool("ldd", "print('linux-vdso.so.1 (0x1234)')")
+        self.tool("dpkg-shlibdeps", "print('shlibs:Depends=libc6 (>= 2.17), libqt6core6 (>= 6.4.2), libstdc++6 (>= 12), libfcitx5core7 (>= 5.0.21)')")
         self.tool("readelf", "print(\"Version needs section '.gnu.version_r' contains 1 entry:\"); print('  Name: GLIBC_2.39 Flags: none Version: 2')")
 
     def tool(self, name, body):
@@ -94,6 +95,59 @@ class LinuxPackagingTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         depends = subprocess.check_output(["dpkg-deb", "-f", str(self.root / "dist/reword_0.1.0_amd64.deb"), "Depends"], text=True)
         self.assertIn("libc6 (>= 2.42)", depends)
+
+    def test_addon_host_dependencies_come_from_debian_symbols(self):
+        (self.root / "build/libreword-fcitx.so").write_bytes(b"\x7fELFsynthetic addon")
+        result = self.package()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        depends = subprocess.check_output(["dpkg-deb", "-f", str(self.root / "dist/reword_0.1.0_amd64.deb"), "Depends"], text=True)
+        self.assertIn("libqt6core6 (>= 6.4.2)", depends)
+        self.assertNotIn("6.8", depends)
+        self.assertIn("libstdc++6 (>= 12)", depends)
+        self.assertIn("libfcitx5core7 (>= 5.0.21)", depends)
+        self.assertIn("libc6 (>= 2.39)", depends)
+        self.assertNotIn("libc6 (>= 2.17)", depends)
+        self.assertIn("libqt6sql6-sqlite", depends)
+
+    def test_missing_debian_dependency_metadata_rejects_addon(self):
+        (self.root / "build/libreword-fcitx.so").write_bytes(b"\x7fELFsynthetic addon")
+        self.tool("dpkg-shlibdeps", "import sys; sys.exit(1)")
+        result = self.package()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / "dist/reword_0.1.0_amd64.deb").exists())
+
+    def test_malformed_debian_dependency_output_rejects_addon(self):
+        (self.root / "build/libreword-fcitx.so").write_bytes(b"\x7fELFsynthetic addon")
+        self.tool("dpkg-shlibdeps", "print('unexpected output')")
+        result = self.package()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / "dist/reword_0.1.0_amd64.deb").exists())
+
+    def test_debian_symbols_can_raise_libc_package_minimum(self):
+        (self.root / "build/libreword-fcitx.so").write_bytes(b"\x7fELFsynthetic addon")
+        self.tool("dpkg-shlibdeps", "print('shlibs:Depends=libc6 (>= 2.44), libstdc++6 (>= 15)')")
+        result = self.package()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        depends = subprocess.check_output(["dpkg-deb", "-f", str(self.root / "dist/reword_0.1.0_amd64.deb"), "Depends"], text=True)
+        self.assertIn("libc6 (>= 2.44)", depends)
+        self.assertNotIn("libc6 (>= 2.39)", depends)
+
+    def test_addon_metadata_inspects_actual_binary_in_stable_locale(self):
+        addon = self.root / "build/libreword-fcitx.so"
+        addon.write_bytes(b"\x7fELFsynthetic addon")
+        self.env["LC_ALL"] = "de_DE.UTF-8"
+        self.tool("dpkg-shlibdeps", "import os, pathlib, sys\n"
+                  "assert os.environ.get('LC_ALL') == 'C'\n"
+                  "assert '-O' in sys.argv and '--ignore-missing-info' not in sys.argv\n"
+                  "assert " + repr("-e" + str(addon)) + " in sys.argv\n"
+                  "print('shlibs:Depends=libc6 (>= 2.17), libstdc++6 (>= 12)')")
+        result = self.package()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_no_addon_does_not_require_host_dependency_metadata(self):
+        self.tool("dpkg-shlibdeps", "import sys; sys.exit(1)")
+        result = self.package()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_unreadable_version_requirements_reject_package(self):
         self.tool("readelf", "import sys; sys.exit(1)")
