@@ -1,4 +1,5 @@
 #include "controller.h"
+#include "platform/recovery_channel.h"
 #include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -67,6 +68,7 @@ int main(int argc, char **argv) {
         std::cerr << "Reword could not create its local activation endpoint.\n";
         return 3;
     }
+    QLocalServer::removeServer(reword::recoveryEndpoint(directory));
     try {
         reword::Controller controller(directory);
         QObject::connect(&activationServer, &QLocalServer::newConnection, &app, [&] {

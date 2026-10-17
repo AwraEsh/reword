@@ -338,7 +338,10 @@ native Service path with History off. One bounded pair stays in memory; Copy is
 explicit and Clear resets the recovery/explicit workspace Undo buffers. Service
 emits the confirmed passage before optional History persistence. The hard
 operation ceiling is now 50,000 in Engine/Store/Settings; tests reproduced the
-old 100,000 bypass. Six suites pass (17.86 seconds), and compact UI captures were
-reviewed. Fcitx transport and app-lifecycle gating remain unfinished; read
-ORIGINAL_RECOVERY.md before continuing this draft. PR #6 packaging metadata has
+old 100,000 bypass. The bounded Fcitx local channel now forwards confirmed passages and gates input
+on a live app connection. Quit/crash stops addon processing; reconnect resumes
+only after a fresh authenticated handshake. OS peer-account checks prevent
+cross-account endpoint impersonation. Seven suites pass locally (23.24 seconds);
+Qt/GTK native lifecycle probes pass before the final authentication rerun. Fresh
+Windows CI remains pending. Read ORIGINAL_RECOVERY.md for protocol and limits. PR #6 packaging metadata has
 merged as 7db0555; primary packaging CTest passes (1.76 seconds).

@@ -13,6 +13,7 @@
 #include <QTimer>
 #include <atomic>
 #include "app/controller.h"
+#include "platform/recovery_channel.h"
 class BlockedReply : public QNetworkReply {
   public:
     BlockedReply(const QNetworkRequest &request, QObject *parent) : QNetworkReply(parent) {
@@ -69,6 +70,8 @@ class UiTest : public QObject {
         QCOMPARE(requests.load(), 0);
     }
     void originalCopySurvivesStaleWorkspaceUndoWithHistoryOff() {
+        if (QGuiApplication::platformName() != "offscreen")
+            QSKIP("Clipboard testing requires the isolated offscreen platform.");
         QTemporaryDir data;
         reword::Controller controller(data.path());
         controller.set("history", false);
@@ -92,6 +95,27 @@ class UiTest : public QObject {
         QCOMPARE(QApplication::clipboard()->text(), QString("im here with teh book"));
         QCOMPARE(editor->property("text").toString(), QString("my subsequent edits"));
         QCOMPARE(controller.history().size(), 0);
+    }
+    void privateRecoveryReachesControllerWithoutHistoryOrClipboard() {
+        if (QGuiApplication::platformName() != "offscreen")
+            QSKIP("Clipboard testing requires the isolated offscreen platform.");
+        QGuiApplication::clipboard()->setText("unrelated clipboard sentinel");
+        QTemporaryDir data;
+        reword::RecoveryClient client;
+        {
+            reword::Controller controller(data.path());
+            controller.set("history", false);
+            client.start(data.path());
+            QTRY_VERIFY_WITH_TIMEOUT(client.active(), 2500);
+            auto original = QString::fromUtf8("im here متن فارسی");
+            QVERIFY(client.submit(original, "corrected"));
+            QTRY_COMPARE(controller.recoveryOriginal(), original);
+            QCOMPARE(controller.recoveryCorrected(), QString("corrected"));
+            QCOMPARE(controller.history().size(), 0);
+            QCOMPARE(QGuiApplication::clipboard()->text(), QString("unrelated clipboard sentinel"));
+        }
+        QTRY_VERIFY(!client.active());
+        QVERIFY(!client.submit("after app closes", "result"));
     }
     void operationLimitCannotBeRaisedAboveFiftyThousand() {
         QTemporaryDir data;

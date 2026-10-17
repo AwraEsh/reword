@@ -1,4 +1,5 @@
 #include "controller.h"
+#include "platform/recovery_channel.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QMenu>
@@ -7,6 +8,13 @@
 namespace reword {
 Controller::Controller(const QString &directory, QObject *parent)
     : QObject(parent), store_(directory) {
+    recoveryServer_ = new RecoveryServer(this);
+    connect(recoveryServer_, &RecoveryServer::passage, this,
+            [this](QString original, QString corrected) { rememberPassage(original, corrected); });
+    if (!recoveryServer_->listen(directory) &&
+        qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland")
+        notice_ =
+            "Original recovery is unavailable. Restart Reword before using Wayland correction.";
     service_ = new Service(directory);
     service_->moveToThread(&worker_);
     connect(&worker_, &QThread::started, service_, &Service::start);
@@ -96,6 +104,7 @@ Controller::Controller(const QString &directory, QObject *parent)
     refresh_.start(10000);
 }
 Controller::~Controller() {
+    recoveryServer_->stop();
     service_->cancel();
     QMetaObject::invokeMethod(service_, &Service::stop, Qt::BlockingQueuedConnection);
     worker_.quit();
@@ -254,10 +263,7 @@ void Controller::fix(QString text) {
     });
 }
 bool Controller::rememberPassage(const QString &original, const QString &corrected) {
-    if (original.isEmpty() || original == corrected || original.size() > 2 * MaxPassageCharacters ||
-        corrected.size() > 2 * MaxPassageCharacters ||
-        original.toUcs4().size() > MaxPassageCharacters ||
-        corrected.toUcs4().size() > MaxPassageCharacters)
+    if (!recoveryEligible(original, corrected))
         return false;
     recoveryOriginal_ = original;
     recoveryCorrected_ = corrected;
@@ -350,6 +356,8 @@ void Controller::refreshTray() {
     tray_->setToolTip("Reword · " + status());
 }
 void Controller::quit() {
+    recoveryServer_->stop();
+    service_->cancel();
     QApplication::quit();
 }
 } // namespace reword

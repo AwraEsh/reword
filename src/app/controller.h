@@ -4,6 +4,7 @@
 #include <QSystemTrayIcon>
 #include <QVariantMap>
 namespace reword {
+class RecoveryServer;
 class Controller : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantMap settings READ settings NOTIFY updated)
@@ -24,6 +25,7 @@ class Controller : public QObject {
     Q_PROPERTY(bool paused READ paused NOTIFY updated)
     Q_PROPERTY(bool trayAvailable READ trayAvailable CONSTANT)
     Store store_;
+    RecoveryServer *recoveryServer_ = nullptr;
     QThread worker_;
     Service *service_ = nullptr;
     QSystemTrayIcon *tray_ = nullptr;

@@ -1,4 +1,4 @@
-# Current handoff — 2026-10-16
+# Current handoff — 2026-10-17
 
 The approved scope is in [REQUIREMENTS.md](REQUIREMENTS.md). The repository is
 intentionally public at the user's later request. Do not change visibility back
@@ -183,9 +183,14 @@ Native Service delivery, Unicode bounds, non-persistence and a 50k ceiling bypas
 also have RED/GREEN evidence. Six local suites pass (17.86 seconds). Reviewed
 Overview/History screenshots at 880x620 logical/150% scale are readable.
 
-This is not ready to merge: Fcitx delivery and its bounded same-user channel,
-security/native tests, and fresh Windows CI remain open. Lifecycle audit found
-Fcitx can continue after Controller::quit because it only consults stored
-permission/pause settings; tie correction to the live app channel so Quit/crash
-stops it. See [recovery design and next steps](ORIGINAL_RECOVERY.md). No production
-claim or secure-memory-erasure claim is made by this draft.
+The second phase implements framed Fcitx delivery with account-authenticated
+peers, bounded buffers/clients/deadlines and no disk mailbox. A live app handshake
+now gates addon input; disconnect clears pending state. Actual GUI Quit initially
+failed the native probe, then Quit/crash/restart pass with both Qt and GTK.
+History-off passage delivery is confirmed on Qt; unsupported GTK selection stays
+unchanged. Seven local suites pass (23.24 seconds). Review found an endpoint
+impersonation risk and a destructor callback lifetime defect; both are fixed with
+OS peer checks, signal suppression and callback guards. Independent final source
+review has no Important finding. Fresh Windows CI and final authentication native
+reruns remain pending, so PR #7 stays draft. See [recovery evidence](ORIGINAL_RECOVERY.md).
+No production claim or secure-memory-erasure claim is made by this draft.
