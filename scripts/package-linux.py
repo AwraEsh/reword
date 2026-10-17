@@ -6,7 +6,8 @@ APPIMAGETOOL points to a local appimagetool binary. No tool is downloaded/execut
 implicitly by this script.
 """
 import pathlib, subprocess, shutil, os, re, json
-from package_audit import dynamic_libraries, is_elf, minimum_glibc
+from package_audit import (dynamic_libraries, is_elf, minimum_glibc,
+                           debian_host_dependencies, debian_dependencies)
 root=pathlib.Path(__file__).resolve().parents[1]
 build=root/'build'; dist=root/'dist'; dist.mkdir(exist_ok=True)
 appdir=dist/'Reword.AppDir'
@@ -50,13 +51,16 @@ for binary in [path for path in appdir.rglob('*') if is_elf(path)]:
 addon=build/'libreword-fcitx.so'
 objects=[path for path in appdir.rglob('*') if is_elf(path)]
 addon_libraries=[]
+addon_packages=[]
 if addon.exists():
  objects.append(addon)
  addon_libraries=sorted(pathlib.Path(path).name for path in dynamic_libraries(addon))
+ addon_packages=debian_host_dependencies(addon)
 glibc=minimum_glibc(objects)
 (appdir/'usr/share/reword/runtime-manifest.json').write_text(json.dumps({
  'minimumGlibc':glibc,'elfObjects':len(objects),'runtimeLibraries':sorted(seen),
  'fcitxAddon':addon.exists(),'fcitxHostLibraries':addon_libraries,
+ 'fcitxHostPackages':addon_packages,
 },indent=2)+'\n')
 shutil.copy2(root/'assets/reword.desktop',appdir/'reword.desktop')
 shutil.copy2(root/'assets/reword.svg',appdir/'reword.svg')
@@ -76,12 +80,13 @@ shutil.copytree(appdir,debroot/'opt/reword',symlinks=False)
 (debroot/'usr/bin').mkdir(parents=True);(debroot/'usr/bin/reword').symlink_to('/opt/reword/AppRun')
 (debroot/'usr/share/applications').mkdir(parents=True);shutil.copy2(root/'assets/reword.desktop',debroot/'usr/share/applications/reword.desktop')
 (debroot/'usr/share/icons/hicolor/scalable/apps').mkdir(parents=True);shutil.copy2(root/'assets/reword.svg',debroot/'usr/share/icons/hicolor/scalable/apps/reword.svg')
-dependencies=f'libc6 (>= {glibc}), libgl1, libegl1'
+dependencies=debian_dependencies(glibc,addon_packages)
 if addon.exists():
  target=debroot/'usr/lib/x86_64-linux-gnu/fcitx5';target.mkdir(parents=True);shutil.copy2(addon,target/addon.name)
  shutil.copytree(root/'assets/dictionaries',debroot/'usr/share/reword/dictionaries',dirs_exist_ok=True)
  target=debroot/'usr/share/fcitx5/addon';target.mkdir(parents=True);shutil.copy2(root/'packaging/reword-fcitx.conf',target/'reword.conf')
- dependencies+=', fcitx5 (>= 5.1), libqt6core6t64 (>= 6.8), libqt6sql6 (>= 6.8), libqt6dbus6 (>= 6.8), libqt6sql6-sqlite, libhunspell-1.7-0'
+ dependencies+=['fcitx5','libqt6sql6-sqlite']
+dependencies=', '.join(dict.fromkeys(dependencies))
 (debroot/'DEBIAN').mkdir();(debroot/'DEBIAN/control').write_text(f'''Package: reword
 Version: 0.1.0
 Section: utils

@@ -72,7 +72,8 @@ scripts name their required host tools in their help/docstrings.
    The distribution branch now derives the real glibc floor and rejects unresolved
    libraries; its real staged closure requires GLIBC_2.39 and the .deb declares
    >=2.39. Staged and extracted-.deb launches pass without developer paths.
-   Final-source rebuilds and host-addon dependency declarations still need audit. Supply corresponding copyleft-library source/notice material
+   Final-source rebuilds remain open; the addon-dependencies branch now derives
+   host package constraints with dpkg-shlibdeps and validates real staging. Supply corresponding copyleft-library source/notice material
    before public binary distribution; a third-party project URL alone is not an
    adequate completed source-delivery workflow.
 5. Expand real compatibility tests to browsers and representative GTK/Qt/Windows
@@ -153,4 +154,18 @@ native correction is unconfirmed, then presents a late matching plaintext
 snapshot: statistics/history stay unchanged and the next retry starts fresh.
 The complete updated Qt run exits successfully. This exercises the combined
 capability/Reset/timer protection paths, not exclusive callback dispatch.
-The new regression is on codex/wayland-password-transition awaiting integration.
+The new regression merged in PR #5 as 69b206d after source 4df50e4 passed both
+platforms in runs 39029896682 and 39029916494.
+
+
+## Host-addon metadata branch
+
+`codex/addon-dependencies` reuses the managed `linux-distribution` worktree.
+Fourteen packaging regressions pass; four new failures were observed before the
+fix. Actual dpkg-shlibdeps inspection includes previously omitted libstdc++6
+>=13.1 and Fcitx core/utils >=5.1.12. A private real staging run contains 240 ELF
+objects, builds .deb metadata with libc6 >=2.39 and launches AppRun with no inherited
+developer paths. Existing development packages were preserved; no new release is
+published. Independent review has no Important finding. See
+[package checks](LINUX_PACKAGING_CHECKS.md) for exact constraints and remaining
+notices/source-delivery/final-installation gates. Fresh CI/integration is pending.
