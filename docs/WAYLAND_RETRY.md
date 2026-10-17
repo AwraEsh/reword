@@ -101,3 +101,21 @@ anchor and refuses passage replacement unchanged. Three private native X11
 cycles pass, including real delivery of the updated Pause default through XTest.
 Independent final review has no remaining actionable finding in this scope.
 Windows CI and integration remain pending; no final release acceptance is claimed.
+
+
+## Integration and protected transition follow-up — 2026-10-17
+
+PR #4 merged as bc4737b after source 7bd4d00 passed both platforms in runs
+38961399942 and 38961425946 (the latter on attempt 2). The initial PR Linux job
+passed all suites but timed out waiting for private Openbox before native input;
+the same-source push run and the failed-job rerun pass. The startup flake is
+recorded as unexplained; rerunning does not establish its root cause.
+
+A follow-up Qt regression retains a real rejected/unconfirmed IME correction,
+enables synthetic statistics, changes Password/Normal without typing, and then
+presents a late plaintext snapshot matching the discarded result. No statistics
+or history entry is added, and the next correction attempt starts fresh. The
+complete updated private Qt run exits 0. This validates the actual combined
+protection path; it does not isolate capability notification from Reset/timer
+handling or prove physical lock/unlock behavior. The branch contains no new
+production behavior for this follow-up.

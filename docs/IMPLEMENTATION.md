@@ -309,3 +309,12 @@ was ambiguous with even retry attempts; the probe now checks persisted Pause
 state and real behavior before and after a 31-second interval. Six local suites
 pass (15.46 seconds), and native X11's three cycles confirm the new default.
 Fresh Windows CI is required before integration.
+
+
+PR #4 merged as bc4737b after Linux/Windows CI. The first PR Linux run timed out
+before native input while waiting for Openbox; a same-source push run and the
+failed-job rerun pass. Its cause remains unproven. All six suites pass after
+integration on the primary checkout (16.33 seconds). The follow-up protected
+transition probe passes on Qt: rejected/unconfirmed correction, Password/Normal
+change, late matching snapshot, unchanged statistics/history and fresh retry.
+This tests the combined real capability/Reset/timer path.

@@ -56,9 +56,10 @@ scripts name their required host tools in their help/docstrings.
 
 ## Required work still open
 
-1. Audit remaining retry reset cases on Wayland (cursor movement, continuation,
-   timing), selected-operation cancellation/staleness, settings/permission changes
-   during operations and actual lock/unlock behavior.
+1. Audit selected-operation cancellation/staleness, settings/permission changes
+   during operations and actual lock/unlock behavior. Wayland cursor, continuation
+   and expiry now pass the native fixtures, with the documented 250ms Reset
+   correlation limit still requiring broader real-application evidence.
 2. Extend the Windows storage evidence to a normal Windows 10/11 desktop account;
    protected native NTFS DACLs and outside hard-link preservation now pass CI on
    the Windows Server 2022 runner.
@@ -121,9 +122,10 @@ private GNOME Wayland Qt/GTK3 probes also exit successfully. Read
 [shortcut verification](SHORTCUTS.md) for scope and limits. Previously downloaded
 installers and local distribution artifacts predate this integration.
 
-## Wayland retry work awaiting integration
+## Wayland retry integration
 
-`codex/wayland-retry` reuses the managed `shortcut-conflicts` worktree. It adds
+[PR #4](https://github.com/AwraEsh/reword/pull/4) merged as bc4737b after source
+7bd4d00 passed Linux/Windows runs 38961399942 and 38961425946 (attempt 2). It adds
 surrounding/capability/Reset handling, actual Backspace rewriting, cursor and
 continuation regressions, and 31-second expiry/Pause-after-idle checks. A no-op
 Delete must not exempt a later cursor Reset. The native probes first reproduced
@@ -136,10 +138,19 @@ shared by Store, UI and addon; explicitly saved bindings are preserved. Native
 X11 confirms delivery of the updated default in three cycles. General Fcitx
 conflict reporting still needs audit. See [retry evidence](WAYLAND_RETRY.md).
 
-The six-suite final local run passes in 15.46 seconds. Final native Qt and GTK processes both exit successfully, including Backspace,
+The six-suite branch run passes in 15.46 seconds; the primary checkout after
+integration passes all six suites in 16.33 seconds. Final native Qt and GTK processes both exit successfully, including Backspace,
 no-op Delete/client cursor reset, continuation, expiry and Pause after idle.
-Fresh Windows CI and integration are still pending. Do not
+Windows compilation, tests, installer and native probe all pass. The initial PR
+Linux run timed out waiting for its private Openbox manager, before input probes;
+its six suites had passed. The same-SHA push run passed, and rerunning only the
+failed PR job passed. Startup timing remains an unresolved harness flake, not a
+proven application defect or an explained fix. Do not
 claim ordinary Windows desktop, all-client timing behavior or physical lock
 acceptance from these fixtures. The deletion/Reset correlation has a documented
-250ms bound; capability-only password changes during an unconfirmed write still
-need a targeted regression.
+250ms bound. A targeted Qt probe now changes Password/Normal while a rejected
+native correction is unconfirmed, then presents a late matching plaintext
+snapshot: statistics/history stay unchanged and the next retry starts fresh.
+The complete updated Qt run exits successfully. This exercises the combined
+capability/Reset/timer protection paths, not exclusive callback dispatch.
+The new regression is on codex/wayland-password-transition awaiting integration.
