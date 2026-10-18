@@ -1094,6 +1094,7 @@ ApplicationWindow {
         header: Label {
             textFormat: Text.PlainText
             text: consentDialog.title
+            wrapMode: Text.Wrap
             padding: 20
             font.pixelSize: 18
         }

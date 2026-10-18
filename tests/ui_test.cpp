@@ -5,6 +5,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QQuickItem>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QQmlNetworkAccessManagerFactory>
@@ -53,6 +54,183 @@ class AuditFactory : public QQmlNetworkAccessManagerFactory {
 class UiTest : public QObject {
     Q_OBJECT
   private slots:
+    void dialogReceivesKeyboardFocus_data() {
+        QTest::addColumn<QString>("title");
+        for (auto title :
+             {"Pause Reword", "Saved correction", "Delete all saved text?", "Practice spelling"})
+            QTest::newRow(title) << QString(title);
+    }
+    void dialogReceivesKeyboardFocus() {
+        QFETCH(QString, title);
+        QTemporaryDir data;
+        reword::Controller controller(data.path());
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        auto window = qobject_cast<QQuickWindow *>(root);
+        QVERIFY(window);
+        auto editor = root->findChild<QQuickItem *>("workspaceEditor");
+        QVERIFY(editor);
+        editor->forceActiveFocus();
+        QObject *dialog = nullptr;
+        for (auto object : root->findChildren<QObject *>())
+            if (object->property("title").toString() == title) {
+                dialog = object;
+                break;
+            }
+        QVERIFY(dialog);
+        if (title == "Practice spelling")
+            dialog->setProperty("answer", "receive");
+        QVERIFY(QMetaObject::invokeMethod(dialog, "open"));
+        QTRY_VERIFY(dialog->property("opened").toBool());
+        auto content = dialog->property("contentItem").value<QQuickItem *>();
+        QVERIFY(content && content->parentItem());
+        const auto containsFocus = [&] {
+            auto focused = window->activeFocusItem();
+            auto popup = content->parentItem();
+            return focused && (focused == popup || popup->isAncestorOf(focused));
+        };
+        QVERIFY2(containsFocus(), "Opening a dialog must move keyboard focus into its popup.");
+        for (int i = 0; i < 20; ++i) {
+            QTest::keyClick(window, Qt::Key_Tab);
+            QVERIFY2(containsFocus(), "Tab navigation must stay inside a modal dialog.");
+        }
+        const auto captures = qEnvironmentVariable("REWORD_DIALOG_CAPTURE_DIR");
+        if (!captures.isEmpty()) {
+            QVERIFY(QDir().mkpath(captures));
+            window->setWidth(880);
+            window->setHeight(620);
+            root->setProperty(
+                "selectedHistory",
+                QVariantMap{
+                    {"original",
+                     QString::fromUtf8("im here. یک متن فارسی برای نمایش.\n").repeated(100)},
+                    {"corrected",
+                     QString::fromUtf8("I am here. یک متن فارسی برای نمایش.\n").repeated(100)}});
+            for (bool dark : {false, true}) {
+                controller.set("dark", dark);
+                QTest::qWait(100);
+                auto name = title;
+                name.replace(' ', '_').remove('?');
+                QVERIFY(window->grabWindow().save(captures + "/" + (dark ? "dark-" : "light-") +
+                                                  name + ".png"));
+            }
+        }
+        QTest::keyClick(window, Qt::Key_Escape);
+        QTRY_VERIFY(!dialog->property("opened").toBool());
+    }
+    void sidebarCanBeNavigatedWithoutPointer() {
+        QTemporaryDir data;
+        reword::Controller controller(data.path());
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        auto window = qobject_cast<QQuickWindow *>(root);
+        QVERIFY(window);
+        QQuickItem *overview = nullptr;
+        // Repeater delegates belong to the visual tree; QObject ownership can differ.
+        auto items = window->contentItem()->childItems();
+        while (!items.isEmpty()) {
+            auto item = items.takeLast();
+            if (item->property("text").toString() == "Overview" &&
+                item->metaObject()->indexOfProperty("checkable") >= 0) {
+                overview = item;
+                break;
+            }
+            items.append(item->childItems());
+        }
+        QVERIFY(overview);
+        overview->forceActiveFocus();
+        for (int page = 1; page < 7; ++page) {
+            QTest::keyClick(window, Qt::Key_Tab);
+            QTest::keyClick(window, Qt::Key_Space);
+            QCOMPARE(root->property("page").toInt(), page);
+        }
+        QTest::keyClick(window, Qt::Key_Backtab);
+        QTest::keyClick(window, Qt::Key_Space);
+        QCOMPARE(root->property("page").toInt(), 5);
+    }
+    void consentHeaderFitsLongExecutableName() {
+        QTemporaryDir data;
+        reword::Controller controller(data.path());
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        auto window = qobject_cast<QQuickWindow *>(root);
+        QVERIFY(window);
+        QObject *dialog = nullptr;
+        for (auto object : root->findChildren<QObject *>())
+            if (object->property("title").toString().startsWith("Allow Reword in ")) {
+                dialog = object;
+                break;
+            }
+        QVERIFY(dialog);
+        auto title = QString("Allow Reword in notes-") + QString(220, 'x') + ".exe?";
+        dialog->setProperty("title", title);
+        QVERIFY(QMetaObject::invokeMethod(dialog, "open"));
+        QTRY_VERIFY(dialog->property("opened").toBool());
+        auto header = dialog->property("header").value<QQuickItem *>();
+        QVERIFY(header);
+        QCOMPARE(header->property("text").toString(), title);
+        auto available = header->width() - header->property("leftPadding").toReal() -
+                         header->property("rightPadding").toReal();
+        QVERIFY2(header->property("contentWidth").toReal() <= available + 1,
+                 "A long executable name must wrap inside the permission dialog.");
+        const auto captures = qEnvironmentVariable("REWORD_DIALOG_CAPTURE_DIR");
+        if (!captures.isEmpty()) {
+            QVERIFY(QDir().mkpath(captures));
+            window->setWidth(880);
+            window->setHeight(620);
+            for (bool dark : {false, true}) {
+                controller.set("dark", dark);
+                QTest::qWait(100);
+                QVERIFY(window->grabWindow().save(captures + (dark ? "/dark-consent-long.png" : "/light-consent-long.png")));
+            }
+        }
+    }
+    void consentNoIsReachableWithKeyboard() {
+        QTemporaryDir data;
+        reword::Controller controller(data.path());
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        auto window = qobject_cast<QQuickWindow *>(root);
+        QVERIFY(window);
+        auto editor = root->findChild<QQuickItem *>("workspaceEditor");
+        QVERIFY(editor);
+        editor->forceActiveFocus();
+        QObject *dialog = nullptr;
+        for (auto object : root->findChildren<QObject *>())
+            if (object->property("title").toString().startsWith("Allow Reword in ")) {
+                dialog = object;
+                break;
+            }
+        QVERIFY(dialog);
+        QVERIFY(QMetaObject::invokeMethod(dialog, "open"));
+        QTRY_VERIFY(dialog->property("opened").toBool());
+        QTest::keyClick(window, Qt::Key_Escape);
+        QVERIFY(dialog->property("opened").toBool());
+        bool reached = false;
+        for (int i = 0; i < 20; ++i) {
+            auto item = window->activeFocusItem();
+            if (item && item->property("text").toString() == "No") {
+                reached = true;
+                break;
+            }
+            QTest::keyClick(window, Qt::Key_Tab);
+        }
+        QVERIFY2(reached, "The explicit No action must be reachable using Tab.");
+        QTest::keyClick(window, Qt::Key_Space);
+        QTRY_VERIFY(!dialog->property("opened").toBool());
+    }
     void savedMarkupNeverLoadsRemoteResources() {
         QTemporaryDir data;
         reword::Controller controller(data.path());
