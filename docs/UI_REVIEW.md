@@ -111,3 +111,10 @@ native X11 cycles at 63e1fc2 also pass first/second/third correction, live/selec
 Undo, Pause, selected history and password exclusion. Their initial local launch
 attempts lacked the rootless window-manager theme path; setting the private
 XDG_DATA_DIRS fixed the fixture environment without changing production code.
+
+At 3ea55cb, the four Linux headings and other popup text pass; the expanded
+check reproduces low-contrast Practice placeholder text (2.80893, light mode).
+Its placeholder now binds to the theme's muted ink. The first glyph-index check
+passed on Windows despite its box-font screenshots; glyph indices alone are
+insufficient. It now also requires discovered font families and valid raw fonts.
+Do not call that first check a reproduced regression or accepted typography.

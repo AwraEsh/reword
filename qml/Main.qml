@@ -1331,6 +1331,7 @@ ApplicationWindow {
                 color: root.ink
                 id: practiceWord
                 placeholderText: "Write the word"
+                placeholderTextColor: root.muted
                 Accessible.name: "Practice word"
                 background: Rectangle {
                     color: root.surface

@@ -18,6 +18,7 @@
 #include <QTimer>
 #include <QTextLayout>
 #include <QGlyphRun>
+#include <QFontDatabase>
 #include <atomic>
 #include <cmath>
 #include <algorithm>
@@ -86,6 +87,8 @@ class UiTest : public QObject {
     Q_OBJECT
   private slots:
     void renderingFontsCoverBothLanguages() {
+        QVERIFY2(!QFontDatabase::families().isEmpty(),
+                 "The offscreen renderer must discover installed font families.");
 #ifdef Q_OS_WIN
         const QFont font("Segoe UI");
 #else
@@ -99,10 +102,13 @@ class UiTest : public QObject {
         layout.endLayout();
         const auto runs = layout.glyphRuns();
         QVERIFY2(!runs.isEmpty(), "The UI renderer must load fonts for its review captures.");
-        for (const auto &run : runs)
+        for (const auto &run : runs) {
+            QVERIFY2(run.rawFont().isValid(),
+                     "Box-font fallback is not valid rendered UI evidence.");
             for (auto glyph : run.glyphIndexes())
                 QVERIFY2(glyph != 0,
                          "English/Persian review text must not render as missing glyphs.");
+        }
     }
     void dialogReceivesKeyboardFocus_data() {
         QTest::addColumn<QString>("title");
