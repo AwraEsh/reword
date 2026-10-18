@@ -430,3 +430,13 @@ readiness false. Review found os.walk silently skipping unreadable directories;
 the deterministic traversal regression was RED and error propagation closes it.
 Four matching-version Qt source candidates are locally checksum-verified. Actual
 Windows audit inspection and full source/notice binding remain open.
+
+## 2026-10-18: remote source delivery verified, release remains gated
+
+The earlier upload checkpoints are superseded: both source assets are uploaded,
+and complete remote byte-stream verification matches all 481,747,380 archive
+bytes and its SHA256. See SOURCE_DISTRIBUTION.md and the packaging receipt. This
+remains a Draft release; matching final installers, Windows runtime/source/notice
+material and desktop/active stability acceptance remain open. The user explicitly
+requires ordinary-user documentation, a quality-gated product release and then
+installation of the accepted build on this machine.
