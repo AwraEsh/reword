@@ -9,9 +9,10 @@ not a claim that every desktop or interaction has been accepted.
 The UI suite exercises modal focus, repeated Tab containment and Escape dismissal
 for Pause, History detail, Clear history and Practice. It also visits all seven
 sidebar pages using Tab/Space, then Backtab, and reaches/activates the explicit
-No action in the permission dialog. That latter test verifies reachability and
-closing the dialog; it does not itself prove a persisted application denial.
-Consent persistence/calendar rules have separate Store tests.
+No action in the permission dialog. That test verifies reachability and one button activation. A separate test
+drives application discovery through Service, waits for the active modal to
+close, selects No using Tab/Space, and verifies the stored denial and empty
+history. Calendar rules have separate Store tests.
 
 Initial focus checks already passed. These checks extend acceptance coverage;
 they do not represent a repaired focus regression. An initial sidebar test used
@@ -66,3 +67,25 @@ A shared AppDialog now binds palette roles directly to the current theme. The
 Windows focus failure includes its active item/window identity and a failure
 capture so native-window routing can be distinguished from actual escaped focus.
 Local Qt 6.8.2 passes all 19 UI cases; final CI is still required.
+
+At 8c77a0b, direct popup palette bindings still failed the older Qt contrast
+check (1.1417 in light mode). Windows diagnostics showed focus on the No button
+of a newly discovered application's consent prompt, over the active modal.
+The consent presenter now waits for other dialogs to become invisible, including
+their closing transitions. A deterministic Service-to-QML test reproduced the
+original overlap before this change. It passes with the deferred presenter and
+verifies a keyboard No decision is persisted. Pure UI fixtures now inject a
+metadata-only adapter; they do not discover CI/host foreground applications.
+Native adapter integration tests remain separate.
+
+The application now sets its initial and changed theme palette for both Widgets
+and Quick controls. The previous window-only palette left shared popup defaults
+and tray menu colors out of sync. A widget palette regression failed before this
+change and passes locally afterwards. Linux Qt 6.4 and Windows CI are still
+required before accepting the popup contrast repair.
+
+After these changes, the full local build and all seven CTest suites pass in
+61.28s with Qt 6.8.2. The regenerated light long-name consent capture was
+inspected: the complete title wraps and all three actions remain visible.
+Independent read-only code review found no important issues in this diff. This
+local evidence does not close the older Qt/Windows or physical desktop gates.

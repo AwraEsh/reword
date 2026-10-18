@@ -1,6 +1,9 @@
 #include <QtTest>
 #include <QApplication>
 #include <QClipboard>
+#include <QMenu>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlProperty>
@@ -54,6 +57,29 @@ class AuditFactory : public QQmlNetworkAccessManagerFactory {
         return new AuditNetwork(requests_, parent);
     }
 };
+class UiMetadataAdapter final : public reword::Adapter {
+    QMutex mutex_;
+    QString application_;
+
+  public:
+    void application(QString id) {
+        QMutexLocker lock(&mutex_);
+        application_ = std::move(id);
+    }
+    reword::Field inspect(bool) override {
+        QMutexLocker lock(&mutex_);
+        reword::Field field;
+        field.app = application_;
+        field.id = "controlled-ui-field";
+        return field;
+    }
+    bool replace(const reword::Field &, const QString &, int) override {
+        return false;
+    }
+    QString description() const override {
+        return "Controlled UI metadata fixture";
+    }
+};
 class UiTest : public QObject {
     Q_OBJECT
   private slots:
@@ -66,7 +92,7 @@ class UiTest : public QObject {
     void dialogReceivesKeyboardFocus() {
         QFETCH(QString, title);
         QTemporaryDir data;
-        reword::Controller controller(data.path());
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("Backend", &controller);
         engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
@@ -139,11 +165,13 @@ class UiTest : public QObject {
                     window->grabWindow().save(captures + "/failure-focus-" + name + ".png");
                 }
                 QFAIL(qPrintable(
-                    QString("Tab %1 escaped modal: root=%2 popup=%3 sameWindow=%4 opened=%5")
+                    QString(
+                        "Tab %1 escaped modal: root=%2 popup=%3 sameWindow=%4 opened=%5 pending=%6")
                         .arg(i)
                         .arg(description(focused), description(popupFocus))
                         .arg(popupWindow == window)
-                        .arg(dialog->property("opened").toBool())));
+                        .arg(dialog->property("opened").toBool())
+                        .arg(controller.pendingName())));
             }
         }
         const auto captures = qEnvironmentVariable("REWORD_DIALOG_CAPTURE_DIR");
@@ -172,7 +200,7 @@ class UiTest : public QObject {
     }
     void sidebarCanBeNavigatedWithoutPointer() {
         QTemporaryDir data;
-        reword::Controller controller(data.path());
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("Backend", &controller);
         engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
@@ -205,7 +233,7 @@ class UiTest : public QObject {
     }
     void consentHeaderFitsLongExecutableName() {
         QTemporaryDir data;
-        reword::Controller controller(data.path());
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("Backend", &controller);
         engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
@@ -246,7 +274,7 @@ class UiTest : public QObject {
     }
     void consentNoIsReachableWithKeyboard() {
         QTemporaryDir data;
-        reword::Controller controller(data.path());
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("Backend", &controller);
         engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
@@ -278,12 +306,80 @@ class UiTest : public QObject {
             QTest::keyClick(window, Qt::Key_Tab);
         }
         QVERIFY2(reached, "The explicit No action must be reachable using Tab.");
+        QSignalSpy activated(window->activeFocusItem(), SIGNAL(clicked()));
+        QVERIFY(activated.isValid());
         QTest::keyClick(window, Qt::Key_Space);
-        QTRY_VERIFY(!dialog->property("opened").toBool());
+        QCOMPARE(activated.count(), 1);
+        // Another queued application may legitimately reuse the same popup next.
+    }
+    void consentWaitsForModalThenKeyboardNoPersists() {
+        QTemporaryDir data;
+        auto native = std::make_unique<UiMetadataAdapter>();
+        auto adapter = native.get();
+        reword::Controller controller(data.path(), nullptr, std::move(native));
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        auto window = qobject_cast<QQuickWindow *>(root);
+        QVERIFY(window);
+        QObject *pause = nullptr, *consent = nullptr;
+        for (auto object : root->findChildren<QObject *>()) {
+            if (object->metaObject()->indexOfMethod("open()") < 0)
+                continue;
+            auto title = object->property("title").toString();
+            if (title == "Pause Reword")
+                pause = object;
+            else if (title.startsWith("Allow Reword in "))
+                consent = object;
+        }
+        QVERIFY(pause && consent);
+        QVERIFY(QMetaObject::invokeMethod(pause, "open"));
+        QTRY_VERIFY(pause->property("opened").toBool());
+        adapter->application("synthetic-note-app");
+        QTRY_COMPARE_WITH_TIMEOUT(controller.pendingName(), QString("synthetic-note-app"), 12000);
+        QVERIFY2(!consent->property("visible").toBool(),
+                 "A new application must wait behind the active modal.");
+        QTest::keyClick(window, Qt::Key_Escape);
+        QTRY_VERIFY(!pause->property("visible").toBool());
+        QTRY_VERIFY(consent->property("opened").toBool());
+        bool reached = false;
+        for (int i = 0; i < 20; ++i) {
+            auto item = window->activeFocusItem();
+            if (item && item->property("text").toString() == "No") {
+                reached = true;
+                break;
+            }
+            QTest::keyClick(window, Qt::Key_Tab);
+        }
+        QVERIFY(reached);
+        QTest::keyClick(window, Qt::Key_Space);
+        QTRY_VERIFY(controller.pendingName().isEmpty());
+        QTRY_VERIFY(!consent->property("visible").toBool());
+        auto applications = controller.apps();
+        QCOMPARE(applications.size(), 1);
+        QCOMPARE(applications.first().toMap()["decision"].toString(), QString("deny"));
+        QVERIFY(controller.history().isEmpty());
+    }
+    void widgetPaletteTracksSelectedTheme() {
+        QTemporaryDir data;
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        QMenu menu;
+        for (bool dark : {false, true}) {
+            controller.set("dark", dark);
+            QTRY_COMPARE(menu.palette().color(QPalette::WindowText),
+                         root->property("ink").value<QColor>());
+        }
     }
     void savedMarkupNeverLoadsRemoteResources() {
         QTemporaryDir data;
-        reword::Controller controller(data.path());
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
         controller.recordApplied("<img src='https://example.invalid/unsafe'> teh",
                                  "<img src='https://example.invalid/unsafe'> the");
         std::atomic_int requests{0};
@@ -301,7 +397,7 @@ class UiTest : public QObject {
         if (QGuiApplication::platformName() != "offscreen")
             QSKIP("Clipboard testing requires the isolated offscreen platform.");
         QTemporaryDir data;
-        reword::Controller controller(data.path());
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
         controller.set("history", false);
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("Backend", &controller);
@@ -331,7 +427,8 @@ class UiTest : public QObject {
         QTemporaryDir data;
         reword::RecoveryClient client;
         {
-            reword::Controller controller(data.path());
+            reword::Controller controller(data.path(), nullptr,
+                                          std::make_unique<UiMetadataAdapter>());
             controller.set("history", false);
             client.start(data.path());
             QTRY_VERIFY_WITH_TIMEOUT(client.active(), 2500);
@@ -347,7 +444,7 @@ class UiTest : public QObject {
     }
     void operationLimitCannotBeRaisedAboveFiftyThousand() {
         QTemporaryDir data;
-        reword::Controller controller(data.path());
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
         controller.set("maxCharacters", 100000);
         QCOMPARE(controller.settings()["maxCharacters"].toInt(), 50000);
         QSignalSpy corrected(&controller, &reword::Controller::correctedText);
@@ -359,7 +456,8 @@ class UiTest : public QObject {
     void sessionRecoveryIsBoundedAndNotPersisted() {
         QTemporaryDir data;
         {
-            reword::Controller controller(data.path());
+            reword::Controller controller(data.path(), nullptr,
+                                          std::make_unique<UiMetadataAdapter>());
             controller.set("history", false);
             controller.recordApplied("teh", "the");
             QCOMPARE(controller.property("recoveryOriginal").toString(), QString("teh"));
@@ -375,13 +473,14 @@ class UiTest : public QObject {
             QVERIFY(controller.property("recoveryOriginal").toString().isEmpty());
             controller.recordApplied("new original", "new result");
         }
-        reword::Controller reopened(data.path());
+        reword::Controller reopened(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
         QVERIFY(reopened.property("recoveryOriginal").toString().isEmpty());
         QCOMPARE(reopened.history().size(), 0);
     }
     void passageLockRejectsConcurrentWork() {
         QTemporaryDir data;
-        reword::Controller first(data.path()), second(data.path());
+        reword::Controller first(data.path(), nullptr, std::make_unique<UiMetadataAdapter>()),
+            second(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
         QSignalSpy one(&first, &reword::Controller::correctedText),
             two(&second, &reword::Controller::correctedText);
         auto text = QString("teh ").repeated(10000);
@@ -393,7 +492,7 @@ class UiTest : public QObject {
     }
     void pausePreventsPendingAndNewCorrections() {
         QTemporaryDir data;
-        reword::Controller controller(data.path());
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
         QSignalSpy results(&controller, &reword::Controller::correctedText);
         controller.fix(QString("teh ").repeated(10000));
         controller.pause(-1);
@@ -406,7 +505,7 @@ class UiTest : public QObject {
     }
     void immediateCancellationDoesNotApply() {
         QTemporaryDir data;
-        reword::Controller controller(data.path());
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
         QSignalSpy results(&controller, &reword::Controller::correctedText);
         controller.fix(QString("teh ").repeated(10000));
         controller.cancel();
@@ -415,7 +514,7 @@ class UiTest : public QObject {
     }
     void storageFailureDoesNotEscape() {
         QTemporaryDir data;
-        reword::Controller controller(data.path());
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
         QTest::qWait(300);
         {
             auto db = QSqlDatabase::addDatabase("QSQLITE", "storage-lock-test");
@@ -440,7 +539,7 @@ class UiTest : public QObject {
     }
     void workspaceCorrectionAndStaleGuard() {
         QTemporaryDir data;
-        reword::Controller controller(data.path());
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
         QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("Backend", &controller);
         engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));

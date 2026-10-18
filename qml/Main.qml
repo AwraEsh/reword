@@ -42,7 +42,18 @@ ApplicationWindow {
             Backend.quit();
     }
 
+    function presentPendingConsent() {
+        if (!root.visible || Backend.pendingName.length === 0 || consentDialog.visible)
+            return;
+        for (let dialog of [pauseDialog, historyDialog, clearDialog, practiceDialog]) {
+            if (dialog.visible)
+                return;
+        }
+        consentDialog.open();
+    }
+
     component AppDialog: Dialog {
+        onVisibleChanged: if (!visible) Qt.callLater(root.presentPendingConsent)
         palette.window: root.surface
         palette.windowText: root.ink
         palette.text: root.ink
@@ -59,6 +70,7 @@ ApplicationWindow {
             root.show();
             root.raise();
             root.requestActivate();
+            root.presentPendingConsent();
         }
         function onPauseDialog() {
             root.show();
@@ -79,8 +91,7 @@ ApplicationWindow {
             }
         }
         function onUpdated() {
-            if (Backend.pendingName.length > 0 && !consentDialog.opened)
-                consentDialog.open();
+            root.presentPendingConsent();
         }
     }
 
