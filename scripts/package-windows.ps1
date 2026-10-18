@@ -14,6 +14,25 @@ Copy-Item "$Root/THIRD_PARTY.md","$Root/LICENSE" "$Stage/licenses"
 $Crt = Get-ChildItem 'C:/Program Files/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/x64/Microsoft.VC143.CRT' -Directory | Sort-Object FullName -Descending | Select-Object -First 1
 if (-not $Crt) { throw 'VC runtime directory not found' }
 Copy-Item "$($Crt.FullName)/*.dll" $Stage
+# Keep material evidence outside the installer stage until source/notice mapping is complete.
+$QtRoot = Split-Path -Parent (Split-Path -Parent (Get-Command windeployqt).Source)
+$Materials = Join-Path $Root 'dist/windows-materials'
+python "$PSScriptRoot/package_windows_audit.py" --stage $Stage --application "$Root/build/Release/reword.exe" --vendor "qt=$QtRoot" --vendor "vcpkg=$env:VCPKG_INSTALLATION_ROOT/installed" --vendor "vc-runtime=$($Crt.FullName)" --output $Materials
+if ($LASTEXITCODE -ne 0) { throw 'Windows material audit failed' }
+$QtVersion = & "$QtRoot/bin/qmake.exe" -query QT_VERSION
+if ($LASTEXITCODE -ne 0) { throw 'Qt SDK version query failed' }
+$VcpkgCommit = git -C $env:VCPKG_INSTALLATION_ROOT rev-parse HEAD
+if ($LASTEXITCODE -ne 0) { throw 'vcpkg checkout identity is unavailable' }
+$Packages = vcpkg list
+if ($LASTEXITCODE -ne 0) { throw 'Installed vcpkg inventory is unavailable' }
+@{
+  schemaVersion = 1
+  qtSdkVersion = "$QtVersion".Trim()
+  vcpkgCheckoutCommit = "$VcpkgCommit".Trim()
+  installedVcpkgPackages = @($Packages)
+  cachedPackageBinding = 'not-established-by-checkout-identity'
+  releaseReady = $false
+} | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 "$Materials/vendor-versions.json"
 # Only uninstall files shipped by us; preserve anything the user adds later.
 $Uninstall = @()
 Get-ChildItem $Stage -File -Recurse | ForEach-Object {

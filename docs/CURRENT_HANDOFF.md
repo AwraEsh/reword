@@ -362,3 +362,36 @@ remote archive state is still `starter` and public byte verification is pending.
 Do not restart it solely because of a slow upload or a status-observation timeout.
 Windows distribution inspection confirms CI uses Qt 6.8.3 and Hunspell 1.7.5;
 the Debian source bundle cannot serve as their matching Windows source material.
+
+## Windows build-material audit work
+
+PR #12 merged as c5628aa after final-head Linux/Windows runs 39133319979 and
+39133324256 passed; the primary checkout rebuild and all seven CTest suites pass
+in 40.36 seconds. The former shortcut/distribution worktree directories were
+removed during PR branch cleanup; their shared `.deps` logs and primary source
+materials remain intact. Do not assume those old attached paths still exist.
+The remaining storage-access worktree is reused for codex/windows-runtime-materials.
+
+The new audit inventories every staged file and exact binary candidates under
+explicit SDK/vcpkg/CRT roots; notice copies and metadata hashes live in a separate
+CI artifact. It does not change deployed components or claim release readiness.
+Review reproduced silently skipped unreadable directories; a RED regression now
+requires traversal errors to stop publication. Local packaging checks and fresh
+Windows execution/results are recorded in the next checkpoint.
+
+Four Qt 6.8.3 source candidates (qtbase/declarative/svg/tools) are fully downloaded
+and checksum-verified, without extraction. See WINDOWS_DISTRIBUTION.md for hashes
+and unresolved source/notice/ABI binding. Acquisition session 27393 is terminal
+exit 0. The original Linux archive upload is still live; preserve its handle and
+verify actual server bytes before claiming delivery.
+
+Windows audit source d742c62 passes Linux/Windows CI 39134648774/39134700661.
+The second run's actual evidence was downloaded and inspected: 1,318 files,
+96 binaries, all exact matches (Qt 84, VC 10, vcpkg 1, app 1), seven candidate
+notices and 158 metadata hashes. The only Qt notice candidates are CMake helper
+licenses; these do not establish runtime Qt coverage. CRT notices are absent
+from the selected DLL directory. The report now makes the unresolved per-runtime
+notice coverage explicit. Mesa/D3DCompiler/Mimer are staged and need resolution.
+All 95 local packaging tests pass in 10.107s; independent review's traversal
+finding is fixed and all eight audit tests pass. Full runtime/source/ABI/license
+mapping and final Windows acceptance remain open. See WINDOWS_DISTRIBUTION.md.

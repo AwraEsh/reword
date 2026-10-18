@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "d742c6223950b54ceb3d66629eb715570dff69c2",
+  "ciRunId": 39134700661,
+  "ciRunUrl": "https://github.com/AwraEsh/reword/actions/runs/39134700661",
+  "artifactName": "Reword-Windows-Materials-Audit",
+  "downloadedAndInspected": true,
+  "files": 1318,
+  "binaries": 96,
+  "unmatchedBinaries": [],
+  "noticeCandidates": 7,
+  "metadataHashes": 158,
+  "runtimeNoticeCoverage": "not-established; Qt candidates are CMake helper notices; CRT has no candidate",
+  "sourceBuildCorrespondence": "not-established",
+  "releaseReady": false,
+  "versions": {
+    "vcpkgCheckoutCommit": "e456309491fd875487bf02b8a0dca76c1b1b00cc",
+    "qtSdkVersion": "6.8.3",
+    "schemaVersion": 1,
+    "cachedPackageBinding": "not-established-by-checkout-identity",
+    "releaseReady": false,
+    "installedVcpkgPackages": [
+      "hunspell:x64-windows                              1.7.5               The most popular spellchecking library.",
+      "libiconv:x64-windows                              1.19                iconv() text conversion.",
+      "vcpkg-cmake-get-vars:x64-windows                  2025-05-29          ",
+      "vcpkg-cmake:x64-windows                           2025-08-07          ",
+      "vcpkg-make:x64-windows                            2026-07-09#1        "
+    ]
+  },
+  "evidence": {
+    "audit.json": {
+      "bytes": 304272,
+      "sha256": "ac95e00c0374599659e6ee747dd0fb24f6658d0de7555312a22d4bb0f441d805"
+    },
+    "vendor-versions.json": {
+      "bytes": 713,
+      "sha256": "ba11f5c01ff9e1cf4242ecaeaaaba8c6761ecb6ba0eaf82c459fea724905b56a"
+    }
+  }
+}
