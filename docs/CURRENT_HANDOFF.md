@@ -274,22 +274,45 @@ acceptance and multi-hour active stability remain required.
 
 ## Authenticated exact source descriptors
 
-PR #9 merged as b985207 from430000b after Linux/Windows runs39124936466 and
+PR #9 merged as b985207 from430000b after Linux/Windows runs 39124936466 and
 39124972344 passed. Primary integrated packaging CTest passes13.27s. The managed
 linux-distribution worktree now uses codex/source-authentication. Source2ecb35a
 adds optional required descriptor authentication with explicit local keyrings,
 complete signed archive index hash chains and fail-closed exact identities.
-The actual78-descriptor set verifies:75 archive-index proofs and3 maintainer
+The actual78-descriptor set verifies:75 archive-index proofs and 3 maintainer
 signatures. Unknown/expired/revoked signatures and indexed mismatches are refused.
 A historical signed proposed-updates index proves the exact at-spi2-core version;
 no expired key exception is introduced. Source documentation records the trust
 inputs, dates, hashes and limitations in SOURCE_DISTRIBUTION.md.
 
-All87 packaging checks pass18.39s. After rebuilding the older worktree (initial
-full CTest could not find recovery_tests), all7 suites pass39.26s. Independent
-review has no Important/Critical finding and independently passes19 auth tests.
+All 87 packaging checks pass 18.39s. After rebuilding the older worktree (initial
+full CTest could not find recovery_tests), all 7 suites pass 39.26s. Independent
+review has no Important/Critical finding and independently passes 19 auth tests.
 Exact archive acquisition is running in the ignored source cache; descriptor
 authentication alone is not archive delivery. No release has been published.
 Source/publication/build instructions, Windows material and final desktop/active
-stability acceptance remain open. Disk space changed externally from715MiB to
-13GiB; no cleanup was performed by this task. Recheck before large copying.
+stability acceptance remain open. Disk space changed externally from 715 MiB to
+13 GiB; no cleanup was performed by this task. Recheck before large copying.
+
+
+## Complete local dependency source material and remote upload
+
+PR #10 merged as b69b1a3 from a3e842d after Linux/Windows runs 39127584465 and
+39127671396 passed. Integrated primary packaging CTest passes 11.13s. The managed
+linux-distribution worktree now uses codex/linux-source-materials. All 186 archives
+and 78 descriptors are collected, independently assembled and authenticated.
+The 264 source files total 440,968,366 bytes; the final tar.xz contains 284 regular
+files with public verification evidence and rebuilding instructions. Its SHA256
+is 94c96989f55d2bed81f37c5149a9d10cfc4762c970f2ee4fe31bb682df0a2df3.
+
+GitHub draft release 416448800 targets b69b1a3 and tag
+dependency-sources-debian13-2026-10-18. Large asset 653490023 remains uploading at
+this checkpoint; checksum asset 653490027 is uploaded. Recheck live process/status
+before any retry. Detailed active upload handles and paths are in the ignored
+.deps/source-acquisition/NEXT_STEPS.md. The public receipt records observed states;
+remote byte verification and public availability remain open. Do not claim the
+draft material publicly delivered or the application ready for release.
+
+Next: finish/verify this upload, complete Windows notices/source material, then
+remaining keyboard/populated UI, native race/lock and active performance/stability
+acceptance. Source archives are only one gate of the approved product scope.

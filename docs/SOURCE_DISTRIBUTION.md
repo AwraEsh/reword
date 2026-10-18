@@ -202,3 +202,42 @@ again before starting, since other processes can consume it.
 References: [Debian source package structure](https://www.debian.org/doc/manuals/debian-handbook/sect.source-package-structure.en.html),
 [Debian snapshot](https://snapshot.debian.org/),
 [Qt open-source obligations](https://www.qt.io/development/open-source-lgpl-obligations).
+
+
+## Complete local source material, 2026-10-18
+
+All 186 descriptor-referenced archives have been downloaded and checked against
+the authenticated descriptors. The offline assembler then independently accepts
+all 78 exact source versions: 264 descriptor/archive files, 440,968,366 bytes.
+The canonical source index requires authentication and matches the retained
+runtime manifest by SHA256:
+
+- runtime manifest: `73fe56a025b976daeca285254d4ff407faa93dbbe62e6c56bdebb440a9ab51ef`
+- source index: `e037b3ff605dafe46b9d415f888b56bcda10f59cfdb530c8121e89b596a40549`
+
+The source tree also carries public keyring/index evidence, a relative-path trust
+configuration, keyring notices and [rebuilding/replacement instructions](REBUILDING_BUNDLED_LIBRARIES.md).
+Authentication using the exported configuration reproduces the original evidence;
+every descriptor/archive is hashed again. Published JSON has no build-host paths.
+The tar.xz is read back without extraction and every regular member is compared
+with the verified tree: 284 files, 486,835,870 expanded file bytes. The archive is
+481,747,380 bytes (about 459.4 MiB), SHA256
+`94c96989f55d2bed81f37c5149a9d10cfc4762c970f2ee4fe31bb682df0a2df3`.
+
+A GitHub Draft Release holds this material under the distributor account. At this
+checkpoint the large archive upload remains in progress and its remote bytes
+have not been verified. The checksum asset is uploaded. Draft content is not
+public source availability. The receipt in
+[packaging/source-materials-debian13-2026-10-18.json](../packaging/source-materials-debian13-2026-10-18.json)
+records the actual asset states at the stated observation time. Complete remote
+verification and publication/pairing with final installers before closing that
+gate. Windows material and the remaining installation/desktop/stability gates
+are still open. No application installer was published by this work.
+
+Local evidence: `.deps/source-acquisition/debian-sources-verified/`,
+`archive-acquisition.json`, `full-bundle-verification.json`, `source-artifact.json`
+and `.deps/source-auth-full-assembly.log`. The source archive and its checksum are
+in `dist/`. Existing development installers were preserved. A task-owned ignored
+acquisition harness performs exact hash-addressed snapshot downloads with bounded
+streaming reads/retries; a supported general acquisition command remains to be
+finished before claiming that part of the distribution workflow complete.

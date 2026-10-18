@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "purpose": "development-linux-dependency-sources",
+  "runtimeAuditDate": "2026-10-17",
+  "artifact": {
+    "filename": "Reword-Linux-Dependency-Sources-debian13-2026-10-18.tar.xz",
+    "bytes": 481747380,
+    "sha256": "94c96989f55d2bed81f37c5149a9d10cfc4762c970f2ee4fe31bb682df0a2df3",
+    "regularFiles": 284,
+    "expandedFileBytes": 486835870,
+    "verifiedSourceFiles": 264,
+    "sourcePackages": 78,
+    "archives": 186,
+    "runtimeManifestSha256": "73fe56a025b976daeca285254d4ff407faa93dbbe62e6c56bdebb440a9ab51ef",
+    "sourceIndexSha256": "e037b3ff605dafe46b9d415f888b56bcda10f59cfdb530c8121e89b596a40549"
+  },
+  "verification": {
+    "sourcePackages": 78,
+    "descriptorAndArchiveFiles": 264,
+    "descriptorAndArchiveBytes": 440968366,
+    "authenticatedMethods": {
+      "archive-index": 75,
+      "maintainer-signature": 3
+    },
+    "sourceIndexSha256": "e037b3ff605dafe46b9d415f888b56bcda10f59cfdb530c8121e89b596a40549",
+    "runtimeManifestSha256": "73fe56a025b976daeca285254d4ff407faa93dbbe62e6c56bdebb440a9ab51ef",
+    "hostPathsInPublishedJson": false
+  },
+  "toolSourceCommit": "b69b1a3bb78b20f238888d4e9e18760f91161c47",
+  "github": {
+    "releaseId": 416448800,
+    "tagName": "dependency-sources-debian13-2026-10-18",
+    "url": "https://github.com/AwraEsh/reword/releases/tag/untagged-c72379b798ec5ee1cb49",
+    "draft": true,
+    "targetCommitish": "b69b1a3bb78b20f238888d4e9e18760f91161c47",
+    "assets": [
+      {
+        "id": 653490027,
+        "name": "Reword-Linux-Dependency-Sources-debian13-2026-10-18.tar.xz.sha256",
+        "state": "uploaded",
+        "bytes": 125,
+        "digest": "sha256:dfd5d433a8d312db684fbb6c3582624227b04bd1536462905337c31a9068f04f"
+      }
+    ]
+  },
+  "remoteByteVerification": "pending",
+  "observedAtUtc": "2026-10-18T13:13:53.288968+00:00"
+}
