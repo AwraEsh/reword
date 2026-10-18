@@ -363,3 +363,16 @@ the RED cases now pass with required transitive imports overriding optional use.
 with 524 runtime files/134 components/197 ELFs launches cleanly. No prior installer
 was replaced. Corresponding source archives, Windows notices and final platform/
 installation/stability acceptance remain open. See LINUX_PACKAGING_CHECKS.md.
+
+
+## 2026-10-18: verified source package assembly
+
+PR #8 is integrated as a39913d after green Linux/Windows CI. Its exact provenance
+and runtime notices now feed a separate offline source archive assembler. The
+assembler preserves exact versions/epochs, checks every archive byte against all
+descriptor inventories and publishes only a complete new bundle. Review found
+check/open and publication races; no-follow file descriptors and atomic
+RENAME_NOREPLACE close them with regressions. All 68 packaging checks pass; an
+actual Hunspell package passes its SHA256/SHA1/MD5. Acquisition authentication,
+full source collection/publication, Windows notices and final acceptance remain
+open; see docs/SOURCE_DISTRIBUTION.md.
