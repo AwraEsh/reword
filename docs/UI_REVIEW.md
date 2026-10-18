@@ -118,3 +118,10 @@ Its placeholder now binds to the theme's muted ink. The first glyph-index check
 passed on Windows despite its box-font screenshots; glyph indices alone are
 insufficient. It now also requires discovered font families and valid raw fonts.
 Do not call that first check a reproduced regression or accepted typography.
+
+At dbd25e3, Linux CI is green and Windows now reproduces the missing-font defect:
+its font-family inventory is empty, and JUnit reports the nonexistent SDK
+lib/fonts path. The Windows workflow now points QT_QPA_FONTDIR at the runner's
+installed Windows Fonts directory after checking Segoe UI exists. This changes
+the offscreen test environment; no fonts are copied into the app or artifacts.
+Fresh Windows CI and actual images must confirm this repair.
