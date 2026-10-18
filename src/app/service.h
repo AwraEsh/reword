@@ -27,12 +27,14 @@ class Service : public QObject {
     qint64 platformPoll_ = 0, shortcutRevision_ = -1;
     bool shortcutsHealthy_ = false;
     std::atomic_bool cancel_{false};
+    std::atomic<quint64> cancellationRevision_{0};
     bool wayland_ = false, jobRunning_ = false;
     QFutureWatcher<Change> *job_ = nullptr;
     std::unique_ptr<QLockFile> jobLock_;
     void runText(QString input, bool native, Field field = {});
     void tick();
     Field permitted();
+    bool policyCurrent(const Field &field, qint64 revision, quint64 cancellation);
     void fixSelection();
     void undo();
 
@@ -40,6 +42,7 @@ class Service : public QObject {
     explicit Service(QString directory, std::unique_ptr<Adapter> adapter = {})
         : directory_(std::move(directory)), adapter_(std::move(adapter)) {}
     void cancel() {
+        cancellationRevision_.fetch_add(1);
         cancel_.store(true);
     }
     void prepare() {

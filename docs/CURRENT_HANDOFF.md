@@ -316,3 +316,34 @@ draft material publicly delivered or the application ready for release.
 Next: finish/verify this upload, complete Windows notices/source material, then
 remaining keyboard/populated UI, native race/lock and active performance/stability
 acceptance. Source archives are only one gate of the approved product scope.
+
+
+## Operation policy boundary audit
+
+A read-only review reproduced two Service policy races at b69b1a3. The operation-
+policy branch adds 15 synthetic cases across live bursts, selected completion
+and Undo: Pause, denial, language disable, Cancel and Cancel followed by prepare.
+Initial live/selected tests were RED in all eight original cases; Undo was RED
+for language/Cancel/cancel-reset after the initial read-access fix. The fix uses
+fresh Access plus configuration and monotonic cancellation revisions before
+native writes. Cancellation remains scoped to existing work, not future typing.
+
+Fcitx now reads configuration revision before options and refreshes policy after
+blocking lock inspection. The new optional command is:
+
+```sh
+/usr/bin/python3 scripts/test-native-wayland.py --fixture qt --policy-races
+```
+
+It owns a separate D-Bus/compositor session and synthetic screensaver service.
+The exact baseline addon fails selected denial with `the` replacing `teh`;
+the fixed addon passes selected Pause/denial and Undo Pause/denial. Undo's query
+counter can include timer observation, so these native Undo cases are boundary
+checks, not proof of hitting that precise internal call. Synthetic fixture state
+is saved only inside this test's private temporary directory. Default probes
+continue to use the compositor's ordinary lock service.
+
+Independent final review found no remaining Important implementation defect.
+Full CTest and default Qt/GTK native reruns, final CI, Git integration and exact
+check results are recorded at the next checkpoint. This does not establish real
+host lock/unlock or normal Windows 10/11 desktop acceptance.

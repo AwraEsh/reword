@@ -3,6 +3,7 @@
 #include <QInputMethodEvent>
 #include <QSocketNotifier>
 #include <QTimer>
+#include <QSaveFile>
 #include <QWidget>
 #include <QVBoxLayout>
 #include <unistd.h>
@@ -32,6 +33,15 @@ int main(int argc, char **argv) {
     auto layout = new QVBoxLayout(&window);
     auto entry = new FixtureEntry(&window);
     layout->addWidget(entry);
+    const auto statePath = qEnvironmentVariable("REWORD_FIXTURE_STATE");
+    if (!statePath.isEmpty())
+        QObject::connect(entry, &QLineEdit::textChanged, &app, [statePath](const QString &text) {
+            QSaveFile file(statePath);
+            if (file.open(QIODevice::WriteOnly)) {
+                file.write(text.toUtf8());
+                file.commit();
+            }
+        });
     window.resize(800, 600);
     if (qEnvironmentVariableIsSet("REWORD_FIXTURE_MAXIMIZE"))
         window.showMaximized();
