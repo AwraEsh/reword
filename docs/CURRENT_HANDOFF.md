@@ -395,3 +395,22 @@ notice coverage explicit. Mesa/D3DCompiler/Mimer are staged and need resolution.
 All 95 local packaging tests pass in 10.107s; independent review's traversal
 finding is fixed and all eight audit tests pass. Full runtime/source/ABI/license
 mapping and final Windows acceptance remain open. See WINDOWS_DISTRIBUTION.md.
+
+## Keyboard/dialog UI and latest delivery instruction
+
+PR #13 merged as 6735cd2 after final-head Linux/Windows runs 39135443045 and
+39135448262 passed. Its Windows material receipt is explicit about unresolved
+runtime license/source binding; no product release has been accepted.
+
+The managed keyboard-review worktree uses codex/dialog-keyboard-focus. It adds
+keyboard modal/sidebar/No acceptance checks and a one-line wrap fix for long
+executable names in the permission heading. The long-title geometry regression
+was RED; focus/navigation already worked. CI now collects synthetic Linux/Windows
+page/dialog captures. All seven local CTest suites pass in 38.63s. See UI_REVIEW.md
+for the exact visual evidence and fixture/evidence limits.
+
+The user now explicitly requires ordinary-user GitHub installation/use docs,
+a real release only after quality/stability is established, and installation of
+that accepted build on this current machine. These are recorded in REQUIREMENTS.
+Do not install a development build or publish a product release merely because CI
+is green. Repository visibility remains intentionally PUBLIC.

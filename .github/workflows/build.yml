@@ -20,6 +20,14 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           QT_QUICK_BACKEND: software
+          REWORD_UI_CAPTURE_DIR: ${{ github.workspace }}/dist/ui-review/pages
+          REWORD_UI_CAPTURE_COMPACT: '1'
+          REWORD_DIALOG_CAPTURE_DIR: ${{ github.workspace }}/dist/ui-review/dialogs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Reword-Linux-UI-Review
+          path: dist/ui-review
+          if-no-files-found: error
       - name: Reject a foreign-account recovery server
         run: sudo ./build/reword_recovery_tests crossAccountServerNeverReceivesGreeting
       - name: Launch UI
@@ -85,6 +93,14 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           QT_QUICK_BACKEND: software
+          REWORD_UI_CAPTURE_DIR: ${{ github.workspace }}/dist/ui-review/pages
+          REWORD_UI_CAPTURE_COMPACT: '1'
+          REWORD_DIALOG_CAPTURE_DIR: ${{ github.workspace }}/dist/ui-review/dialogs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Reword-Windows-UI-Review
+          path: dist/ui-review
+          if-no-files-found: error
       - name: Bundle and create installer
         shell: pwsh
         run: |

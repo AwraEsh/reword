@@ -1,0 +1,51 @@
+# Keyboard and rendered UI evidence
+
+The interface remains English. Content-language controls and mixed Persian/English
+text are independent of the interface language. This document records evidence,
+not a claim that every desktop or interaction has been accepted.
+
+## Keyboard checks
+
+The UI suite exercises modal focus, repeated Tab containment and Escape dismissal
+for Pause, History detail, Clear history and Practice. It also visits all seven
+sidebar pages using Tab/Space, then Backtab, and reaches/activates the explicit
+No action in the permission dialog. That latter test verifies reachability and
+closing the dialog; it does not itself prove a persisted application denial.
+Consent persistence/calendar rules have separate Store tests.
+
+Initial focus checks already passed. These checks extend acceptance coverage;
+they do not represent a repaired focus regression. An initial sidebar test used
+QObject ownership to find Repeater delegates; it was corrected to inspect the
+visual tree. That was a fixture error, not an application navigation failure.
+
+A separate geometry test reproduced the long-executable-name header overflowing
+the permission dialog. `Text.Wrap` keeps its full plain-text title within the
+existing dialog width, including an unbroken 220-character basename. This was
+observed RED before the one-line QML change.
+
+## Rendered checks
+
+Optional synthetic captures cover all seven pages plus Pause, populated bilingual
+History detail, Clear history, Practice and the long consent title in light/dark
+modes. The minimum logical viewport is 880x620. History fixtures contain repeated
+mixed text and use the real scrolling/read-only text controls. No user text is
+used for captures.
+
+CI publishes separate Linux and Windows UI review artifacts from offscreen Qt
+rendering with its software scene graph. Those are rendered OS/Qt evidence, not
+proof of native desktop focus, tray, graphics-driver behavior or ordinary Windows
+10/11 installation acceptance. Actual images must be downloaded and inspected;
+a successful artifact upload does not itself establish a visual review.
+
+Local Linux modal/No/navigation tests pass; all seven CTest suites pass in 38.63s.
+Light History, dark Pause and dark Practice captures were inspected. The first
+long-title capture was invalidated when a controller notification refreshed the
+test's binding; the fixture now removes that binding using QQmlProperty::write.
+Inspect the regenerated long-title image before treating it as visual proof.
+
+## Remaining acceptance
+
+Inspect the final Linux/Windows captures, including long title and mixed text;
+complete populated Applications/Insights/personal dictionary/replacement list and
+remaining dialog interactions; verify normal desktop scaling, shortcuts and tray.
+These checks complement the full compatibility and active stability gates.

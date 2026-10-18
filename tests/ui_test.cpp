@@ -3,6 +3,7 @@
 #include <QClipboard>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQmlProperty>
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QQuickItem>
@@ -172,7 +173,7 @@ class UiTest : public QObject {
             }
         QVERIFY(dialog);
         auto title = QString("Allow Reword in notes-") + QString(220, 'x') + ".exe?";
-        dialog->setProperty("title", title);
+        QVERIFY(QQmlProperty::write(dialog, "title", title));
         QVERIFY(QMetaObject::invokeMethod(dialog, "open"));
         QTRY_VERIFY(dialog->property("opened").toBool());
         auto header = dialog->property("header").value<QQuickItem *>();
