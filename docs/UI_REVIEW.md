@@ -89,3 +89,25 @@ After these changes, the full local build and all seven CTest suites pass in
 inspected: the complete title wraps and all three actions remain visible.
 Independent read-only code review found no important issues in this diff. This
 local evidence does not close the older Qt/Windows or physical desktop gates.
+
+At 63e1fc2, Windows CI passes including the controlled queue/keyboard No check,
+but manual review finds missing-glyph boxes even for English in its offscreen
+captures. This invalidates their typography evidence. A shaping/glyph regression
+now requires real English/Persian glyphs instead of accepting image creation alone.
+Qt's Windows offscreen plugin uses the FreeType font database rather than the
+native Windows font database; the capture environment needs its installed fonts.
+
+The same source still fails all four heading contrasts under Linux Qt 6.4.2.
+Application-level palette synchronization fixes Widgets but does not repair
+popup child palette inheritance there. The shared dialog now owns its plain-text
+wrapped heading, and popup labels/editors bind directly to the theme ink. The
+practice editor also owns its background. Contrast checks cover visible text in
+popup contents and footers against their nearest opaque control background.
+Fresh CI and downloaded rendered review are required again.
+
+Local verification of the direct ink/header changes and glyph/expanded contrast
+checks: full build and all seven CTest suites pass in 66.17s. Three controlled
+native X11 cycles at 63e1fc2 also pass first/second/third correction, live/selected
+Undo, Pause, selected history and password exclusion. Their initial local launch
+attempts lacked the rootless window-manager theme path; setting the private
+XDG_DATA_DIRS fixed the fixture environment without changing production code.

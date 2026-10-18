@@ -16,6 +16,8 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QTimer>
+#include <QTextLayout>
+#include <QGlyphRun>
 #include <atomic>
 #include <cmath>
 #include <algorithm>
@@ -83,6 +85,25 @@ class UiMetadataAdapter final : public reword::Adapter {
 class UiTest : public QObject {
     Q_OBJECT
   private slots:
+    void renderingFontsCoverBothLanguages() {
+#ifdef Q_OS_WIN
+        const QFont font("Segoe UI");
+#else
+        const QFont font("Noto Sans");
+#endif
+        QTextLayout layout(QString::fromUtf8("Reword یک متن فارسی"), font);
+        layout.beginLayout();
+        auto line = layout.createLine();
+        QVERIFY(line.isValid());
+        line.setLineWidth(1000);
+        layout.endLayout();
+        const auto runs = layout.glyphRuns();
+        QVERIFY2(!runs.isEmpty(), "The UI renderer must load fonts for its review captures.");
+        for (const auto &run : runs)
+            for (auto glyph : run.glyphIndexes())
+                QVERIFY2(glyph != 0,
+                         "English/Persian review text must not render as missing glyphs.");
+    }
     void dialogReceivesKeyboardFocus_data() {
         QTest::addColumn<QString>("title");
         for (auto title :
@@ -143,6 +164,34 @@ class UiTest : public QObject {
             QVERIFY2(contrast >= 4.5, qPrintable(QString("Dialog heading contrast %1 in %2 theme")
                                                      .arg(contrast)
                                                      .arg(dark ? "dark" : "light")));
+            QList<QQuickItem *> items{content->parentItem()};
+            while (!items.isEmpty()) {
+                auto item = items.takeLast();
+                items.append(item->childItems());
+                if ((!item->inherits("QQuickText") && !item->inherits("QQuickTextInput") &&
+                     !item->inherits("QQuickTextEdit")) ||
+                    item->property("text").toString().isEmpty() || !item->isVisible())
+                    continue;
+                auto textColor = item->property("color").value<QColor>();
+                if (!textColor.isValid())
+                    continue;
+                auto backdrop = surface;
+                for (auto ancestor = item; ancestor; ancestor = ancestor->parentItem()) {
+                    auto backing = ancestor->property("background").value<QQuickItem *>();
+                    auto color = backing ? backing->property("color").value<QColor>() : QColor();
+                    if (color.isValid() && color.alphaF() >= 0.99) {
+                        backdrop = color;
+                        break;
+                    }
+                }
+                auto a = luminance(textColor), b = luminance(backdrop);
+                auto textContrast = (std::max(a, b) + 0.05) / (std::min(a, b) + 0.05);
+                QVERIFY2(textContrast >= 4.5,
+                         qPrintable(QString("Dialog text contrast %1 (%2, %3 theme)")
+                                        .arg(textContrast)
+                                        .arg(item->metaObject()->className())
+                                        .arg(dark ? "dark" : "light")));
+            }
         }
 
         for (int i = 0; i < 20; ++i) {
