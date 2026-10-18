@@ -384,3 +384,14 @@ and checksum-verified, without extraction. See WINDOWS_DISTRIBUTION.md for hashe
 and unresolved source/notice/ABI binding. Acquisition session 27393 is terminal
 exit 0. The original Linux archive upload is still live; preserve its handle and
 verify actual server bytes before claiming delivery.
+
+Windows audit source d742c62 passes Linux/Windows CI 39134648774/39134700661.
+The second run's actual evidence was downloaded and inspected: 1,318 files,
+96 binaries, all exact matches (Qt 84, VC 10, vcpkg 1, app 1), seven candidate
+notices and 158 metadata hashes. The only Qt notice candidates are CMake helper
+licenses; these do not establish runtime Qt coverage. CRT notices are absent
+from the selected DLL directory. The report now makes the unresolved per-runtime
+notice coverage explicit. Mesa/D3DCompiler/Mimer are staged and need resolution.
+All 95 local packaging tests pass in 10.107s; independent review's traversal
+finding is fixed and all eight audit tests pass. Full runtime/source/ABI/license
+mapping and final Windows acceptance remain open. See WINDOWS_DISTRIBUTION.md.

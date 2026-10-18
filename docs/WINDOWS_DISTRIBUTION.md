@@ -72,3 +72,26 @@ explains its applicable runtime redistribution material in
 
 Final installer/source pairing, checksums, clean launch, populated UI/keyboard
 review and active stability acceptance remain explicit release gates.
+
+## First real audit: d742c62
+
+Windows CI runs 39134648774 and 39134700661 pass, including audit execution,
+per-user install/clean-PATH launch/uninstall and the native field/shortcut probe.
+The latter run's evidence artifact was downloaded and inspected locally:
+
+- 1,318 staged files; 96 binaries, all with exact byte matches: application 1,
+  Qt SDK 84, vcpkg 1 and VC runtime 10.
+- No unmatched binaries. This is exact SDK byte provenance, not a complete PE
+  dependency-closure or source/build correspondence proof.
+- Seven available notice candidates and 158 metadata hashes. VC-runtime has no
+  notice file in the supplied CRT directory. The two Qt notice candidates are
+  CMake helper notices, so they do not establish runtime Qt license coverage.
+- Mesa `opengl32sw.dll`, D3DCompiler47 and the Mimer SQL plugin are actually
+  staged. Their material must be resolved or their removal tested explicitly.
+
+`missingVendorNotices` means a vendor scan found no notice candidate at all.
+A vendor absent from that list does not imply complete notice coverage. The
+report separately states that runtime notice coverage is not established.
+The current vcpkg checkout is e456309491fd875487bf02b8a0dca76c1b1b00cc;
+its installed inventory includes Hunspell 1.7.5 and libiconv 1.19, but only the
+Hunspell DLL is copied from that tree. Imported-DLL closure still needs inspection.

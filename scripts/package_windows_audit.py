@@ -122,6 +122,7 @@ def audit(stage, application, vendors, output):
         'purpose': 'windows-build-materials-audit',
         'releaseReady': False,
         'sourceAuthentication': 'not-established-by-this-audit',
+        'runtimeNoticeCoverage': 'not-established-by-vendor-directory-scan',
         'files': staged,
         'binaries': binaries,
         'unmatchedBinaries': sorted(name for name, item in binaries.items() if not item['matches']),
