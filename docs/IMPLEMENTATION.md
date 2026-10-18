@@ -376,3 +376,15 @@ RENAME_NOREPLACE close them with regressions. All 68 packaging checks pass; an
 actual Hunspell package passes its SHA256/SHA1/MD5. Acquisition authentication,
 full source collection/publication, Windows notices and final acceptance remain
 open; see docs/SOURCE_DISTRIBUTION.md.
+
+
+## 2026-10-18: authenticated source descriptors
+
+A new offline module authenticates descriptors under explicit keyrings, using
+signed archive index hash chains or direct maintainer signatures for versions
+absent from retained indexes. Source assembly can require this before publication.
+The exact78-source set verifies75 by archive metadata and3 by maintainer signatures.
+An expired at-spi2-core key is refused; a signed historical index binds the exact
+version instead. All87 packaging tests and7 rebuilt CTest suites pass; independent
+review has no Important/Critical issue. Archive acquisition is still in progress;
+full source delivery and final installation acceptance are not implied.

@@ -40,8 +40,9 @@ runtime dependency or network activity.
 
 ## Trust boundary
 
-The assembler preserves a cleartext OpenPGP descriptor exactly but does **not**
-authenticate its signature or establish Debian archive provenance. Its index
+Without `--trust-config`, the assembler preserves a cleartext OpenPGP descriptor
+exactly but does **not** authenticate its signature or establish Debian archive
+provenance. Its index
 states `descriptorAuthentication: not-verified`. Successful assembly proves
 identity/integrity relative to the supplied descriptor, not that an untrusted
 descriptor was issued by Debian. Acquisition must separately establish that trust
@@ -52,6 +53,86 @@ latest source version for a missing requested version.
 Debian snapshot file hashes may have multiple historical filenames. Choose the
 archive name from the exact descriptor's checksum fields and match bytes/hashes;
 do not assume the first filename returned for a snapshot hash is the right name.
+
+## Authenticated assembly
+
+Add `--trust-config /absolute/path/to/trust.json` to require authentication for
+every descriptor before staging any output. Python and `gpgv` are build tools,
+not new installed application dependencies. The configuration names explicit
+local trust roots and retained signed archive metadata; no key is discovered or
+downloaded by this operation. Example paths are relative to the configuration:
+
+```json
+{
+  "schemaVersion": 1,
+  "maintainerKeyrings": ["trust/debian-keyring.pgp"],
+  "archiveKeyrings": ["trust/debian-archive-keyring.pgp"],
+  "indexes": [{
+    "release": "trust/trixie/InRelease",
+    "sources": "trust/trixie/Sources.xz",
+    "path": "main/source/Sources.xz"
+  }]
+}
+```
+
+Use real regular files, including when a Debian `.gpg` filename is a symlink to
+`.pgp`. Checked keyring bytes are copied into a private temporary home; `gpgv`
+uses only those copies with a 15-second deadline. Accepted signatures require
+machine-readable `VALIDSIG`, successful exit and no invalid/unknown/expired/
+revoked signature status. Display UserIDs never decide acceptance.
+
+For each supplied index, the tool verifies the InRelease signature, both the
+compressed and expanded Sources SHA256/size, then the exact source identity and
+descriptor filename/hash/size. It consumes the entire index before accepting
+matches. An indexed descriptor disagreement or conflicting authenticated index
+is an error; it cannot fall back to a maintainer signature. Versions absent from
+all supplied indexes require a valid descriptor signature under an explicitly
+supplied maintainer keyring. No latest-version substitution is performed.
+
+This authenticates fixed source artifacts. Release dates and Valid-Until are
+recorded, but repository freshness is not an acceptance condition: an exact
+historical package can use its historical signed index. Do not reuse this as an
+APT update/upgrade policy. Trust root compromise is outside this check; the
+builder must establish trust in its explicitly provided keyrings independently.
+
+Bounds: 128 KiB config, four keyrings per role (64 MiB each), eight indexes,
+2 MiB signed metadata/paragraphs, 64 MiB compressed index, 512 MiB expanded index
+and 64 MiB xz decoder memory. No archives are extracted. Authentication failures
+leave output unpublished. A successful source index records
+`descriptorAuthentication: verified` and structured authentication evidence with
+hashes, exact identities, methods and signer fingerprints. It records no local
+paths or signer display text.
+
+### Actual authentication evidence
+
+All 78 pinned runtime source descriptors pass the new module: 75 via authenticated
+archive indexes and three (curl, glib2.0, sqlite3) via maintainer signatures. This
+proves descriptor authentication; collection and verification of every archive
+are separate gates. The evidence is `.deps/source-acquisition/authenticated-sources.json`,
+SHA256 `f668601d7e49c87bb6d6e7bff23687e3dc9362b6f3e0375a80712f69c45e08c6`.
+It contains no host absolute paths. Retained inputs include:
+
+| Index | InRelease SHA256 | Sources.xz SHA256 |
+| --- | --- | --- |
+| trixie | 0584fba32e13e0ab8285fb16c27adea1ec03a73669c18702821094fd6ca86675 | 6002f81f463a2d976d84b34170367cc16da2d60bd0ba9ab9d868d6e1c1a935d9 |
+| trixie-security | 50645c1f10bf441e10f009d1ea2843881812de66d217439b389faf09ce913ae1 | cc4452f64c7de5bcbea49037c823827aae9062ff49ba5dc5710a1a1f1bb2cf29 |
+| trixie-proposed-updates at 20251208 | f2fb1fce97f77f09013eca141b26ae47c678f5774e34e1a9c03cfe05ba08250f | 42d943fe2db65afda91602dd0efa9ef8693c8f4775f2329b28a1e8b147fd6cbb |
+
+The historical proposed-updates index binds the exact at-spi2-core descriptor;
+its direct signing certificate is now expired and is refused. A curl certificate
+renewal was retrieved from the official Debian keyring service only after pinning
+the unchanged primary fingerprint `BFAE9E331A867A7C80D8EB78F4E4ACDBB8D08BE0`
+already present in the trusted Debian keyring package. No arbitrary missing signer
+key was promoted to a trust root. Raw trust configuration/certificate evidence
+stays in the ignored acquisition directory; release preparation must preserve
+matching public evidence without copying host-specific configuration paths.
+
+Nineteen real GPG/xz fixture tests pass, including an expired certificate for
+which GPGV exits zero and emits VALIDSIG. All 87 packaging tests pass (18.39s).
+The first full worktree CTest attempt could not find its stale/missing recovery
+binary; after rebuilding the entire worktree, all seven suites pass (39.26s).
+Independent review finds no Important/Critical defect and independently passes
+the 19 authentication tests. No C++ or QML behavior changed in this branch.
 
 ## Recorded development acceptance, 2026-10-18
 

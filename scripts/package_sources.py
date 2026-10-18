@@ -224,7 +224,7 @@ def copy_archive(source, target, size, expected):
     return hashes['sha256'].hexdigest()
 
 
-def assemble(manifest, source_root, output):
+def assemble(manifest, source_root, output, trust_config=None):
     if output.exists() or output.is_symlink():
         raise ValueError('Source output already exists')
     manifest_data = read_small(manifest, _MAX_MANIFEST)
@@ -245,6 +245,11 @@ def assemble(manifest, source_root, output):
     missing = required - selected.keys()
     if missing:
         raise ValueError('Missing exact source package: ' + ', '.join(n + ' ' + v for n, v in sorted(missing)))
+    authentication = None
+    if trust_config is not None:
+        from package_source_auth import authenticate
+        authentication = authenticate(trust_config, {key: (path.name, data)
+            for key, (path, data, _) in selected.items()})
     total = sum(len(data) + sum(x[0] for x in archives['sha256'].values())
                 for _, data, archives in selected.values())
     if total > 64 * 1024**3:
@@ -254,7 +259,9 @@ def assemble(manifest, source_root, output):
     staging = Path(tempfile.mkdtemp(prefix='.' + output.name + '-', dir=output.parent))
     try:
         index = {'schemaVersion': 1, 'runtimeManifestSha256': hashlib.sha256(manifest_data).hexdigest(),
-                 'descriptorAuthentication': 'not-verified', 'sources': []}
+                 'descriptorAuthentication': 'verified' if authentication else 'not-verified', 'sources': []}
+        if authentication:
+            index['authentication'] = authentication
         for (name, version), (descriptor, data, inventories) in sorted(selected.items()):
             directory = staging / name / quote(version, safe='+~.-')
             directory.mkdir(parents=True)
@@ -284,9 +291,10 @@ def main():
     parser.add_argument('--manifest', type=Path, required=True)
     parser.add_argument('--input', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--trust-config', type=Path, help='Require authenticated descriptors under explicit keyrings/indexes')
     args = parser.parse_args()
     try:
-        index = assemble(args.manifest, args.input, args.output)
+        index = assemble(args.manifest, args.input, args.output, args.trust_config)
     except (OSError, ValueError, KeyError, TypeError) as error:
         parser.exit(1, f'Source bundle rejected: {error}\n')
     print(f"Verified {len(index['sources'])} exact source packages")

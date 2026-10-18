@@ -1,4 +1,4 @@
-# Current handoff — 2026-10-17
+# Current handoff — 2026-10-18
 
 The approved scope is in [REQUIREMENTS.md](REQUIREMENTS.md). The repository is
 intentionally public at the user's later request. Do not change visibility back
@@ -270,3 +270,26 @@ authenticated source acceptance. See
 [SOURCE_DISTRIBUTION.md](SOURCE_DISTRIBUTION.md) for commands, hashes and trust limits.
 No release is published by this work. Windows materials, remaining desktop/UI
 acceptance and multi-hour active stability remain required.
+
+
+## Authenticated exact source descriptors
+
+PR #9 merged as b985207 from430000b after Linux/Windows runs39124936466 and
+39124972344 passed. Primary integrated packaging CTest passes13.27s. The managed
+linux-distribution worktree now uses codex/source-authentication. Source2ecb35a
+adds optional required descriptor authentication with explicit local keyrings,
+complete signed archive index hash chains and fail-closed exact identities.
+The actual78-descriptor set verifies:75 archive-index proofs and3 maintainer
+signatures. Unknown/expired/revoked signatures and indexed mismatches are refused.
+A historical signed proposed-updates index proves the exact at-spi2-core version;
+no expired key exception is introduced. Source documentation records the trust
+inputs, dates, hashes and limitations in SOURCE_DISTRIBUTION.md.
+
+All87 packaging checks pass18.39s. After rebuilding the older worktree (initial
+full CTest could not find recovery_tests), all7 suites pass39.26s. Independent
+review has no Important/Critical finding and independently passes19 auth tests.
+Exact archive acquisition is running in the ignored source cache; descriptor
+authentication alone is not archive delivery. No release has been published.
+Source/publication/build instructions, Windows material and final desktop/active
+stability acceptance remain open. Disk space changed externally from715MiB to
+13GiB; no cleanup was performed by this task. Recheck before large copying.
