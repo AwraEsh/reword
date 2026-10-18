@@ -245,3 +245,28 @@ exit 0. Existing installers are intact. Fresh review/CI and PR integration remai
 pending. Then consume the runtime manifest's sourcePackage/sourceVersion pairs
 for exact corresponding source archives and Windows materials. A license overview
 or a source URL alone does not complete that distribution gate.
+
+
+## Runtime notice integration and source assembly
+
+[PR #8](https://github.com/AwraEsh/reword/pull/8) merged as a39913d from f365e5e.
+Both platforms pass push run 39038063500 and PR run 39038124521. The primary
+checkout passes all seven suites after integration (44.69 seconds), including
+the updated 47-test packaging suite. The temporary real package audit records
+524 runtime files / 134 binary components / 78 source identities / 21 QML modules;
+clean AppRun launch exits 0. Final source delivery/installer acceptance remains open.
+
+`codex/source-archives` reuses the managed linux-distribution worktree. The new
+offline source assembler validates exact source versions and complete descriptor
+checksum inventories, publishes atomically without replacing existing output, and
+refuses symlinked file ancestors and special files at the actual open. Independent
+review reproduced publication/open races; both have RED/GREEN regression coverage.
+The branch's 68 packaging tests pass (9.84 seconds). Real Hunspell source archives
+pass all descriptor digests, but descriptor authentication and all-source collection
+are not complete. The exact-version snapshot size/availability inventory is complete: 78/78
+identities, 440,968,366 archive/descriptor bytes. Transient DNS failures succeeded
+on retry; historical filename aliases are retained. These metadata are not
+authenticated source acceptance. See
+[SOURCE_DISTRIBUTION.md](SOURCE_DISTRIBUTION.md) for commands, hashes and trust limits.
+No release is published by this work. Windows materials, remaining desktop/UI
+acceptance and multi-hour active stability remain required.
