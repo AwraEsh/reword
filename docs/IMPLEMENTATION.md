@@ -383,8 +383,18 @@ open; see docs/SOURCE_DISTRIBUTION.md.
 A new offline module authenticates descriptors under explicit keyrings, using
 signed archive index hash chains or direct maintainer signatures for versions
 absent from retained indexes. Source assembly can require this before publication.
-The exact78-source set verifies75 by archive metadata and3 by maintainer signatures.
+The exact 78-source set verifies75 by archive metadata and 3 by maintainer signatures.
 An expired at-spi2-core key is refused; a signed historical index binds the exact
-version instead. All87 packaging tests and7 rebuilt CTest suites pass; independent
+version instead. All 87 packaging tests and7 rebuilt CTest suites pass; independent
 review has no Important/Critical issue. Archive acquisition is still in progress;
 full source delivery and final installation acceptance are not implied.
+
+
+## 2026-10-18: complete local Linux dependency source bundle
+
+PR #10 is integrated as b69b1a3 with green Linux/Windows CI. Actual collection and
+independent authenticated assembly now cover all 78 pinned source versions,
+78 descriptors and 186 archives. A read-back-verified tar.xz carries public trust
+evidence and rebuilding/replacement instructions. Its large draft-release upload
+is still in progress; remote verification and public source availability remain
+open. No final installer/source pairing or application acceptance is claimed.
