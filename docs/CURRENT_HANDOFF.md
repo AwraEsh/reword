@@ -395,3 +395,21 @@ notice coverage explicit. Mesa/D3DCompiler/Mimer are staged and need resolution.
 All 95 local packaging tests pass in 10.107s; independent review's traversal
 finding is fixed and all eight audit tests pass. Full runtime/source/ABI/license
 mapping and final Windows acceptance remain open. See WINDOWS_DISTRIBUTION.md.
+
+## Source delivery verification and release gate — 2026-10-18
+
+The earlier upload-in-progress checkpoints above are superseded. Archive asset
+653490023 and checksum asset 653490027 are uploaded in Draft release 416448800.
+Full remote byte streaming verified 481,747,380 archive bytes and SHA256
+94c96989f55d2bed81f37c5149a9d10cfc4762c970f2ee4fe31bb682df0a2df3;
+the checksum asset also matches. The verifier exited successfully; no upload or
+readback is still running. See the public packaging/source-materials receipt
+and SOURCE_DISTRIBUTION.md for scope. Preserve Draft status pending release gates.
+
+The latest user instruction requires ordinary-user GitHub installation/use docs,
+a stable simple installation, an actual release only after quality/stability is
+established, and then installation of that accepted Linux build on this machine.
+Do not treat green CI or successful source delivery as product acceptance. No
+local development build was installed. Repository remains intentionally PUBLIC.
+UI PR #14 is still under repair and verification; Windows source/runtime notices,
+final packaged active soak and normal desktop acceptance remain open.

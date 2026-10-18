@@ -224,15 +224,20 @@ with the verified tree: 284 files, 486,835,870 expanded file bytes. The archive 
 481,747,380 bytes (about 459.4 MiB), SHA256
 `94c96989f55d2bed81f37c5149a9d10cfc4762c970f2ee4fe31bb682df0a2df3`.
 
-A GitHub Draft Release holds this material under the distributor account. At this
-checkpoint the large archive upload remains in progress and its remote bytes
-have not been verified. The checksum asset is uploaded. Draft content is not
-public source availability. The receipt in
+A GitHub Draft Release holds this material under the distributor account. Both
+assets are uploaded. The entire 481,747,380-byte archive was read back through
+the authenticated GitHub asset API and matched the local SHA256 on 2026-10-18;
+the checksum asset was also read back and matched. No extraction was needed for
+remote verification. The receipt in
 [packaging/source-materials-debian13-2026-10-18.json](../packaging/source-materials-debian13-2026-10-18.json)
-records the actual asset states at the stated observation time. Complete remote
-verification and publication/pairing with final installers before closing that
-gate. Windows material and the remaining installation/desktop/stability gates
-are still open. No application installer was published by this work.
+records the asset identities and full-stream verification evidence.
+
+The release remains Draft. This is not public source availability or a product
+release. The source set belongs to the recorded development runtime manifest;
+matching it to final installers remains required. Windows material and remaining
+installation, desktop and active stability gates are open. The user requires
+release and local installation only after quality and stability are established;
+no application installer was published or installed by this work.
 
 Local evidence: `.deps/source-acquisition/debian-sources-verified/`,
 `archive-acquisition.json`, `full-bundle-verification.json`, `source-artifact.json`
