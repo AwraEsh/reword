@@ -42,6 +42,17 @@ ApplicationWindow {
             Backend.quit();
     }
 
+    component AppDialog: Dialog {
+        palette.window: root.surface
+        palette.windowText: root.ink
+        palette.text: root.ink
+        palette.base: root.surface
+        palette.button: root.surface
+        palette.buttonText: root.ink
+        palette.highlight: root.accent
+        palette.highlightedText: Backend.dark ? "#101b17" : "white"
+    }
+
     Connections {
         target: Backend
         function onShowWindow() {
@@ -1085,7 +1096,7 @@ ApplicationWindow {
         }
     }
 
-    Dialog {
+    AppDialog {
         id: consentDialog
         anchors.centerIn: parent
         width: 480
@@ -1143,7 +1154,7 @@ ApplicationWindow {
             }
         }
     }
-    Dialog {
+    AppDialog {
         id: pauseDialog
         anchors.centerIn: parent
         title: "Pause Reword"
@@ -1176,7 +1187,7 @@ ApplicationWindow {
             }
         }
     }
-    Dialog {
+    AppDialog {
         id: historyDialog
         anchors.centerIn: parent
         width: Math.min(820, root.width - 80)
@@ -1257,7 +1268,7 @@ ApplicationWindow {
         }
         onClosed: root.selectedHistory = ({})
     }
-    Dialog {
+    AppDialog {
         id: clearDialog
         anchors.centerIn: parent
         title: "Delete all saved text?"
@@ -1271,7 +1282,7 @@ ApplicationWindow {
         }
         onAccepted: Backend.clearHistory()
     }
-    Dialog {
+    AppDialog {
         id: practiceDialog
         anchors.centerIn: parent
         title: "Practice spelling"

@@ -49,3 +49,20 @@ Inspect the final Linux/Windows captures, including long title and mixed text;
 complete populated Applications/Insights/personal dictionary/replacement list and
 remaining dialog interactions; verify normal desktop scaling, shortcuts and tray.
 These checks complement the full compatibility and active stability gates.
+
+## CI findings still being repaired
+
+The first capture runs 39151319903/39151365451 at 9a79a24 pass Linux tests but
+show near-white heading/body text on light dialog surfaces under the older Qt
+SDK. Windows UI tests fail; that GUI executable produced no useful stdout in the
+initial CTest log. The branch now adds an actual contrast check and retained
+JUnit/partial screenshot diagnostics. These are open issues, not accepted visual
+results. Earlier local success used Qt 6.8.2 and cannot replace the CI findings.
+
+At 9ee9e87 the new Linux regression confirms all four headings have contrast
+1.0638 in light mode (Qt 6.4.2). Windows JUnit identifies four Tab-containment
+failures; opening focus, sidebar navigation and the No action are separate tests.
+A shared AppDialog now binds palette roles directly to the current theme. The
+Windows focus failure includes its active item/window identity and a failure
+capture so native-window routing can be distinguished from actual escaped focus.
+Local Qt 6.8.2 passes all 19 UI cases; final CI is still required.

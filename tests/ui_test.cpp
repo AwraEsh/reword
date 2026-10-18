@@ -121,7 +121,30 @@ class UiTest : public QObject {
 
         for (int i = 0; i < 20; ++i) {
             QTest::keyClick(window, Qt::Key_Tab);
-            QVERIFY2(containsFocus(), "Tab navigation must stay inside a modal dialog.");
+            if (!containsFocus()) {
+                auto focused = window->activeFocusItem();
+                auto popupWindow = content->window();
+                auto popupFocus = popupWindow ? popupWindow->activeFocusItem() : nullptr;
+                const auto description = [](QQuickItem *item) {
+                    return item ? QString("%1 text=%2")
+                                      .arg(item->metaObject()->className(),
+                                           item->property("text").toString())
+                                : QString("null");
+                };
+                const auto captures = qEnvironmentVariable("REWORD_DIALOG_CAPTURE_DIR");
+                if (!captures.isEmpty()) {
+                    QDir().mkpath(captures);
+                    auto name = title;
+                    name.replace(' ', '_').remove('?');
+                    window->grabWindow().save(captures + "/failure-focus-" + name + ".png");
+                }
+                QFAIL(qPrintable(
+                    QString("Tab %1 escaped modal: root=%2 popup=%3 sameWindow=%4 opened=%5")
+                        .arg(i)
+                        .arg(description(focused), description(popupFocus))
+                        .arg(popupWindow == window)
+                        .arg(dialog->property("opened").toBool())));
+            }
         }
         const auto captures = qEnvironmentVariable("REWORD_DIALOG_CAPTURE_DIR");
         if (!captures.isEmpty()) {
