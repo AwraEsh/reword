@@ -35,7 +35,7 @@
 
 - [x] Write tests using real ephemeral GPG keys/signatures and xz indexes. Assert direct signatures and archive chain evidence; reject unknown keys, modified bytes, wrong versions, index conflicts, duplicate fields, unsafe paths and oversized streams. Observe missing-feature failure.
 - [x] Implement checked private keyring copies, gpgv bounded verification, streaming signed index checks and exact descriptor resolution. Integrate optional required authentication into assembly before publication.
-- [ ] Run all packaging checks and project CTest; preserve RED/GREEN evidence. Commit.
+- [x] Run all packaging checks and project CTest; preserve RED/GREEN evidence. Commit.
 - [ ] Run actual authentication for all78 exact runtime source identities using retained Debian keyring and signed trixie/trixie-security indexes. Record hashes/method counts/trust boundary. Obtain independent review, address concrete findings with regressions, and run fresh Linux/Windows CI.
 
 ### Task 2: Complete acquisition/publication
@@ -69,3 +69,11 @@ The first full CTest attempt in this older distribution worktree cannot run the
 recovery test because its binary is missing; the other suites finish. Rebuilding
 the entire branch before rerunning, rather than treating that run as green.
 Current free disk space is13GiB (external state changed; no cleanup performed).
+
+The full rebuilt branch passes all7 CTest suites39.26s. Final read-only review
+finds no Important/Critical issue and independently passes19 authentication tests.
+Actual strict authentication passes78/78 with75 archive-index/3 maintainer proofs;
+old direct at-spi2-core expiry is avoided through an authenticated historical index,
+not a relaxed signature status rule. Source certificate renewal for curl retains
+its already trusted primary fingerprint. Exact source archive acquisition started
+in the task-owned ignored cache, not as an implicit packaging/runtime action.
