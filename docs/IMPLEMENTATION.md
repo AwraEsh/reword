@@ -419,3 +419,14 @@ Final verification at 05e389d: all seven CTest suites pass (35.16s), ordinary
 isolated Qt/GTK Wayland probes pass, and all four optional lock-query injections
 pass. Linux/Windows CI 39132778701 and 39132810221 pass. Source documentation
 PR #11 merged independently as ba1815c; operation-policy work is PR #12.
+
+## 2026-10-18: Windows build-material inventory
+
+A separate audit now hashes staged files, finds exact byte matches under explicit
+Qt/vcpkg/CRT roots, retains available vendor notices and records missing material.
+A filename/version alone cannot establish provenance; patched or unknown binaries
+stay unmatched. Evidence is a separate CI artifact and always marks release
+readiness false. Review found os.walk silently skipping unreadable directories;
+the deterministic traversal regression was RED and error propagation closes it.
+Four matching-version Qt source candidates are locally checksum-verified. Actual
+Windows audit inspection and full source/notice binding remain open.
