@@ -16,7 +16,11 @@ class FixtureAdapter final : public Adapter {
     QStringList activeShortcuts;
     bool rejectRestore = false, rejectedShortcut = false;
     int rejectedShortcutAttempts = 0;
-    std::function<void()> onShortcutRejected;
+    std::function<void()> onShortcutRejected, onRead;
+    bool quiet = false;
+    bool changed() override {
+        return !quiet;
+    }
     FixtureAdapter() {
         field.app = "synthetic-text-fixture";
         field.id = "entry";
@@ -32,9 +36,13 @@ class FixtureAdapter final : public Adapter {
     Field inspect(bool includeText) override {
         ++inspections;
         auto value = field;
-        if (includeText)
+        if (includeText) {
             ++reads;
-        else
+            if (onRead) {
+                auto callback = std::exchange(onRead, {});
+                callback();
+            }
+        } else
             value.text.clear();
         return value;
     }
@@ -235,6 +243,103 @@ class ServiceTest : public QObject {
         QTRY_VERIFY(h.adapter->reads > 0);
         h.adapter->type("teh recieve ");
         QTRY_COMPARE(h.adapter->field.text, QString("the receive "));
+    }
+    void liveBurstStopsWhenPolicyChanges_data() {
+        QTest::addColumn<QString>("policy");
+        for (auto policy : {"pause", "deny", "language", "cancel", "cancel-reset"})
+            QTest::newRow(policy) << QString(policy);
+    }
+    void liveBurstStopsWhenPolicyChanges() {
+        QFETCH(QString, policy);
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        QSignalSpy corrections(&h.service, &Service::corrected);
+        connect(&h.service, &Service::corrected, &h.service, [&] {
+            if (corrections.count() != 1)
+                return;
+            if (policy == "pause")
+                h.store.pause(-1);
+            else if (policy == "deny")
+                h.store.decide(h.adapter->field.app, "deny");
+            else if (policy == "language") {
+                h.store.setValue("english", false);
+                h.store.setValue("configRevision",
+                                 h.store.value("configRevision", 0).toLongLong() + 1);
+            } else {
+                h.service.cancel();
+                if (policy == "cancel-reset")
+                    h.service.prepare();
+            }
+        });
+        h.adapter->type("teh recieve ");
+        QTRY_VERIFY(!corrections.isEmpty());
+        QCOMPARE(h.adapter->field.text, QString("the recieve "));
+        QCOMPARE(h.adapter->writes, 1);
+    }
+    void selectionStopsWhenPolicyChangesDuringFinalRead_data() {
+        liveBurstStopsWhenPolicyChanges_data();
+    }
+    void selectionStopsWhenPolicyChangesDuringFinalRead() {
+        QFETCH(QString, policy);
+        Harness h;
+        h.adapter->quiet = true;
+        h.adapter->type("teh");
+        h.adapter->field.selectionStart = 0;
+        h.adapter->field.selectionEnd = 3;
+        QSignalSpy results(&h.service, &Service::result);
+        QSignalSpy messages(&h.service, &Service::message);
+        h.service.action("fix");
+        bool injected = false;
+        h.adapter->onRead = [&] {
+            injected = true;
+            if (policy == "pause")
+                h.store.pause(-1);
+            else if (policy == "deny")
+                h.store.decide(h.adapter->field.app, "deny");
+            else if (policy == "language") {
+                h.store.setValue("english", false);
+                h.store.setValue("configRevision",
+                                 h.store.value("configRevision", 0).toLongLong() + 1);
+            } else {
+                h.service.cancel();
+                if (policy == "cancel-reset")
+                    h.service.prepare();
+            }
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(!results.isEmpty() || !messages.isEmpty(), 12000);
+        QVERIFY(injected);
+        QCOMPARE(h.adapter->field.text, QString("teh"));
+        QCOMPARE(h.adapter->writes, 0);
+        QVERIFY(h.store.histories().isEmpty());
+    }
+    void undoStopsWhenPolicyChangesDuringFinalRead_data() {
+        liveBurstStopsWhenPolicyChanges_data();
+    }
+    void undoStopsWhenPolicyChangesDuringFinalRead() {
+        QFETCH(QString, policy);
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        h.adapter->quiet = true;
+        h.adapter->onRead = [&] {
+            if (policy == "pause")
+                h.store.pause(-1);
+            else if (policy == "deny")
+                h.store.decide(h.adapter->field.app, "deny");
+            else if (policy == "language") {
+                h.store.setValue("english", false);
+                h.store.setValue("configRevision",
+                                 h.store.value("configRevision", 0).toLongLong() + 1);
+            } else {
+                h.service.cancel();
+                if (policy == "cancel-reset")
+                    h.service.prepare();
+            }
+        };
+        h.service.action("undo");
+        QCOMPARE(h.adapter->field.text, QString("the "));
+        QCOMPARE(h.adapter->writes, 1);
     }
     void burstPreservesOffsetsAndPunctuation() {
         Harness h;

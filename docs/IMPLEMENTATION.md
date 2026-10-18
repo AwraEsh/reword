@@ -398,3 +398,24 @@ independent authenticated assembly now cover all 78 pinned source versions,
 evidence and rebuilding/replacement instructions. Its large draft-release upload
 is still in progress; remote verification and public source availability remain
 open. No final installer/source pairing or application acceptance is claimed.
+
+
+## 2026-10-18: policy changes at native write boundaries
+
+Synthetic Service regressions reproduced burst writes after Pause, denial,
+disabled English and cancellation, plus selection and Undo changes during their
+final native read. Access is now refreshed after that read; every write compares
+current permission/Pause, configuration revision and a monotonic cancellation
+revision. Preparing new work cannot revive an operation invalidated by Cancel.
+
+Fcitx captures configuration revision before options and refreshes policy after
+blocking lock inspection for live, selected and Undo edits. A private GNOME/
+Fcitx screensaver fixture reproduces selected denial against the baseline addon
+and passes on the fixed addon. Its Undo policy-injection checks pass, but timer
+queries mean they do not uniquely establish the final Undo lock-query race.
+The deterministic Service Undo regressions are separate evidence.
+
+Final verification at 05e389d: all seven CTest suites pass (35.16s), ordinary
+isolated Qt/GTK Wayland probes pass, and all four optional lock-query injections
+pass. Linux/Windows CI 39132778701 and 39132810221 pass. Source documentation
+PR #11 merged independently as ba1815c; operation-policy work is PR #12.

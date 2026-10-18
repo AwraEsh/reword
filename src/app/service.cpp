@@ -19,7 +19,7 @@ void Service::start() {
     }
 }
 void Service::stop() {
-    cancel_.store(true);
+    cancel();
     if (job_) {
         job_->disconnect(this);
         job_->waitForFinished();
@@ -54,9 +54,16 @@ Field Service::permitted() {
     if (!safe(f, access, store_->options()))
         return {};
     auto read = adapter_->inspect(true);
+    access = {store_->allowed(f.app), browserApp(f.app), store_->paused()};
     if (read.id != f.id || read.app != f.app || !safe(read, access, store_->options()))
         return {};
     return read;
+}
+bool Service::policyCurrent(const Field &field, qint64 revision, quint64 cancellation) {
+    const Access access{store_->allowed(field.app), browserApp(field.app), store_->paused()};
+    return safe(field, access, store_->options()) &&
+           revision == store_->value("configRevision", 0).toLongLong() &&
+           cancellation == cancellationRevision_.load();
 }
 void Service::tick() {
     if (!adapter_ || !store_)
@@ -83,7 +90,7 @@ void Service::tick() {
                 if (store_->restoreShortcuts(settings, revision, workingShortcuts_)) {
                     shortcutSettings_ = workingShortcuts_;
                     shortcutRevision_ = revision + 1;
-                    cancel_.store(true);
+                    cancel();
                     emit message(
                         restored ? "This shortcut set is unavailable or already in use. Previous "
                                    "shortcuts were restored."
@@ -162,6 +169,8 @@ void Service::tick() {
         const auto completed = completedWords(old, f);
         if (completed.isEmpty())
             return;
+        const auto cancellation = cancellationRevision_.load();
+        const auto operationRevision = store_->value("configRevision", 0).toLongLong();
         auto o = store_->options();
         o.abbreviations = false;
         engine_->setPersonal(store_->words(), store_->replacements());
@@ -186,7 +195,8 @@ void Service::tick() {
             QString updated = f.text;
             updated.replace(start, token.size(), correct);
             int caret = f.caret + correct.size() - token.size();
-            if (!adapter_->replace(f, updated, caret)) {
+            if (!policyCurrent(f, operationRevision, cancellation) ||
+                !adapter_->replace(f, updated, caret)) {
                 retry_ = savedRetry;
                 break;
             }
@@ -235,65 +245,73 @@ void Service::runText(QString input, bool native, Field field) {
     }
     jobLock_ = std::move(operationLock);
     jobRunning_ = true;
+    const auto cancellation = cancellationRevision_.load();
+    const auto revision = store_->value("configRevision", 0).toLongLong();
     auto options = store_->options();
     auto words = store_->words();
     auto replacements = store_->replacements();
-    auto revision = store_->value("configRevision", 0).toLongLong();
     job_ = new QFutureWatcher<Change>(this);
-    connect(job_, &QFutureWatcher<Change>::finished, this, [this, input, native, field, revision] {
-        auto operationLock = std::move(jobLock_);
-        auto completed = job_;
-        job_ = nullptr;
-        jobRunning_ = false;
-        completed->deleteLater();
-        try {
-            auto change = completed->result();
-            if (cancel_.load() || store_->paused() ||
-                revision != store_->value("configRevision", 0).toLongLong())
-                change.error = "Cancelled or settings changed. Nothing was replaced.";
-            if (!change.error.isEmpty()) {
-                emit result(input, input, change.error, native);
-                return;
-            }
-            if (!native) {
-                emit result(input, change.corrected, {}, false);
-                return;
-            }
-            if (!change.changed) {
-                emit message("No confident corrections found.");
-                return;
-            }
+    connect(
+        job_, &QFutureWatcher<Change>::finished, this,
+        [this, input, native, field, revision, cancellation] {
+            auto operationLock = std::move(jobLock_);
+            auto completed = job_;
+            job_ = nullptr;
+            jobRunning_ = false;
+            completed->deleteLater();
             try {
-                auto current = permitted();
-                if (!sameTarget(field, current)) {
-                    emit message("The selection changed. Nothing was replaced.");
+                auto change = completed->result();
+                if (cancel_.load() || cancellation != cancellationRevision_.load() ||
+                    store_->paused() || revision != store_->value("configRevision", 0).toLongLong())
+                    change.error = "Cancelled or settings changed. Nothing was replaced.";
+                if (!change.error.isEmpty()) {
+                    emit result(input, input, change.error, native);
                     return;
                 }
-                QString updated = field.text;
-                updated.replace(field.selectionStart, field.selectionEnd - field.selectionStart,
-                                change.corrected);
-                if (!adapter_->replace(field, updated,
-                                       field.selectionStart + change.corrected.size())) {
-                    emit message("The application did not confirm the replacement. Check its text "
-                                 "before continuing.");
+                if (!native) {
+                    emit result(input, change.corrected, {}, false);
                     return;
                 }
-                undoPassage_ = true;
-                undoBefore_ = field.text;
-                undoCaret_ = field.caret;
-                undoAfter_ = adapter_->inspect(true);
-                previous_ = undoAfter_;
-                emit passageApplied(input, change.corrected);
-                store_->history(input, change.corrected, store_->options());
-                emit result(input, change.corrected, {}, true);
+                if (!change.changed) {
+                    emit message("No confident corrections found.");
+                    return;
+                }
+                try {
+                    auto current = permitted();
+                    if (!sameTarget(field, current)) {
+                        emit message("The selection changed. Nothing was replaced.");
+                        return;
+                    }
+                    QString updated = field.text;
+                    updated.replace(field.selectionStart, field.selectionEnd - field.selectionStart,
+                                    change.corrected);
+                    if (!policyCurrent(current, revision, cancellation)) {
+                        emit message("Cancelled or settings changed. Nothing was replaced.");
+                        return;
+                    }
+                    if (!adapter_->replace(field, updated,
+                                           field.selectionStart + change.corrected.size())) {
+                        emit message(
+                            "The application did not confirm the replacement. Check its text "
+                            "before continuing.");
+                        return;
+                    }
+                    undoPassage_ = true;
+                    undoBefore_ = field.text;
+                    undoCaret_ = field.caret;
+                    undoAfter_ = adapter_->inspect(true);
+                    previous_ = undoAfter_;
+                    emit passageApplied(input, change.corrected);
+                    store_->history(input, change.corrected, store_->options());
+                    emit result(input, change.corrected, {}, true);
+                } catch (...) {
+                    emit message("The operation stopped safely.");
+                }
             } catch (...) {
-                emit message("The operation stopped safely.");
+                emit result(input, input, "Local storage is unavailable. The operation stopped.",
+                            native);
             }
-        } catch (...) {
-            emit result(input, input, "Local storage is unavailable. The operation stopped.",
-                        native);
-        }
-    });
+        });
     job_->setFuture(QtConcurrent::run([this, input, options, words, replacements] {
         try {
             QElapsedTimer elapsed;
@@ -332,11 +350,17 @@ void Service::fixSelection() {
             field);
 }
 void Service::undo() {
+    const auto cancellation = cancellationRevision_.load();
+    const auto revision = store_->value("configRevision", 0).toLongLong();
     auto f = permitted();
     if (undoBefore_.isEmpty() || !sameTarget(undoAfter_, f)) {
         emit message(undoPassage_ ? "Undo is no longer safe. Copy the latest passage original from "
                                     "session recovery in Reword."
                                   : "Undo is no longer safe. Nothing was replaced.");
+        return;
+    }
+    if (!policyCurrent(f, revision, cancellation)) {
+        emit message("Cancelled or settings changed. Nothing was replaced.");
         return;
     }
     if (adapter_->replace(f, undoBefore_, undoCaret_)) {
@@ -357,7 +381,7 @@ void Service::action(QString name) {
         else if (name == "pause") {
             store_->pause(store_->paused() ? 0 : -1);
             if (store_->paused())
-                cancel_.store(true);
+                cancel();
             previous_ = {};
             retry_.reset();
             emit message(store_->paused() ? "Reword paused." : "Reword resumed.");

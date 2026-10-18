@@ -316,3 +316,49 @@ draft material publicly delivered or the application ready for release.
 Next: finish/verify this upload, complete Windows notices/source material, then
 remaining keyboard/populated UI, native race/lock and active performance/stability
 acceptance. Source archives are only one gate of the approved product scope.
+
+
+## Operation policy boundary audit
+
+A read-only review reproduced two Service policy races at b69b1a3. The operation-
+policy branch adds 15 synthetic cases across live bursts, selected completion
+and Undo: Pause, denial, language disable, Cancel and Cancel followed by prepare.
+Initial live/selected tests were RED in all eight original cases; Undo was RED
+for language/Cancel/cancel-reset after the initial read-access fix. The fix uses
+fresh Access plus configuration and monotonic cancellation revisions before
+native writes. Cancellation remains scoped to existing work, not future typing.
+
+Fcitx now reads configuration revision before options and refreshes policy after
+blocking lock inspection. The new optional command is:
+
+```sh
+/usr/bin/python3 scripts/test-native-wayland.py --fixture qt --policy-races
+```
+
+It owns a separate D-Bus/compositor session and synthetic screensaver service.
+The exact baseline addon fails selected denial with `the` replacing `teh`;
+the fixed addon passes selected Pause/denial and Undo Pause/denial. Undo's query
+counter can include timer observation, so these native Undo cases are boundary
+checks, not proof of hitting that precise internal call. Synthetic fixture state
+is saved only inside this test's private temporary directory. Default probes
+continue to use the compositor's ordinary lock service.
+
+Independent final review found no remaining Important implementation defect.
+Full CTest and default Qt/GTK native reruns, final CI, Git integration and exact
+check results are recorded at the next checkpoint. This does not establish real
+host lock/unlock or normal Windows 10/11 desktop acceptance.
+
+Operation-policy verification at source 05e389d: all seven local CTest suites
+pass in 35.16 seconds; both default Qt and GTK isolated Wayland probes pass.
+The final optional policy probe passes all four selected/Undo Pause/denial cases.
+The baseline-denial failure is retained in the ignored native-baseline log;
+service RED/Undo RED logs and the final build/test logs remain under `.deps`.
+Linux/Windows CI runs 39132778701 and 39132810221 pass at that source commit.
+PR #12 carries the code and this evidence. PR #11 source-material documentation
+merged separately as ba1815c after green runs 39132083252/39132227777.
+
+The source archive upload remains live in its original gh process/session; the
+remote archive state is still `starter` and public byte verification is pending.
+Do not restart it solely because of a slow upload or a status-observation timeout.
+Windows distribution inspection confirms CI uses Qt 6.8.3 and Hunspell 1.7.5;
+the Debian source bundle cannot serve as their matching Windows source material.

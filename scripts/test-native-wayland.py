@@ -8,6 +8,7 @@ clipboard, application text, or desktop settings are used.
 import argparse
 import base64
 import hashlib
+import json
 import socket
 import struct
 from contextlib import nullcontext
@@ -39,6 +40,7 @@ def wait_for(predicate, description, seconds=5):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--policy-races", action="store_true")
     parser.add_argument("--inside", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--fixture", choices=("qt", "gtk"), default="qt")
     parser.add_argument("--directory", help=argparse.SUPPRESS)
@@ -48,6 +50,7 @@ def main():
             result = subprocess.run([
                 "dbus-run-session", "--", sys.executable, str(Path(__file__).resolve()),
                 "--inside", "--fixture", args.fixture, "--directory", temporary,
+                *(["--policy-races"] if args.policy_races else []),
             ])
             # Portals may leave private FUSE mounts after their D-Bus session ends.
             # Detach only mountpoints inside the directory created by this caller.
@@ -97,6 +100,7 @@ def main():
             "REWORD_DATA_DIR": str(folder / "reword"),
             "REWORD_DICTIONARY_DIR": str(ROOT / "assets/dictionaries"),
             "REWORD_FIXTURE_MAXIMIZE": "1",
+            **({"REWORD_FIXTURE_STATE": str(folder / "fixture-state")} if args.policy_races else {}),
         })
         env.pop("AT_SPI_BUS_ADDRESS", None)
         activation = {key: env[key] for key in (
@@ -117,6 +121,11 @@ def main():
             return process
 
         try:
+            if args.policy_races:
+                spawn([sys.executable, str(ROOT / "tests/screensaver_fixture.py"), str(folder)],
+                      "screensaver")
+                wait_for(lambda: (folder / "screensaver-ready").exists(),
+                         "Private screensaver fixture did not start.")
             shell = spawn([
                 "gnome-shell", "--headless", "--wayland", "--no-x11",
                 "--virtual-monitor", "1280x800", "--wayland-display", "reword-wayland",
@@ -247,13 +256,48 @@ def main():
                     key(ord(char))
                 time.sleep(.3)
 
-            def chord(letter, shift=False):
+            def chord(letter, shift=False, before_key=None):
                 modifiers = (0xffe3, 0xffe9, 0xffe1) if shift else (0xffe3, 0xffe9)
                 for symbol in modifiers:
                     key_state(symbol, True)
+                if before_key:
+                    time.sleep(.15)
+                    before_key()
                 key(ord(letter.upper() if shift else letter))
                 for symbol in reversed(modifiers):
                     key_state(symbol, False)
+
+            if args.policy_races:
+                if args.fixture != "qt":
+                    raise RuntimeError("Policy races require the Qt selection fixture.")
+                for operation in ("selection", "undo"):
+                    for change in ("pause", "deny"):
+                        command("password"); command("plain")
+                        with database:
+                            database.execute("DELETE FROM settings WHERE key='pauseUntil'")
+                            database.execute("UPDATE applications SET decision='allow' WHERE id=?",
+                                             ("fcitx:" + fixture_name,))
+                        command("text:teh"); command("select-all")
+                        if operation == "undo":
+                            chord("r"); expect("the")
+                        time.sleep(.15)
+                        fired = folder / "policy-fired"
+                        fired.unlink(missing_ok=True)
+                        def arm():
+                            (folder / "policy-arm.json").write_text(json.dumps({
+                                "remaining": 1 if operation == "selection" else 2,
+                                "operationOnly": operation == "selection",
+                                "change": change, "app": "fcitx:" + fixture_name,
+                            }))
+                        chord("r" if operation == "selection" else "z", before_key=arm)
+                        wait_for(fired.exists, "Policy injection did not reach its lock query.")
+                        time.sleep(.25)
+                        expected = "teh" if operation == "selection" else "the"
+                        if fired.read_text() != expected:
+                            raise RuntimeError("Policy was injected after the target edit.")
+                        expect(expected)
+                        print(f"PASS: {operation} stopped after {change} during final lock query.", flush=True)
+                return 0
 
             if args.fixture == "qt":
                 command("reject-native"); type_word(); expect("teh ")

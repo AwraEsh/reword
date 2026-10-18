@@ -198,8 +198,8 @@ class RewordAddon final : public fcitx::AddonInstance {
         auto job = job_;
         job_ = {};
         auto ic = job.context.get();
-        if (cancel_.load() || !change.changed || !change.error.isEmpty() ||
-            !permitted(ic, job.app) || !unlocked() ||
+        if (cancel_.load() || !change.changed || !change.error.isEmpty() || !unlocked() ||
+            !permitted(ic, job.app) ||
             job.revision != store_->value("configRevision", 0).toLongLong())
             return;
         const auto &st = ic->surroundingText();
@@ -290,7 +290,7 @@ class RewordAddon final : public fcitx::AddonInstance {
                 resetIfContinued(before);
             }
             if (undo) {
-                if (!unlocked() || !pending_.valid || !pending_.confirmed ||
+                if (!unlocked() || !permitted(ic, id) || !pending_.valid || !pending_.confirmed ||
                     pending_.context.get() != ic || text != pending_.after ||
                     st.cursor() != pending_.cursor || st.anchor() != st.cursor())
                     return;
@@ -312,6 +312,7 @@ class RewordAddon final : public fcitx::AddonInstance {
                 if (future_.valid() || st.cursor() == st.anchor() || !unlocked())
                     return;
                 auto original = QString::fromStdString(st.selectedText());
+                const auto revision = store_->value("configRevision", 0).toLongLong();
                 auto options = store_->options();
                 if (original.size() > 2 * options.maxCharacters ||
                     original.toUcs4().size() > options.maxCharacters)
@@ -330,7 +331,7 @@ class RewordAddon final : public fcitx::AddonInstance {
                 job_.anchorBefore = st.anchor();
                 job_.cursorBefore = st.cursor();
                 job_.passage = true;
-                job_.revision = store_->value("configRevision", 0).toLongLong();
+                job_.revision = revision;
                 auto words = store_->words();
                 auto replacements = store_->replacements();
                 future_ =
@@ -376,12 +377,14 @@ class RewordAddon final : public fcitx::AddonInstance {
             const auto words = reword::completedWords(snapshot, typed);
             if (words.isEmpty())
                 return;
+            const auto cursorBefore = st.cursor(), anchorBefore = st.anchor();
             const auto &word = words.back();
             auto token = word.token, prefix = before.left(word.start);
             if (prefix != prefix_) {
                 resetRetry();
                 prefix_ = prefix;
             }
+            const auto revision = store_->value("configRevision", 0).toLongLong();
             auto options = store_->options();
             options.abbreviations = false;
             engine_->setPersonal(store_->words(), store_->replacements());
@@ -396,8 +399,20 @@ class RewordAddon final : public fcitx::AddonInstance {
                 return;
             }
             auto suffix = QString::fromUcs4(
-                reinterpret_cast<const char32_t *>(points.constData() + st.cursor()),
-                points.size() - st.cursor());
+                reinterpret_cast<const char32_t *>(points.constData() + cursorBefore),
+                points.size() - cursorBefore);
+            // Dictionary work and lock inspection may outlive a policy change.
+            // Validate again before issuing either part of the native edit.
+            if (!unlocked() || !permitted(ic, id) || QString::fromStdString(ic->program()) != app ||
+                revision != store_->value("configRevision", 0).toLongLong()) {
+                resetRetry();
+                pending_ = {};
+                return;
+            }
+            const auto &currentText = ic->surroundingText();
+            if (!currentText.isValid() || QString::fromStdString(currentText.text()) != text ||
+                currentText.cursor() != cursorBefore || currentText.anchor() != anchorBefore)
+                return;
             pending_ = {};
             pending_.retryAfter = tentativeRetry;
             pending_.context = ic->watch();
