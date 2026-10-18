@@ -35,6 +35,13 @@
     "targetCommitish": "b69b1a3bb78b20f238888d4e9e18760f91161c47",
     "assets": [
       {
+        "id": 653490023,
+        "name": "Reword-Linux-Dependency-Sources-debian13-2026-10-18.tar.xz",
+        "state": "uploaded",
+        "bytes": 481747380,
+        "digest": "sha256:94c96989f55d2bed81f37c5149a9d10cfc4762c970f2ee4fe31bb682df0a2df3"
+      },
+      {
         "id": 653490027,
         "name": "Reword-Linux-Dependency-Sources-debian13-2026-10-18.tar.xz.sha256",
         "state": "uploaded",
@@ -43,6 +50,22 @@
       }
     ]
   },
-  "remoteByteVerification": "pending",
-  "observedAtUtc": "2026-10-18T13:13:53.288968+00:00"
+  "remoteByteVerification": {
+    "archive": {
+      "assetId": 653490023,
+      "bytes": 481747380,
+      "sha256": "94c96989f55d2bed81f37c5149a9d10cfc4762c970f2ee4fe31bb682df0a2df3",
+      "elapsedSeconds": 1235.16,
+      "verifiedAtUtc": "2026-10-18T18:09:33.370947+00:00",
+      "method": "full authenticated GitHub API asset byte stream; no archive extraction"
+    },
+    "checksum": {
+      "observedAtUtc": "2026-10-18T14:10:16.973303+00:00",
+      "assetId": 653490027,
+      "bytes": 125,
+      "sha256": "dfd5d433a8d312db684fbb6c3582624227b04bd1536462905337c31a9068f04f",
+      "matchesLocal": true
+    }
+  },
+  "observedAtUtc": "2026-10-18T18:09:33.370947+00:00"
 }
