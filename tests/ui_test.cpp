@@ -14,6 +14,8 @@
 #include <QNetworkReply>
 #include <QTimer>
 #include <atomic>
+#include <cmath>
+#include <algorithm>
 #include "app/controller.h"
 #include "platform/recovery_channel.h"
 class BlockedReply : public QNetworkReply {
@@ -94,6 +96,29 @@ class UiTest : public QObject {
             return focused && (focused == popup || popup->isAncestorOf(focused));
         };
         QVERIFY2(containsFocus(), "Opening a dialog must move keyboard focus into its popup.");
+        auto header = dialog->property("header").value<QQuickItem *>();
+        auto background = dialog->property("background").value<QQuickItem *>();
+        QVERIFY(header && background);
+        const auto luminance = [](const QColor &color) {
+            const auto linear = [](double value) {
+                return value <= 0.04045 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+            };
+            return 0.2126 * linear(color.redF()) + 0.7152 * linear(color.greenF()) +
+                   0.0722 * linear(color.blueF());
+        };
+        for (bool dark : {true, false}) {
+            controller.set("dark", dark);
+            QTest::qWait(50);
+            const auto foreground = header->property("color").value<QColor>();
+            const auto surface = background->property("color").value<QColor>();
+            QVERIFY(foreground.isValid() && surface.isValid());
+            auto first = luminance(foreground), second = luminance(surface);
+            auto contrast = (std::max(first, second) + 0.05) / (std::min(first, second) + 0.05);
+            QVERIFY2(contrast >= 4.5, qPrintable(QString("Dialog heading contrast %1 in %2 theme")
+                                                     .arg(contrast)
+                                                     .arg(dark ? "dark" : "light")));
+        }
+
         for (int i = 0; i < 20; ++i) {
             QTest::keyClick(window, Qt::Key_Tab);
             QVERIFY2(containsFocus(), "Tab navigation must stay inside a modal dialog.");
@@ -191,7 +216,8 @@ class UiTest : public QObject {
             for (bool dark : {false, true}) {
                 controller.set("dark", dark);
                 QTest::qWait(100);
-                QVERIFY(window->grabWindow().save(captures + (dark ? "/dark-consent-long.png" : "/light-consent-long.png")));
+                QVERIFY(window->grabWindow().save(
+                    captures + (dark ? "/dark-consent-long.png" : "/light-consent-long.png")));
             }
         }
     }

@@ -24,10 +24,18 @@ jobs:
           REWORD_UI_CAPTURE_COMPACT: '1'
           REWORD_DIALOG_CAPTURE_DIR: ${{ github.workspace }}/dist/ui-review/dialogs
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: Reword-Linux-UI-Review
           path: dist/ui-review
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Reword-Linux-Test-Diagnostics
+          path: |
+            build/ui-test-results.xml
+            build/Testing/Temporary/LastTest.log
       - name: Reject a foreign-account recovery server
         run: sudo ./build/reword_recovery_tests crossAccountServerNeverReceivesGreeting
       - name: Launch UI
@@ -97,10 +105,18 @@ jobs:
           REWORD_UI_CAPTURE_COMPACT: '1'
           REWORD_DIALOG_CAPTURE_DIR: ${{ github.workspace }}/dist/ui-review/dialogs
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: Reword-Windows-UI-Review
           path: dist/ui-review
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Reword-Windows-Test-Diagnostics
+          path: |
+            build/ui-test-results.xml
+            build/Testing/Temporary/LastTest.log
       - name: Bundle and create installer
         shell: pwsh
         run: |
