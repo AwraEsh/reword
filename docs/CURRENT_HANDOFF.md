@@ -347,3 +347,18 @@ Independent final review found no remaining Important implementation defect.
 Full CTest and default Qt/GTK native reruns, final CI, Git integration and exact
 check results are recorded at the next checkpoint. This does not establish real
 host lock/unlock or normal Windows 10/11 desktop acceptance.
+
+Operation-policy verification at source 05e389d: all seven local CTest suites
+pass in 35.16 seconds; both default Qt and GTK isolated Wayland probes pass.
+The final optional policy probe passes all four selected/Undo Pause/denial cases.
+The baseline-denial failure is retained in the ignored native-baseline log;
+service RED/Undo RED logs and the final build/test logs remain under `.deps`.
+Linux/Windows CI runs 39132778701 and 39132810221 pass at that source commit.
+PR #12 carries the code and this evidence. PR #11 source-material documentation
+merged separately as ba1815c after green runs 39132083252/39132227777.
+
+The source archive upload remains live in its original gh process/session; the
+remote archive state is still `starter` and public byte verification is pending.
+Do not restart it solely because of a slow upload or a status-observation timeout.
+Windows distribution inspection confirms CI uses Qt 6.8.3 and Hunspell 1.7.5;
+the Debian source bundle cannot serve as their matching Windows source material.

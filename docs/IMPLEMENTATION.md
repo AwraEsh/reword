@@ -414,3 +414,8 @@ Fcitx screensaver fixture reproduces selected denial against the baseline addon
 and passes on the fixed addon. Its Undo policy-injection checks pass, but timer
 queries mean they do not uniquely establish the final Undo lock-query race.
 The deterministic Service Undo regressions are separate evidence.
+
+Final verification at 05e389d: all seven CTest suites pass (35.16s), ordinary
+isolated Qt/GTK Wayland probes pass, and all four optional lock-query injections
+pass. Linux/Windows CI 39132778701 and 39132810221 pass. Source documentation
+PR #11 merged independently as ba1815c; operation-policy work is PR #12.
