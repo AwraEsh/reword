@@ -413,3 +413,20 @@ Do not treat green CI or successful source delivery as product acceptance. No
 local development build was installed. Repository remains intentionally PUBLIC.
 UI PR #14 is still under repair and verification; Windows source/runtime notices,
 final packaged active soak and normal desktop acceptance remain open.
+
+## Active stability harness: process sampler
+
+The storage-access worktree now uses codex/active-stability-harness from c4e7fb3.
+Task 1 of docs/superpowers/plans/2026-10-18-active-stability.md adds bounded,
+content-free Linux /proc sampling for app/helper CPU, RSS, private/PSS/data/swap,
+threads and descriptors. It brackets process identity and CPU reads and rejects
+PID reuse, missing metrics and backwards counters/time. CPU percent uses one
+logical CPU as 100%; child CPU is separate. It retains constant-space aggregates.
+
+All 13 sampler tests pass, including real own-process sampling. Review reproduced
+CPU rollback within a sample; the regression was RED and the fix independently
+verified. Full build and all eight local CTest suites pass in 53.05s. CI and final
+integration are separate. The actual packaged GUI workload, fixture watchdog/
+timing extension and multi-hour acceptance run are NOT implemented by this task.
+The earlier idle soak remains insufficient; no release or installation gate is
+closed by merely adding a resource sampler.
