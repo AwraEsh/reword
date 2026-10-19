@@ -582,3 +582,30 @@ The new native regression is GREEN for one complete owned probe cycle; see
 Fresh runtime review, complete CTest/native rerun, a newly staged package and
 active latency/resource verification are still required before claiming this
 change accepted. Existing packaged poll20 binaries predate the release fix.
+
+## Second hard freeze: remote verification — 2026-10-19
+
+The user confirmed full-system hangs requiring the hardware restart button,
+not just application crashes. The second interrupted build stopped during UI
+test compilation, without a compiler error or completed test result. Its process
+handle is missing and process inspection confirms nothing remains alive.
+Do not count this interrupted execution as GREEN or restart it automatically.
+Accessible logs contain no crash-cause evidence; current-boot memory counters
+cannot establish or exclude prior-boot OOM, GPU or kernel failures.
+
+All local builds, GUI workloads and heavy tests are suspended. Continue code
+review, Git checkpoints and hosted CI without local heavy verification. The
+harness checkpoint `67ef91b` is pushed to the public feature branch; no product
+release or installation has occurred. The earlier post-first-restart ten-suite
+run passed in 45.16 s, before the latest pending-shortcut follow-up changes.
+
+Runtime review found held Undo losing its buffer and an older queued action
+dispatching while a later chord was still held. Both were reproduced RED in
+owned native tests (`held-undo-red.log`, `queued-shortcut-red.log`). Five extra
+metadata-only Service boundary cases also failed before the fix (password,
+locked, unknown, denied, paused). New code waits for all pending releases and
+their grace intervals and suppresses text observation while a shortcut is
+pending. It still checks metadata/policy and erases Undo at unsafe boundaries.
+Compilation of the helper/application completed before the second freeze, but
+the full build and post-fix tests did not. Final verification is moving to CI;
+the follow-up remains unaccepted pending those results and review.

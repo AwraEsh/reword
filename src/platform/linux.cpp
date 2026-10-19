@@ -6,9 +6,11 @@
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QElapsedTimer>
+#include <QQueue>
 #undef signals
 #include <atspi/atspi.h>
 #include <X11/Xlib.h>
+#include <X11/XKBlib.h>
 #include <X11/keysym.h>
 #include <unistd.h>
 namespace reword {
@@ -32,6 +34,13 @@ class LinuxAdapter final : public Adapter {
     int scanApplication_ = 0;
     Display *display_ = nullptr;
     QHash<int, QString> keys_;
+    struct Shortcut {
+        int key;
+        QString action;
+        bool released = false;
+        QElapsedTimer releasedAt;
+    };
+    QQueue<Shortcut> pendingShortcuts_;
     bool wayland_ = false;
     static void event(AtspiEvent *e, void *data) {
         auto self = static_cast<LinuxAdapter *>(data);
@@ -285,6 +294,7 @@ class LinuxAdapter final : public Adapter {
         previousHandler_ = XSetErrorHandler(errorHandler);
         XUngrabKey(display_, AnyKey, AnyModifier, DefaultRootWindow(display_));
         keys_.clear();
+        pendingShortcuts_.clear();
         auto grab = [&](QString sequence, QString action) {
             QKeySequence seq(sequence);
             if (seq.count() != 1)
@@ -314,7 +324,9 @@ class LinuxAdapter final : public Adapter {
             keys_[id] = action;
             return true;
         };
-        bool ok = grab(fix, "fix") && grab(undo, "undo") && grab(pause, "pause");
+        Bool detectable = False;
+        const bool repeatSafe = XkbSetDetectableAutoRepeat(display_, True, &detectable) && detectable;
+        bool ok = repeatSafe && grab(fix, "fix") && grab(undo, "undo") && grab(pause, "pause");
         XSync(display_, False);
         ok = ok && trapError_ == 0;
         if (!ok) {
@@ -329,15 +341,43 @@ class LinuxAdapter final : public Adapter {
     QString takeAction() override {
         if (!display_)
             return {};
-        while (XPending(display_)) {
+        for (int count = 0; count < 64 && XPending(display_); ++count) {
             XEvent e;
             XNextEvent(display_, &e);
             if (e.type == KeyPress) {
                 auto mods = e.xkey.state & ~(LockMask | Mod2Mask);
-                return keys_.value((e.xkey.keycode << 16) | mods);
+                const auto action = keys_.value((e.xkey.keycode << 16) | mods);
+                if (action.isEmpty())
+                    continue;
+                bool held = false;
+                for (const auto &pending : pendingShortcuts_)
+                    held |= pending.key == int(e.xkey.keycode) && !pending.released;
+                if (held)
+                    continue; // Detectable auto-repeat sends presses without releases.
+                if (pendingShortcuts_.size() >= 8) {
+                    pendingShortcuts_.clear();
+                    return {};
+                }
+                pendingShortcuts_.enqueue({int(e.xkey.keycode), action, false, {}});
+            } else if (e.type == KeyRelease) {
+                for (auto &pending : pendingShortcuts_)
+                    if (pending.key == int(e.xkey.keycode) && !pending.released) {
+                        pending.released = true;
+                        pending.releasedAt.start();
+                        break;
+                    }
             }
         }
-        return {};
+        // Passive grabs transiently remove GTK focus. Dispatch after release
+        // and one event-loop interval so accessibility can observe its return.
+        if (XPending(display_))
+            return "pending";
+        if (pendingShortcuts_.isEmpty())
+            return {};
+        for (const auto &pending : pendingShortcuts_)
+            if (!pending.released || pending.releasedAt.elapsed() < 20)
+                return "pending";
+        return pendingShortcuts_.dequeue().action;
     }
 };
 std::unique_ptr<Adapter> createNativeAdapter() {
