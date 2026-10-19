@@ -20,6 +20,22 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           QT_QUICK_BACKEND: software
+          REWORD_UI_CAPTURE_DIR: ${{ github.workspace }}/dist/ui-review/pages
+          REWORD_UI_CAPTURE_COMPACT: '1'
+          REWORD_DIALOG_CAPTURE_DIR: ${{ github.workspace }}/dist/ui-review/dialogs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Reword-Linux-UI-Review
+          path: dist/ui-review
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Reword-Linux-Test-Diagnostics
+          path: |
+            build/ui-test-results.xml
+            build/Testing/Temporary/LastTest.log
       - name: Reject a foreign-account recovery server
         run: sudo ./build/reword_recovery_tests crossAccountServerNeverReceivesGreeting
       - name: Launch UI
@@ -55,6 +71,14 @@ jobs:
       - name: Add Qt to PATH
         shell: pwsh
         run: '"$env:RUNNER_TEMP/Qt/6.8.3/msvc2022_64/bin" >> $env:GITHUB_PATH'
+      - name: Configure offscreen font lookup
+        shell: pwsh
+        run: |
+          $rewordFontDirectory = Join-Path $env:WINDIR 'Fonts'
+          if (!(Test-Path (Join-Path $rewordFontDirectory 'segoeui.ttf'))) {
+            throw 'The Windows review runner is missing its system UI font.'
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "QT_QPA_FONTDIR=$rewordFontDirectory"
       - name: Install Hunspell
         shell: pwsh
         run: vcpkg install hunspell:x64-windows --disable-metrics
@@ -85,6 +109,22 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           QT_QUICK_BACKEND: software
+          REWORD_UI_CAPTURE_DIR: ${{ github.workspace }}/dist/ui-review/pages
+          REWORD_UI_CAPTURE_COMPACT: '1'
+          REWORD_DIALOG_CAPTURE_DIR: ${{ github.workspace }}/dist/ui-review/dialogs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Reword-Windows-UI-Review
+          path: dist/ui-review
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Reword-Windows-Test-Diagnostics
+          path: |
+            build/ui-test-results.xml
+            build/Testing/Temporary/LastTest.log
       - name: Bundle and create installer
         shell: pwsh
         run: |

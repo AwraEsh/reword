@@ -42,12 +42,50 @@ ApplicationWindow {
             Backend.quit();
     }
 
+    function presentPendingConsent() {
+        if (!root.visible || Backend.pendingName.length === 0 || consentDialog.visible)
+            return;
+        for (let dialog of [pauseDialog, historyDialog, clearDialog, practiceDialog]) {
+            if (dialog.visible)
+                return;
+        }
+        consentDialog.open();
+    }
+
+    component AppDialog: Dialog {
+        id: appDialog
+        header: Label {
+            text: appDialog.title
+            visible: text.length > 0
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            font.bold: true
+            padding: 12
+            color: root.ink
+            background: Rectangle { color: root.surface }
+        }
+        footer: DialogButtonBox {
+            visible: count > 0
+            background: Rectangle { color: root.surface }
+        }
+        onVisibleChanged: if (!visible) Qt.callLater(root.presentPendingConsent)
+        palette.window: root.surface
+        palette.windowText: root.ink
+        palette.text: root.ink
+        palette.base: root.surface
+        palette.button: root.surface
+        palette.buttonText: root.ink
+        palette.highlight: root.accent
+        palette.highlightedText: Backend.dark ? "#101b17" : "white"
+    }
+
     Connections {
         target: Backend
         function onShowWindow() {
             root.show();
             root.raise();
             root.requestActivate();
+            root.presentPendingConsent();
         }
         function onPauseDialog() {
             root.show();
@@ -68,8 +106,7 @@ ApplicationWindow {
             }
         }
         function onUpdated() {
-            if (Backend.pendingName.length > 0 && !consentDialog.opened)
-                consentDialog.open();
+            root.presentPendingConsent();
         }
     }
 
@@ -1085,15 +1122,17 @@ ApplicationWindow {
         }
     }
 
-    Dialog {
+    AppDialog {
         id: consentDialog
         anchors.centerIn: parent
         width: 480
         modal: false
         title: "Allow Reword in " + Backend.pendingName + "?"
         header: Label {
+            color: root.ink
             textFormat: Text.PlainText
             text: consentDialog.title
+            wrapMode: Text.Wrap
             padding: 20
             font.pixelSize: 18
         }
@@ -1102,6 +1141,7 @@ ApplicationWindow {
             anchors.fill: parent
             spacing: 20
             Label {
+                color: root.ink
                 textFormat: Text.PlainText
                 text: "Reword will only correct recognized, non-sensitive text fields. You can change this decision in Applications."
                 wrapMode: Text.WordWrap
@@ -1142,7 +1182,7 @@ ApplicationWindow {
             }
         }
     }
-    Dialog {
+    AppDialog {
         id: pauseDialog
         anchors.centerIn: parent
         title: "Pause Reword"
@@ -1158,6 +1198,7 @@ ApplicationWindow {
                 Accessible.name: "Hours"
             }
             Label {
+                color: root.ink
                 textFormat: Text.PlainText
                 text: "hours"
             }
@@ -1170,12 +1211,13 @@ ApplicationWindow {
                 Accessible.name: "Minutes"
             }
             Label {
+                color: root.ink
                 textFormat: Text.PlainText
                 text: "minutes"
             }
         }
     }
-    Dialog {
+    AppDialog {
         id: historyDialog
         anchors.centerIn: parent
         width: Math.min(820, root.width - 80)
@@ -1193,6 +1235,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Label {
+                        color: root.ink
                         textFormat: Text.PlainText
                         text: "Original"
                         font.weight: Font.Medium
@@ -1201,6 +1244,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         TextArea {
+                            color: root.ink
                             text: root.selectedHistory.original || ""
                             readOnly: true
                             selectByMouse: true
@@ -1223,6 +1267,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Label {
+                        color: root.ink
                         textFormat: Text.PlainText
                         text: "Corrected"
                         font.weight: Font.Medium
@@ -1231,6 +1276,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         TextArea {
+                            color: root.ink
                             text: root.selectedHistory.corrected || ""
                             readOnly: true
                             selectByMouse: true
@@ -1256,13 +1302,14 @@ ApplicationWindow {
         }
         onClosed: root.selectedHistory = ({})
     }
-    Dialog {
+    AppDialog {
         id: clearDialog
         anchors.centerIn: parent
         title: "Delete all saved text?"
         modal: true
         standardButtons: Dialog.Ok | Dialog.Cancel
         Label {
+            color: root.ink
             textFormat: Text.PlainText
             text: "Originals and corrections will be removed from local history."
             wrapMode: Text.WordWrap
@@ -1270,7 +1317,7 @@ ApplicationWindow {
         }
         onAccepted: Backend.clearHistory()
     }
-    Dialog {
+    AppDialog {
         id: practiceDialog
         anchors.centerIn: parent
         title: "Practice spelling"
@@ -1279,14 +1326,21 @@ ApplicationWindow {
         property string answer: ""
         ColumnLayout {
             Label {
+                color: root.ink
                 textFormat: Text.PlainText
                 text: "Type: " + practiceDialog.answer
                 font.pixelSize: 20
             }
             TextField {
+                color: root.ink
                 id: practiceWord
                 placeholderText: "Write the word"
+                placeholderTextColor: root.muted
                 Accessible.name: "Practice word"
+                background: Rectangle {
+                    color: root.surface
+                    border.color: practiceWord.activeFocus ? root.accent : root.line
+                }
             }
             Label {
                 textFormat: Text.PlainText

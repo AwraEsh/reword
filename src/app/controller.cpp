@@ -4,10 +4,33 @@
 #include <QClipboard>
 #include <QMenu>
 #include <QPainter>
+#include <QPalette>
 #include <QKeySequence>
 namespace reword {
-Controller::Controller(const QString &directory, QObject *parent)
+namespace {
+void applyThemePalette(bool dark) {
+    const QColor surface(dark ? "#191e26" : "#ffffff");
+    const QColor ink(dark ? "#eef0f3" : "#202733");
+    const QColor muted(dark ? "#929ba8" : "#647080");
+    QPalette palette(surface);
+    palette.setColor(QPalette::Window, QColor(dark ? "#12161d" : "#f5f7fa"));
+    palette.setColor(QPalette::WindowText, ink);
+    palette.setColor(QPalette::Text, ink);
+    palette.setColor(QPalette::Base, surface);
+    palette.setColor(QPalette::Button, surface);
+    palette.setColor(QPalette::ButtonText, ink);
+    palette.setColor(QPalette::ToolTipBase, surface);
+    palette.setColor(QPalette::ToolTipText, ink);
+    palette.setColor(QPalette::Highlight, QColor(dark ? "#85d4bc" : "#176d58"));
+    palette.setColor(QPalette::HighlightedText, QColor(dark ? "#101b17" : "#ffffff"));
+    for (auto role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText})
+        palette.setColor(QPalette::Disabled, role, muted);
+    QApplication::setPalette(palette);
+}
+} // namespace
+Controller::Controller(const QString &directory, QObject *parent, std::unique_ptr<Adapter> adapter)
     : QObject(parent), store_(directory) {
+    applyThemePalette(dark());
     recoveryServer_ = new RecoveryServer(this);
     connect(recoveryServer_, &RecoveryServer::passage, this,
             [this](QString original, QString corrected) { rememberPassage(original, corrected); });
@@ -15,7 +38,7 @@ Controller::Controller(const QString &directory, QObject *parent)
         qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland")
         notice_ =
             "Original recovery is unavailable. Restart Reword before using Wayland correction.";
-    service_ = new Service(directory);
+    service_ = new Service(directory, std::move(adapter));
     service_->moveToThread(&worker_);
     connect(&worker_, &QThread::started, service_, &Service::start);
     connect(&worker_, &QThread::finished, service_, &QObject::deleteLater);
@@ -189,6 +212,8 @@ void Controller::set(QString key, QVariant value) {
         service_->cancel();
         store_.prune(store_.options());
         emit updated();
+        if (key == "dark")
+            applyThemePalette(dark());
     });
 }
 void Controller::decide(QString id, QString decision) {

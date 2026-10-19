@@ -61,7 +61,8 @@ class Controller : public QObject {
     bool rememberPassage(const QString &original, const QString &corrected);
 
   public:
-    explicit Controller(const QString &directory, QObject *parent = nullptr);
+    explicit Controller(const QString &directory, QObject *parent = nullptr,
+                        std::unique_ptr<Adapter> adapter = {});
     ~Controller();
     QVariantMap settings() const;
     QVariantList apps() const {

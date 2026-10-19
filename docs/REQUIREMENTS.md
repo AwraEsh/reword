@@ -61,3 +61,17 @@ Approved by the user on 2026-10-15. This file is the durable requirements source
 - Aim for word correction p95 under 50 ms on test hardware; measure rather than assume.
 - Multi-hour stability/resource acceptance required before declaring production ready.
 - Persist implementation ledger, architecture, build/package instructions, compatibility evidence and remaining work.
+
+## 2026-10-18: release and local installation instruction
+
+- After stability and quality are demonstrated, update GitHub-facing documentation
+  for an ordinary user: simple installation, first use, limitations, pause/privacy,
+  updating and removal. Keep developer build/audit material separate from that guide.
+- Publish a real GitHub release with the verified Windows installer, Linux packages
+  and matching checksums/source materials only after the quality/stability gates pass.
+- Install the accepted Linux build on the user's current machine after those gates;
+  do not substitute an earlier development package. This instruction authorizes that
+  installation when the checks pass. Native host integration changes must be clear
+  and documented; system/root actions may still need the host's authentication.
+- Green CI alone is insufficient for release or local deployment. Preserve the full
+  desktop compatibility, text-safety, rendered UI and active stability requirements.
