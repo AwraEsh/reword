@@ -1,11 +1,13 @@
 #include "app/service.h"
 #include <QCoreApplication>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QThread>
 #include <QTemporaryDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <iostream>
+#include <chrono>
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 #include <X11/extensions/XTest.h>
@@ -48,6 +50,46 @@ int main(int argc, char **argv) {
         return 1;
     }
     QProcess fixture;
+    auto fixtureEnvironment = QProcessEnvironment::systemEnvironment();
+    fixtureEnvironment.insert("REWORD_FIXTURE_CHANGE_TIMING", "1");
+    fixture.setProcessEnvironment(fixtureEnvironment);
+    QList<qint64> changes;
+    QByteArray changeBuffer;
+    bool invalidTiming = false;
+    const auto monotonicMicros = [] {
+        return std::chrono::duration_cast<std::chrono::microseconds>(
+                   std::chrono::steady_clock::now().time_since_epoch())
+            .count();
+    };
+    auto collectChanges = [&] {
+        changeBuffer += fixture.readAllStandardOutput();
+        if (changeBuffer.size() > 4096) {
+            invalidTiming = true;
+            changeBuffer.clear();
+            return;
+        }
+        while (changeBuffer.contains('\n')) {
+            auto end = changeBuffer.indexOf('\n');
+            auto parts = changeBuffer.left(end).split(':');
+            changeBuffer.remove(0, end + 1);
+            bool sequenceOk = false, timestampOk = false;
+            auto sequence = parts.size() == 3 ? parts[1].toULongLong(&sequenceOk) : 0;
+            auto timestamp = parts.size() == 3 ? parts[2].toLongLong(&timestampOk) : 0;
+            if (parts.size() != 3 || parts[0] != "CHANGE" || !sequenceOk || !timestampOk ||
+                sequence != quint64(changes.size() + 1) || timestamp <= 0 ||
+                (!changes.isEmpty() && timestamp < changes.last()) || changes.size() >= 256) {
+                invalidTiming = true;
+                continue;
+            }
+            changes.append(timestamp);
+        }
+    };
+    QObject::connect(&fixture, &QProcess::readyReadStandardOutput, collectChanges);
+    auto nativeTiming = [&](qsizetype before, qint64 started) {
+        collectChanges();
+        return !invalidTiming && changeBuffer.isEmpty() && changes.size() >= before + 2 &&
+               changes[before] >= started && changes.last() <= monotonicMicros();
+    };
     fixture.start(fixturePath, {});
     if (!fixture.waitForStarted()) {
         service.stop();
@@ -132,18 +174,27 @@ int main(int argc, char **argv) {
     std::cout << "PASS: native X11 shortcut conflict restores settings and Pause delivery.\n";
     pump(300);
     command("text:");
+    auto beforeFirst = changes.size();
+    auto firstStarted = monotonicMicros();
     command("text:teh ");
     if (!until([&] { return text() == "the "; }))
         return finish("FAIL: first attempt was not corrected.", 1);
+    if (!nativeTiming(beforeFirst, firstStarted))
+        return finish("FAIL: first native edit has no valid monotonic timing records.", 1);
     command("text:");
     command("text:teh ");
     pump(300);
     if (text() != "teh ")
         return finish("FAIL: second attempt was not preserved.", 1);
     command("text:");
+    auto beforeThird = changes.size();
+    auto thirdStarted = monotonicMicros();
     command("text:teh ");
     if (!until([&] { return text() == "the "; }))
         return finish("FAIL: third attempt was not corrected.", 1);
+    if (!nativeTiming(beforeThird, thirdStarted))
+        return finish("FAIL: third native edit has no valid monotonic timing records.", 1);
+    std::cout << "PASS: first/third native edits have bounded monotonic fixture timestamps.\n";
     service.action("undo");
     if (!until([&] { return text() == "teh "; }))
         return finish("FAIL: guarded live Undo failed.", 1);
@@ -168,8 +219,13 @@ int main(int argc, char **argv) {
     auto password = observer->inspect(true);
     if (!password.password || !password.text.isEmpty())
         return finish("FAIL: password field protection failed.", 1);
+    collectChanges();
+    auto beforeProtected = changes.size();
     service.action("fix");
     pump(100);
+    collectChanges();
+    if (invalidTiming || !changeBuffer.isEmpty() || changes.size() != beforeProtected)
+        return finish("FAIL: protected operation produced text-change timing records.", 1);
     if (store.histories().size() != 1)
         return finish("FAIL: protected operation was recorded.", 1);
     return finish("PASS: live first/second/third, live Undo, pause, selected "

@@ -430,3 +430,20 @@ integration are separate. The actual packaged GUI workload, fixture watchdog/
 timing extension and multi-hour acceptance run are NOT implemented by this task.
 The earlier idle soak remains insufficient; no release or installation gate is
 closed by merely adding a resource sampler.
+
+## GTK fixture timing/watchdog — 2026-10-19
+
+The storage-access worktree now uses codex/fixture-watchdog-timing. The GTK test
+fixture validates a 1–18000-second lifetime (default 120) before GTK initialization
+and optionally emits CHANGE sequence/monotonic-microsecond records without text.
+The owned desktop runner verifies expiry, two synthetic changes and quiet mode;
+--fixture-timing-only runs this specific check without general command execution.
+
+Review required timestamps from actual native edits, beyond programmatic GTK
+changes. The Service probe now enables and validates records for first/third
+actual corrections and verifies no protected operation change. Missing native
+records were RED before enabling instrumentation; the complete resumed run passes
+all three native/service cycles. Final independent review has no blocking issue.
+Full build and all nine CTest suites pass in 35.77s. See the active-stability plan
+for exact scope: packaged GUI workload, latency baseline and multi-hour active
+acceptance remain open. No product release or local install was performed.
