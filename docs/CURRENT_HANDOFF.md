@@ -656,3 +656,31 @@ PostgreSQL/Mimer Qt SQL plugins. Store explicitly opens QSQLITE. The follow-up
 retains qsqlite.dll and removes other SQL driver DLLs, leaving graphics intact.
 Installed smoke acceptance now requires the synthetic SQLite database/header
 after native clean-PATH launch. This follow-up needs fresh Windows CI.
+
+PR #19 merged as 15e8ad5c3ebbaa5348bde098d58363e3b23da7ab after both hosted
+runs 39315937141 and 39315944368 passed at 7284138. Linux: 10 CTest suites plus
+three native cycles. Windows: 6 CTest suites, 25 PE tests, installer/native clean
+PATH launch, SQLite header, uninstall and native field/shortcut tests pass.
+The downloaded audit has 93 PE files, 89 candidate names, 16 separate API-set
+contracts, no missing/ambiguous ordinary imports and only qsqlite.dll as a SQL
+driver. Its SHA256 is 5cc59ae4ed660092f34f082290a0a226afe2ec29beac56bb95ac30061f612d49;
+artifact 12218965126. Product release readiness remains false. No local install.
+
+## Hosted packaged workload — 2026-10-19
+
+PR #20 adds an explicitly selected manual workload duration to the existing CI;
+normal push/PR runs do not start it. Runs39315576445 and 39316211634 refused
+staging before the active workload. The retained scanner JSON identifies a
+QtQml directory without module metadata, while CI installed WorkerScript but
+not QtQml/Models. The official Ubuntu module archive owns the missing metadata
+and plugin. Added QtQml, Models and Shapes packages; run 39316879658 at 56138e6
+is pending. Keep the path/formal-module validation intact. Do not count failed
+staging as an active soak. Ubuntu CI evidence cannot establish current-host
+Debian latency or final-package acceptance.
+
+Source audit follow-up before release: Service clears RetryCycle on unsafe
+boundaries but leaves retryPrefix_/retryWord_ QString references, and exception
+paths do not uniformly clear Undo/retry payloads. Review temporary-buffer reset
+ownership and add meaningful regression coverage; this is an identified open
+privacy requirement, not a claim that password text was observed or persisted.
+All local builds/GUI/heavy tests remain suspended after the hard freezes.
