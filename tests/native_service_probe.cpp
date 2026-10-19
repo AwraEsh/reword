@@ -172,6 +172,33 @@ int main(int argc, char **argv) {
         return finish("FAIL: restored native Pause shortcut did not arrive.", 1);
     store.pause(0);
     std::cout << "PASS: native X11 shortcut conflict restores settings and Pause delivery.\n";
+    if (!observer->shortcuts("Ctrl+Alt+Shift+U", "Ctrl+Alt+Shift+V", "Ctrl+Alt+Shift+W"))
+        return finish("FAIL: queued-shortcut fixture registration failed.", 1);
+    const auto firstKey = XKeysymToKeycode(display.get(), XK_u);
+    const auto secondKey = XKeysymToKeycode(display.get(), XK_v);
+    for (auto key : {control, alt, shift, firstKey})
+        XTestFakeKeyEvent(display.get(), key, true, 0);
+    XTestFakeKeyEvent(display.get(), firstKey, false, 0);
+    XTestFakeKeyEvent(display.get(), secondKey, true, 0);
+    XSync(display.get(), False);
+    auto isAction = [](const QString &value) {
+        return value == "fix" || value == "undo" || value == "pause";
+    };
+    const bool firstPremature = isAction(observer->takeAction());
+    pump(40);
+    const bool heldPremature = isAction(observer->takeAction());
+    for (auto key : {secondKey, shift, alt, control})
+        XTestFakeKeyEvent(display.get(), key, false, 0);
+    XSync(display.get(), False);
+    const bool releasePremature = isAction(observer->takeAction());
+    pump(30);
+    const auto firstAction = observer->takeAction();
+    pump(30);
+    const auto secondAction = observer->takeAction();
+    if (firstPremature || heldPremature || releasePremature ||
+        firstAction != "fix" || secondAction != "undo")
+        return finish("FAIL: overlapping shortcuts bypass release/grace ordering.", 1);
+    std::cout << "PASS: overlapping native shortcuts wait for all releases and focus grace.\n";
     pump(300);
     command("text:");
     auto beforeFirst = changes.size();
@@ -207,14 +234,34 @@ int main(int argc, char **argv) {
     store.pause(0);
     command("text:im here with teh book");
     command("select-all");
-    service.action("fix");
+    const auto fixKey = XKeysymToKeycode(display.get(), XK_r);
+    collectChanges();
+    auto beforeHeldShortcut = changes.size();
+    for (auto key : {control, alt, fixKey})
+        XTestFakeKeyEvent(display.get(), key, true, 0);
+    XSync(display.get(), False);
+    pump(200);
+    collectChanges();
+    const bool changedWhileHeld = changes.size() != beforeHeldShortcut;
+    for (auto key : {fixKey, alt, control})
+        XTestFakeKeyEvent(display.get(), key, false, 0);
+    XSync(display.get(), False);
+    if (changedWhileHeld)
+        return finish("FAIL: selection changed before the native shortcut was released.", 1);
     if (!until([&] { return text() == "I am here with the book"; }, 12000))
-        return finish("FAIL: selected correction failed.", 1);
+        return finish("FAIL: released native selection shortcut did not correct text.", 1);
     if (store.histories().size() != 1)
         return finish("FAIL: selected history was not saved.", 1);
-    service.action("undo");
+    const auto undoKey = XKeysymToKeycode(display.get(), XK_z);
+    for (auto key : {control, alt, undoKey})
+        XTestFakeKeyEvent(display.get(), key, true, 0);
+    XSync(display.get(), False);
+    pump(200);
+    for (auto key : {undoKey, alt, control})
+        XTestFakeKeyEvent(display.get(), key, false, 0);
+    XSync(display.get(), False);
     if (!until([&] { return text() == "im here with teh book"; }))
-        return finish("FAIL: selected Undo failed.", 1);
+        return finish("FAIL: released native Undo shortcut lost the saved correction.", 1);
     command("password");
     auto password = observer->inspect(true);
     if (!password.password || !password.text.isEmpty())

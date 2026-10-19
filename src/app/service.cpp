@@ -13,7 +13,7 @@ void Service::start() {
         wayland_ = qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland";
         timer_ = new QTimer(this);
         connect(timer_, &QTimer::timeout, this, &Service::tick);
-        timer_->start(80);
+        timer_->start(20);
     } catch (...) {
         emit message("Native integration could not start. Use the writing workspace.");
     }
@@ -119,6 +119,23 @@ void Service::tick() {
             }
         }
         auto a = adapter_->takeAction();
+        if (a == "pending") {
+            auto field = adapter_->inspect(false);
+            // A passive shortcut grab can temporarily unset only the focus
+            // state. Preserve Undo across that interval, but never read text.
+            // All other policy/identity boundaries still erase observation.
+            field.focused = true;
+            const Access access{store_->allowed(field.app), browserApp(field.app), store_->paused()};
+            if (!safe(field, access, store_->options()) || field.id != previous_.id ||
+                field.app != previous_.app) {
+                previous_ = {};
+                undoAfter_ = {};
+                undoBefore_.clear();
+                retry_.reset();
+                retryStart_ = -1;
+            }
+            return;
+        }
         if (!a.isEmpty()) {
             action(a);
             return;

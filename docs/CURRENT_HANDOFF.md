@@ -494,3 +494,133 @@ captures were downloaded and inspected; the footer repair is confirmed. Local
 integrated eight-suite verification passes in46.32s. The fixture/timing branch
 is incorporating that UI source; its final integrated checks are next. Windows
 normal desktop and the other product release gates remain open.
+## Paused checkpoint — 2026-10-19
+
+The user requested stopping as soon as the current tests or a reasonable stage
+finished. Work is paused; do not resume development, release or installation
+until explicitly requested. Uncommitted Task 3 work is preserved on
+`codex/active-gui-workload` in the managed keyboard-review worktree.
+
+The first short packaged-GUI workload failed (`.deps/active-baseline-01/report.json`):
+native-text-mismatch, forced shutdown, four word-boundary latency samples with
+p95 upper bound 56.7 ms. It is not a passing stability result. The app averaged
+105.18% of one CPU over the reported 19.13-second resource window; investigate
+that observation before any sustained-run acceptance claim.
+
+The cleanup review finding is addressed in the working tree: owned fixture/app
+shutdown now escalates TERM to KILL with bounded waits, helper cleanup uses its
+pinned pidfd with bounded exit observation, and individual cleanup failures do
+not skip the remaining resources. Signal-handler restoration is protected even
+if report publication fails. Cancellation during cleanup invalidates success.
+New tests use real owned subprocesses ignoring SIGTERM. The missing-cleanup
+tests were observed RED (`.deps/active-cleanup-red.log`); all 15 active-stability
+unit tests now pass (0.389 s). This is targeted evidence only: no full CTest,
+fresh desktop rerun or independent follow-up review has been performed after
+this cleanup change. No commit, push, release or installation was made here.
+
+Task 3 remains incomplete. Before acceptance: strengthen oversized-selection
+evidence with a correctable typo and below-limit counterpart; confirm each
+history insertion by advancing ID and exact original/result pair; count actual
+successful role samples; force final process/cancellation checks; diagnose the
+native-text mismatch, CPU observation, latency and forced app shutdown; rerun
+the owned packaged workload and full suite, then obtain follow-up review.
+The final multi-hour workload and all remaining release gates remain open.
+
+## Resumed active-workload verification — 2026-10-19
+
+The user explicitly resumed. The paused checkpoint above is historical.
+All ten CTest suites pass under system Python 3.13 (65.52 s); the cached local
+Python 3.11 build lacked pidfd APIs and initially failed two cases. Acceptance
+runs require these APIs. All 17 dedicated workload tests pass, independently
+repeated by review. The harness review found no new blocking defect; verifying
+the running GUI executable after launcher exec was suggested as extra hardening.
+The inspected generated AppRun currently execs the exact hashed packaged binary.
+
+Baseline 07 completes every functional scenario, including the new correctable
+49,998-character control, rejection of 50,001 characters, password and Pause
+exclusion, 113 exact verified history inserts with pruning to 100, live retry
+and Undo. App/helper shutdown is normal, with no cleanup failure. Its six actual
+word-boundary samples have p50 upper bound 46.0 ms and p95 89.2 ms; the report is
+FAILED for latency, not accepted as a stable release. Dense history-burst CPU
+is retained separately; see the active-stability plan for phase budgets/rulings.
+
+The intermittent initial live timeout was addressed by waiting for the GUI's
+normal window to be mapped before starting the fixture. GTK clear commands now
+have an acknowledgment before Pause typing. Baseline 06 was a runner syntax
+error, fixed before 07; it has no acceptance value. The Service's 80 ms poll is
+now changed to 20 ms in the working tree, and a freshly staged development
+package is being measured. The final full suite, native safety rerun, CI, Git
+integration, sustained CPU/latency result and multi-hour final-package run remain
+pending. No product release or installation has occurred.
+
+## System restart and shortcut root cause — 2026-10-19
+
+The user reported a system crash and requested continuation. After restart,
+all changes are present; no Reword/test/build process remains. The accessible
+journal cannot establish the crash cause, so do not attribute it to this project
+or claim the system crash fixed. Use serial, bounded verification; no multi-hour
+run is currently active. The 18-test diagnostic-era unit run passed after restart
+(0.386 s); the temporary notice observer/classifier is now removed, leaving the
+17 workload tests plus the new numeric last-snapshot assertion.
+
+The 20 ms candidate reduced early word samples, but selected actions timed out
+in the dense history workload. A temporary read-only GUI diagnostic on the
+owned desktop returned only the fixed `unsupported-selection` notice code in
+`.deps/active-poll20-04/report.json`. It collected no text into the report.
+The synthetic setup delay did not resolve this issue and is not a proven fix.
+
+A deterministic native regression holds Ctrl+Alt+R for 200 ms, then releases it.
+The baseline fails: the shortcut is acted on during the X11 passive grab, and
+the selection is rejected as unsupported even though focus returns afterward.
+The source fix dispatches after key release and a 20 ms accessibility interval,
+coalesces held-key repeats, bounds pending actions to eight and event processing
+to 64 per poll, and clears pending actions when shortcuts are reconfigured.
+It requires detectable XKB auto-repeat; unsupported registration fails closed.
+The new native regression is GREEN for one complete owned probe cycle; see
+`.deps/shortcut-release-red.log` and `.deps/shortcut-release-green.log`.
+
+Fresh runtime review, complete CTest/native rerun, a newly staged package and
+active latency/resource verification are still required before claiming this
+change accepted. Existing packaged poll20 binaries predate the release fix.
+
+## Second hard freeze: remote verification — 2026-10-19
+
+The user confirmed full-system hangs requiring the hardware restart button,
+not just application crashes. The second interrupted build stopped during UI
+test compilation, without a compiler error or completed test result. Its process
+handle is missing and process inspection confirms nothing remains alive.
+Do not count this interrupted execution as GREEN or restart it automatically.
+Accessible logs contain no crash-cause evidence; current-boot memory counters
+cannot establish or exclude prior-boot OOM, GPU or kernel failures.
+
+All local builds, GUI workloads and heavy tests are suspended. Continue code
+review, Git checkpoints and hosted CI without local heavy verification. The
+harness checkpoint `67ef91b` is pushed to the public feature branch; no product
+release or installation has occurred. The earlier post-first-restart ten-suite
+run passed in 45.16 s, before the latest pending-shortcut follow-up changes.
+
+Runtime review found held Undo losing its buffer and an older queued action
+dispatching while a later chord was still held. Both were reproduced RED in
+owned native tests (`held-undo-red.log`, `queued-shortcut-red.log`). Five extra
+metadata-only Service boundary cases also failed before the fix (password,
+locked, unknown, denied, paused). New code waits for all pending releases and
+their grace intervals and suppresses text observation while a shortcut is
+pending. It still checks metadata/policy and erases Undo at unsafe boundaries.
+Compilation of the helper/application completed before the second freeze, but
+the full build and post-fix tests did not. Final verification is moving to CI;
+the follow-up remains unaccepted pending those results and review.
+
+Runtime source bd3d25d passes Linux and Windows in hosted push run 39309952986,
+including the new native regressions and metadata security cases. The separate
+PR run 39309999956 passes Windows but fails Linux before native tests begin:
+Openbox does not publish its readiness property within the runner's five-second
+startup budget. This is retained as a failed run, not overwritten by the green
+push. The runner now allows 15 seconds for window-manager initialization, bounds
+each readiness command to one second and emits only bounded Xvfb/Openbox startup
+logs if it still times out. No app/fixture has started at that point. The reason
+for the original slow/missing readiness is unproven; fresh CI must verify this
+infrastructure adjustment. Word-latency limits are unchanged.
+
+The user authorized continued unattended work and shutdown once work is finished.
+Preserve the local-heavy-work suspension after the hard freezes. Do not shut down
+while owned work is live or treat incomplete release/installation gates as done.
