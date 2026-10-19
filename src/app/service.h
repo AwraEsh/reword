@@ -11,6 +11,8 @@ class Service : public QObject {
     QString directory_;
     std::unique_ptr<Store> store_;
     std::unique_ptr<Engine> engine_;
+    // Used only by one passage job at a time; never shared with live correction.
+    std::unique_ptr<Engine> passageEngine_;
     std::unique_ptr<Adapter> adapter_;
     QTimer *timer_ = nullptr;
     Field previous_, undoAfter_;

@@ -68,15 +68,46 @@ path/formal-identity validation. No local SDK/compiler/GUI was executed.
 
 Run 39316879658 at 56138e6 successfully stages the real AppDir and executes the
 workload. It fails the unchanged resource budget: app15.90% of one core after
-30.13 sustained seconds, helper2.51%, zero swap, normal cleanup. Word23samples
-p95 upper bound22.3ms/max25.261ms. It completed110 initial history edits and10
-full cycles before resource rejection, not the requested120seconds or final
-oversized-selection checks. No long soak is authorized by this failed baseline.
+30.13 sustained seconds, helper 2.51%, zero swap, normal cleanup. Word 23 samples
+p95 upper bound 22.3ms/max 25.261ms. It completed 110 initial history edits and 10
+full cycles before resource rejection, not the requested 120 seconds or final
+oversized-selection checks. The failed baseline does not justify a long soak yet.
 
 Before optimization, add an explicit diagnostic mode to the existing performance
-probe: compare10 fresh Engine construction+short passage+destruction operations
-with10 short passages on one Engine, retaining CPU and wall totals and exact
+probe: compare 10 fresh Engine construction+short passage+destruction operations
+with 10 short passages on one Engine, retaining CPU and wall totals and exact
 synthetic correctness only. Service currently constructs a new Hunspell-backed
 Engine for every selected correction. This is a hypothesis until measured.
 Run the diagnostic only on hosted manual executions; do not change production
 code or resource/latency budgets based on this hypothesis alone.
+
+Measured run 39318112831: ten fresh engines/passages/destructions use 667.6  CPU ms,
+ten passages on a reused engine use 0.6  CPU ms; exact synthetic results agree.
+The full workload reaches all 120seconds and limit checks but fails normal
+cleanup, so it remains rejected. App sustained CPU 9.08%, helper 1.57%; word p95
+22.7ms. Keep this second baseline alongside the earlier CPU rejection.
+
+### Task 1 follow-up: measured initialization cost and cleanup diagnosis
+
+- [ ] Reuse a separate passage Engine owned by Service, initialized lazily only
+  inside its existing single in-flight worker. Never share the live Engine.
+  Stop waits for the job before destroying it; exceptions discard the worker
+  Engine. Refresh personal words/replacements and options on every operation.
+- [ ] Add a sequential-job regression covering add/remove personal words,
+  add/remove custom replacements and language switches so reuse cannot retain
+  stale user configuration. Verify on hosted CTest, never local compilation.
+- [ ] Add fixed fixture/app/helper forced-cleanup roles to the numeric report;
+  pin the existing stubborn-child test before implementation. Keep deadlines,
+  escalation behavior and failure propagation unchanged until the actual role
+  and cause of forced shutdown are known.
+- [ ] Run 120seconds at the changed source; inspect all limits, hashes and cleanup.
+  Only a fully passing short run permits advancing to the unchanged 7200-second
+  workload. No product acceptance is inferred from diagnostic microbenchmarks.
+
+Tiny harness tests exposed delayed SQLite connection cleanup: Python's
+connection context commits/rolls back but does not close. A regression retained
+the connection and failed before explicit closing; success and failure paths
+now close it. Seed/settings readers and synthetic test setup also close their
+connections deterministically. Forced-role reporting was RED before adding the
+fixed role list. All 18 tiny harness tests pass in 0.365 s under 256 MiB and
+10 CPU seconds. C++ service changes require hosted compilation/tests.

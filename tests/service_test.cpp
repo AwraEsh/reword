@@ -113,6 +113,31 @@ struct Harness {
 class ServiceTest : public QObject {
     Q_OBJECT
   private slots:
+    void consecutivePassagesUseCurrentPersonalConfiguration() {
+        Harness h;
+        h.adapter->quiet = true;
+        QSignalSpy results(&h.service, &Service::result);
+        auto check = [&](const QString &expected) {
+            const auto before = results.size();
+            h.service.processText("teh");
+            QTRY_COMPARE_WITH_TIMEOUT(results.size(), before + 1, 12000);
+            QCOMPARE(results.last()[1].toString(), expected);
+            QVERIFY(results.last()[2].toString().isEmpty());
+        };
+        check("the");
+        h.store.addWord("teh");
+        check("teh");
+        h.store.removeWord("teh");
+        check("the");
+        h.store.replacement("teh", "book");
+        check("book");
+        h.store.replacement("teh", "");
+        check("the");
+        h.store.setValue("english", false);
+        check("teh");
+        h.store.setValue("english", true);
+        check("the");
+    }
     void pendingShortcutStillClearsUnsafeUndo_data() {
         QTest::addColumn<QString>("boundary");
         for (auto value : {"password", "locked", "unknown", "denied", "paused"})
