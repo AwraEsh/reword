@@ -18,6 +18,10 @@ class FixtureAdapter final : public Adapter {
     int rejectedShortcutAttempts = 0;
     std::function<void()> onShortcutRejected, onRead;
     bool quiet = false;
+    QString pendingAction;
+    QString takeAction() override {
+        return pendingAction;
+    }
     bool changed() override {
         return !quiet;
     }
@@ -109,6 +113,56 @@ struct Harness {
 class ServiceTest : public QObject {
     Q_OBJECT
   private slots:
+    void pendingShortcutStillClearsUnsafeUndo_data() {
+        QTest::addColumn<QString>("boundary");
+        for (auto value : {"password", "locked", "unknown", "denied", "paused"})
+            QTest::newRow(value) << QString(value);
+    }
+    void pendingShortcutStillClearsUnsafeUndo() {
+        QFETCH(QString, boundary);
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        const auto saved = h.adapter->field;
+        h.adapter->pendingAction = "pending";
+        h.adapter->field.focused = false;
+        if (boundary == "password")
+            h.adapter->field.password = true;
+        if (boundary == "locked")
+            h.adapter->field.locked = true;
+        if (boundary == "unknown")
+            h.adapter->field.known = false;
+        if (boundary == "denied")
+            h.store.decide(saved.app, "deny");
+        if (boundary == "paused")
+            h.store.pause(-1);
+        const auto reads = h.adapter->reads;
+        QTest::qWait(100);
+        QCOMPARE(h.adapter->reads, reads);
+        h.adapter->field = saved;
+        h.store.decide(saved.app, "allow");
+        h.store.pause(0);
+        h.adapter->pendingAction.clear();
+        h.service.action("undo");
+        QCOMPARE(h.adapter->field.text, QString("the "));
+        QCOMPARE(h.adapter->writes, 1);
+    }
+    void pendingShortcutPreservesUndoAcrossGrabFocusLoss() {
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        h.adapter->pendingAction = "pending";
+        h.adapter->field.focused = false;
+        const auto reads = h.adapter->reads;
+        QTest::qWait(100);
+        QCOMPARE(h.adapter->reads, reads);
+        h.adapter->field.focused = true;
+        h.adapter->pendingAction.clear();
+        h.service.action("undo");
+        QCOMPARE(h.adapter->field.text, QString("teh "));
+    }
     void confirmedPassageIsRecoverableWithoutHistory() {
         Harness h;
         h.store.setValue("history", false);

@@ -11,6 +11,8 @@ class Adapter {
     }
     virtual bool replace(const Field &expected, const QString &newText, int newCaret) = 0;
     virtual QString description() const = 0;
+    // "pending" means a native shortcut still owns the keyboard/focus grace.
+    // Callers must avoid text observation until an action or an empty result.
     virtual QString takeAction() {
         return {};
     }
