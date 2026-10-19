@@ -6,6 +6,16 @@
 #include <QScopeGuard>
 using namespace reword;
 
+namespace reword {
+struct ServiceTestAccess {
+    static bool retainsTransientText(const Service &service) {
+        return !service.previous_.text.isEmpty() || !service.undoAfter_.text.isEmpty() ||
+               !service.undoBefore_.isEmpty() || !service.retryPrefix_.isEmpty() ||
+               !service.retryWord_.isEmpty();
+    }
+};
+}
+
 class FixtureAdapter final : public Adapter {
   public:
     Field field;
@@ -113,6 +123,55 @@ struct Harness {
 class ServiceTest : public QObject {
     Q_OBJECT
   private slots:
+    void unsafeBoundaryReleasesTransientText_data() {
+        QTest::addColumn<QString>("boundary");
+        for (auto value : {"password", "locked", "unknown", "denied", "paused", "exception", "stop"})
+            QTest::newRow(value) << QString(value);
+    }
+    void unsafeBoundaryReleasesTransientText() {
+        QFETCH(QString, boundary);
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        h.adapter->type("hello teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("hello the "));
+        QVERIFY(ServiceTestAccess::retainsTransientText(h.service));
+        if (boundary == "stop") {
+            h.service.stop();
+        } else {
+            const auto inspections = h.adapter->inspections;
+            const auto reads = h.adapter->reads;
+            if (boundary == "password")
+                h.adapter->field.password = true;
+            else if (boundary == "locked")
+                h.adapter->field.locked = true;
+            else if (boundary == "unknown")
+                h.adapter->field.known = false;
+            else if (boundary == "denied")
+                h.store.decide(h.adapter->field.app, "deny");
+            else if (boundary == "paused")
+                h.store.pause(-1);
+            else
+                h.adapter->onRead = [] { throw std::runtime_error("Synthetic inspection failure"); };
+            QTRY_VERIFY(h.adapter->inspections > inspections);
+            if (boundary != "exception")
+                QCOMPARE(h.adapter->reads, reads);
+        }
+        QVERIFY(!ServiceTestAccess::retainsTransientText(h.service));
+    }
+    void inspectionFailureInvalidatesUndo() {
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        QSignalSpy messages(&h.service, &Service::message);
+        h.adapter->onRead = [] { throw std::runtime_error("Synthetic inspection failure"); };
+        QTRY_VERIFY(!messages.isEmpty());
+        h.adapter->quiet = true;
+        const auto writes = h.adapter->writes;
+        h.service.action("undo");
+        QCOMPARE(h.adapter->writes, writes);
+        QCOMPARE(h.adapter->field.text, QString("the "));
+    }
     void cancelledPassageDoesNotPoisonTheNextOperation() {
         Harness h;
         h.adapter->quiet = true;

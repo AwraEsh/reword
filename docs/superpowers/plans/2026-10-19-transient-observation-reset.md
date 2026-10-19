@@ -30,9 +30,10 @@ docs/CURRENT_HANDOFF.md.
 
 ## Task 1: Reset ownership and behavior
 
-- [ ] Add Service regressions: correction then stop/start must restart the
-  first/second/third cycle; an adapter inspection exception after a correction
-  must invalidate Undo so a later action cannot resurrect uncertain state.
+- [ ] Add Service regressions: stop and unsafe metadata must release transient
+  text; an adapter inspection exception after a correction must invalidate Undo
+  so a later action cannot resurrect uncertain state. A narrow friend test peer
+  returns only a text-retention boolean, never contents or a production API.
 - [ ] Observe those failures in hosted CI before changing production behavior.
 - [ ] Implement private resetRetry()/resetObservation() helpers; audit every
   reset, policy/identity/caret/continuation/exception/Pause/stop path. Clear all
@@ -52,3 +53,11 @@ docs/CURRENT_HANDOFF.md.
 
 This plan records an open release gate. It does not establish password capture,
 persisted text leakage or completion of the full buffer audit.
+
+Execution ruling: reuse the clean managed storage-access worktree on
+codex/transient-observation-reset, stacked on8570675 while PR20's hosted soak
+runs independently. Add regressions and the friend declaration before behavior
+changes, push for hosted RED, then implement the reset helpers. stop() destroys
+its injected adapter; testing restart with that destroyed fixture would be
+invalid, so test stop's memory-release contract directly and keep public Undo
+failure coverage. No local C++ build/GUI is allowed.

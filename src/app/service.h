@@ -8,6 +8,7 @@
 namespace reword {
 class Service : public QObject {
     Q_OBJECT
+    friend struct ServiceTestAccess;
     QString directory_;
     std::unique_ptr<Store> store_;
     std::unique_ptr<Engine> engine_;
