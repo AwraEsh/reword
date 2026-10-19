@@ -111,3 +111,21 @@ now close it. Seed/settings readers and synthetic test setup also close their
 connections deterministically. Forced-role reporting was RED before adding the
 fixed role list. All 18 tiny harness tests pass in 0.365 s under 256 MiB and
 10 CPU seconds. C++ service changes require hosted compilation/tests.
+
+Run 39319638562 at 31ab2cd passes the full Linux/Windows workflow and the
+120-second packaged run (149.621 s including setup/burst/cleanup). It completes
+44 full cycles, all history/selection-limit checks and normal cleanup. Word
+90 samples: p95 upper bound 21.8 ms, max 22.505 ms. Sustained app CPU 6.64%,
+helper 1.06%; zero swap, private growth 1,316/1,224 KiB. App SHA256
+0c3aaade2fca52d92712efee130a1064e6002630bb6f8e9e2a8a7e810dcaf22c.
+Independent review found no important lifecycle/concurrency issues. Follow-up
+afa301b adds cancellation-then-next-passage coverage and passes full hosted
+Linux/Windows runs 39320326333 and 39320337032. The earlier forced cleanup is not
+proven fixed by engine reuse; the passing run records an empty forced-role list.
+
+For a 7200-second dispatch, require an additional 120-second preflight on the
+exact same staged AppDir immediately before the long run. Separate new owned
+desktops, databases and report directories preserve isolation. A preflight
+failure skips the long step; always retain both reports when present. This
+avoids treating a prior build's short pass as evidence for a rebuilt candidate.
+It remains hosted development evidence, not the final current-host/product soak.

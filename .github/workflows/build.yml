@@ -60,6 +60,10 @@ jobs:
           ./build/reword_performance_probe --passage-startup-profile > dist/passage-startup-profile.json
           /usr/lib/qt6/libexec/qmlimportscanner -rootPath "$PWD/qml" -importPath /usr/lib/x86_64-linux-gnu/qt6/qml > dist/qml-import-scan.json
           python3 scripts/package-linux.py
+      - name: Short preflight before two-hour packaged workload
+        if: github.event_name == 'workflow_dispatch' && inputs.active_seconds == '7200'
+        run: |
+          python3 scripts/test-native-linux.py --active-app "$PWD/dist/Reword.AppDir/AppRun" --active-seconds 120 --active-output "$PWD/dist/active-preflight"
       - name: Packaged active workload (hosted Ubuntu evidence)
         if: github.event_name == 'workflow_dispatch' && inputs.active_seconds != '0'
         env:
@@ -72,6 +76,7 @@ jobs:
           name: Reword-Hosted-Active-Workload
           path: |
             dist/active-workload
+            dist/active-preflight
             dist/qml-import-scan.json
             dist/passage-startup-profile.json
             dist/Reword.AppDir/usr/share/reword/runtime-manifest.json

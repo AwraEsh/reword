@@ -702,3 +702,22 @@ ten fresh-engine passages with ten passages on one engine, collecting CPU/wall
 totals and exact synthetic correctness. Hosted run 39318112831 at 019591a is
 pending. Treat initialization cost as a hypothesis until its measurements arrive;
 keep the CPU and latency budgets unchanged. No long soak started.
+
+Run 39319638562 at 31ab2cd passes Linux and Windows plus the full 120-second
+staged workload. App SHA256
+0c3aaade2fca52d92712efee130a1064e6002630bb6f8e9e2a8a7e810dcaf22c;
+helper unchanged 0fac4152b1dae0ab03a1bab1e96a38ce035b094fceb1f090afb6877362ed58bd.
+44 full cycles, 155 selected fixes/history inserts, both 50k control/refusal
+checks, all Pause/password/Undo checks and normal cleanup pass. Word 90 samples:
+p95 bound 21.8 ms/max 22.505 ms; sustained CPU app 6.64%/helper 1.06%, swap zero,
+private growth 1316/1224 KiB. Report:
+.deps/hosted-active-31ab2cd/active-workload/report.json.
+Independent review found no important issues in isolated passage-engine reuse
+and deterministic harness cleanup; 18 tiny harness tests pass. Full hosted runs
+39320326333/39320337032 at afa301b also pass the added C++ cancellation recovery
+regression. The manual 7200-second mode now first runs a 120-second preflight on
+the same staged AppDir and advances only on success. Both reports are retained.
+
+Do not claim the earlier shutdown-forced baseline's root cause fixed from one
+normal exit. Keep product release, source/notices, privacy-buffer audit,
+current-host latency/final-binary soak and ordinary Windows/Wayland gates open.
