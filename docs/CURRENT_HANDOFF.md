@@ -443,3 +443,30 @@ bindings and a shaped-glyph regression are now added. Local build and all seven
 CTest suites pass in 66.17s; fresh CI and rendered review remain required. Three
 isolated native X11 cycles pass. See UI_REVIEW.md for the actual failures and
 limits; no final UI/platform acceptance or product release is claimed.
+
+## Active stability harness: process sampler
+
+The storage-access worktree now uses codex/active-stability-harness from c4e7fb3.
+Task 1 of docs/superpowers/plans/2026-10-18-active-stability.md adds bounded,
+content-free Linux /proc sampling for app/helper CPU, RSS, private/PSS/data/swap,
+threads and descriptors. It brackets process identity and CPU reads and rejects
+PID reuse, missing metrics and backwards counters/time. CPU percent uses one
+logical CPU as 100%; child CPU is separate. It retains constant-space aggregates.
+
+All 13 sampler tests pass, including real own-process sampling. Review reproduced
+CPU rollback within a sample; the regression was RED and the fix independently
+verified. Full build and all eight local CTest suites pass in 53.05s. CI and final
+integration are separate. The actual packaged GUI workload, fixture watchdog/
+timing extension and multi-hour acceptance run are NOT implemented by this task.
+The earlier idle soak remains insufficient; no release or installation gate is
+closed by merely adding a resource sampler.
+
+## 2026-10-19 resumed verification
+
+PR #16 merged as d352e45 after final Linux/Windows CI 39155478705 and
+39155551787 passed. UI source 83ca324 also passes both OS runs 39155786400 and
+39155790704. Downloaded Windows Overview/History detail and both ten-dialog
+contact sheets show correct English/Persian glyphs and readable text. A final
+common footer surface adjustment has passed local modal/No checks and review;
+final integrated eight-suite build/CI is next. No ordinary desktop acceptance,
+product release or installation is implied. See UI_REVIEW.md for remaining scope.
