@@ -647,3 +647,12 @@ report; collection errors now produce an explicit incomplete failure record and
 still stop packaging. All 25 PE fixture/CLI tests pass in 0.123 seconds under the
 256 MiB/10 CPU-second limit. Local builds/GUI remain suspended; fresh hosted CI
 and review are required for these follow-ups.
+
+Run 39315174646 at 0561148: Linux passes; Windows tests pass but packaging
+correctly fails the new dependency gate. Downloaded its retained audit to
+.deps/windows-pe-ci-0561148. Collection completed for96 staged PE files, with
+no ambiguous imports; missing libpq.dll and mimapi64.dll come solely from unused
+PostgreSQL/Mimer Qt SQL plugins. Store explicitly opens QSQLITE. The follow-up
+retains qsqlite.dll and removes other SQL driver DLLs, leaving graphics intact.
+Installed smoke acceptance now requires the synthetic SQLite database/header
+after native clean-PATH launch. This follow-up needs fresh Windows CI.

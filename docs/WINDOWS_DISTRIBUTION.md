@@ -132,3 +132,12 @@ classification, without exception contents. Successful collection has
 `collectionComplete: true`; this does not imply ordinary closure or release
 readiness. Twenty-five bounded fixture/CLI tests pass, including malformed-PE
 failed-evidence retention and .drv resolution.
+
+Run 39315174646 at 0561148 collected all 96 staged PE images successfully.
+It found no conflicting candidates but refused the package for `libpq.dll`
+(sqldrivers/qsqlpsql.dll) and `mimapi64.dll` (sqldrivers/qsqlmimer.dll).
+Store opens only QSQLITE. Deployment now retains the required qsqlite.dll and
+removes other SQL driver DLLs; graphics and other plugin categories are retained.
+The installed clean-PATH smoke check also requires a valid SQLite database
+header, so removing unused clients cannot hide a broken local storage driver.
+Fresh hosted verification is required before declaring this package closed.

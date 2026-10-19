@@ -5,6 +5,15 @@ New-Item -ItemType Directory -Force $Stage | Out-Null
 Copy-Item "$Root/build/Release/reword.exe" $Stage
 windeployqt --release --no-translations --qmldir "$Root/qml" "$Stage/reword.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Qt deployment failed' }
+# Store explicitly uses QSQLITE. Do not ship unused database clients whose
+# external runtimes are not part of Reword (PostgreSQL, Mimer, ODBC).
+$SqlDrivers = Join-Path $Stage 'sqldrivers'
+if (-not (Test-Path -LiteralPath "$SqlDrivers/qsqlite.dll" -PathType Leaf)) {
+    throw 'The required bundled SQLite driver is missing'
+}
+Get-ChildItem -LiteralPath $SqlDrivers -File -Filter '*.dll' |
+    Where-Object { $_.Name -ne 'qsqlite.dll' } |
+    Remove-Item -Force
 Copy-Item "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/bin/*hunspell*.dll" $Stage
 New-Item -ItemType Directory -Force "$Stage/dictionaries" | Out-Null
 Copy-Item "$Root/assets/dictionaries/*" "$Stage/dictionaries"
