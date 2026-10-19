@@ -45,6 +45,19 @@ try {
     $env:QT_QUICK_BACKEND = 'software'
     $env:REWORD_DATA_DIR = Join-Path $Temporary 'Synthetic Data'
     Invoke-Checked "$Installed/reword.exe" '--smoke-test'
+    $Database = Join-Path $env:REWORD_DATA_DIR 'reword.sqlite'
+    if (-not (Test-Path -LiteralPath $Database -PathType Leaf)) {
+        throw 'The installed application did not initialize its local database.'
+    }
+    $Stream = [IO.File]::OpenRead($Database)
+    try {
+        $Header = New-Object byte[] 16
+        if ($Stream.Read($Header, 0, 16) -ne 16 -or
+            [Text.Encoding]::ASCII.GetString($Header) -ne "SQLite format 3`0") {
+            throw 'The installed application did not create a valid SQLite database.'
+        }
+    }
+    finally { $Stream.Dispose() }
     $AddedFile = Join-Path $Installed 'user-added.txt'
     Set-Content -LiteralPath $AddedFile -Value 'Synthetic file retained by uninstall.'
     Invoke-Checked "$Installed/Uninstall.exe" '/S'
