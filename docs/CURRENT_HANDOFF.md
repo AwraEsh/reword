@@ -609,3 +609,18 @@ pending. It still checks metadata/policy and erases Undo at unsafe boundaries.
 Compilation of the helper/application completed before the second freeze, but
 the full build and post-fix tests did not. Final verification is moving to CI;
 the follow-up remains unaccepted pending those results and review.
+
+Runtime source bd3d25d passes Linux and Windows in hosted push run 39309952986,
+including the new native regressions and metadata security cases. The separate
+PR run 39309999956 passes Windows but fails Linux before native tests begin:
+Openbox does not publish its readiness property within the runner's five-second
+startup budget. This is retained as a failed run, not overwritten by the green
+push. The runner now allows 15 seconds for window-manager initialization, bounds
+each readiness command to one second and emits only bounded Xvfb/Openbox startup
+logs if it still times out. No app/fixture has started at that point. The reason
+for the original slow/missing readiness is unproven; fresh CI must verify this
+infrastructure adjustment. Word-latency limits are unchanged.
+
+The user authorized continued unattended work and shutdown once work is finished.
+Preserve the local-heavy-work suspension after the hard freezes. Do not shut down
+while owned work is live or treat incomplete release/installation gates as done.

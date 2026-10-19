@@ -125,15 +125,25 @@ def main():
                               '<focus><focusNew>yes</focusNew></focus><keyboard/><mouse/>'
                               '</openbox_config>')
             wm = spawn([manager, "--sm-disable", "--config-file", str(config)], "openbox")
-            deadline = time.monotonic() + 5
+            deadline = time.monotonic() + 15
             while True:
                 if wm.poll() is not None:
                     raise RuntimeError("Private window manager exited during startup.")
-                check = subprocess.run(["xprop", "-root", "_NET_SUPPORTING_WM_CHECK"], env=env,
-                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-                if check.returncode == 0 and "window id #" in check.stdout:
+                try:
+                    check = subprocess.run(["xprop", "-root", "_NET_SUPPORTING_WM_CHECK"], env=env,
+                                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                           text=True, timeout=1)
+                except subprocess.TimeoutExpired:
+                    check = None
+                if check is not None and check.returncode == 0 and "window id #" in check.stdout:
                     break
                 if time.monotonic() > deadline:
+                    # No application/fixture is running yet. Retain only these
+                    # owned infrastructure logs, never authority/context files.
+                    for name in ("xvfb.log", "openbox.log"):
+                        with (folder / name).open("rb") as stream:
+                            print(name + ": " + stream.read(4096).decode("utf-8", errors="replace"),
+                                  file=sys.stderr, flush=True)
                     raise RuntimeError("Private window manager did not become ready.")
                 time.sleep(.05)
             bus.call_sync("org.a11y.Bus", "/org/a11y/bus", "org.freedesktop.DBus.Properties", "Set",
