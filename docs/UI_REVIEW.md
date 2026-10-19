@@ -140,3 +140,8 @@ History detail capture pass review; final footer CI remains required.
 
 This does not close the populated Applications/Insights/dictionary/replacement
 list, physical desktop scaling/keyboard/tray or full platform acceptance gates.
+
+Final integrated local verification at 116ad51: complete build and all eight
+CTest suites pass in 46.32s, including the process sampler integrated from PR #16.
+The final footer and existing consent/modal checks pass. Final branch CI must
+still confirm this integrated source on both operating systems.
