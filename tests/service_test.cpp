@@ -113,6 +113,20 @@ struct Harness {
 class ServiceTest : public QObject {
     Q_OBJECT
   private slots:
+    void cancelledPassageDoesNotPoisonTheNextOperation() {
+        Harness h;
+        h.adapter->quiet = true;
+        QSignalSpy results(&h.service, &Service::result);
+        h.service.processText(QString("teh ").repeated(12500));
+        h.service.cancel();
+        QTRY_COMPARE_WITH_TIMEOUT(results.size(), 1, 12000);
+        QVERIFY(!results.last()[2].toString().isEmpty());
+        h.service.prepare();
+        h.service.processText("teh");
+        QTRY_COMPARE_WITH_TIMEOUT(results.size(), 2, 12000);
+        QCOMPARE(results.last()[1].toString(), QString("the"));
+        QVERIFY(results.last()[2].toString().isEmpty());
+    }
     void consecutivePassagesUseCurrentPersonalConfiguration() {
         Harness h;
         h.adapter->quiet = true;
