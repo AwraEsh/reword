@@ -40,7 +40,7 @@ def collect_dependencies(stage, inventory, system):
     binaries, by_name = {}, {}
     for name, expected in sorted(inventory.items()):
         path = stage_path(stage, name)
-        if path.suffix.lower() not in {'.dll', '.exe'}:
+        if path.suffix.lower() not in {'.dll', '.drv', '.exe'}:
             continue
         if (not isinstance(expected, dict) or type(expected.get('bytes')) is not int or
                 expected['bytes'] < 0 or not isinstance(expected.get('sha256'), str) or
@@ -58,7 +58,7 @@ def collect_dependencies(stage, inventory, system):
     for index, path in enumerate(system.iterdir()):
         if index >= MAX_FILES:
             raise ValueError('System directory exceeds its file limit')
-        if path.suffix.lower() == '.dll':
+        if path.suffix.lower() in {'.dll', '.drv'}:
             if linked(path) or not path.is_file():
                 raise ValueError('System DLL candidates must be ordinary files')
             system_names.setdefault(path.name.lower(), []).append(path)
@@ -96,6 +96,7 @@ def collect_dependencies(stage, inventory, system):
             dependencies[name] = {'kind': kind, 'candidates': candidates,
                                   'bytes': size, 'sha256': digest}
     return {'schemaVersion': 1, 'scope': 'ordinary-and-delay-import-candidates',
+            'collectionComplete': True,
             'releaseReady': False, 'ordinaryClosureComplete': not missing and not ambiguous,
             'apiSetHostCoverage': 'not-established', 'dynamicLoadingCoverage': 'not-established',
             'targetOsCoverage': 'current-system-directory-only',

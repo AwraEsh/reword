@@ -65,3 +65,10 @@ tests pass in 0.079 s. The real CLI keeps a failed audit report while returning
 nonzero for a missing DLL. Windows CI now runs these tests and retains material
 artifacts even if packaging fails. Actual stage resolution and full CI remain
 pending; fixture success does not establish closure of the real installer.
+
+Review follow-up: missing failed evidence reproduced RED; audit now retains an
+explicit incomplete collection record and nonzero CLI exit. Hosted run 39314256438
+stopped on a rejected import basename. Microsoft's Winspool.drv is a legitimate
+PE import; parser/system-candidate .drv regressions were RED then GREEN. All 25
+tiny tests pass in 0.123 s. No actual closure claim until hosted rerun/artifact
+inspection, and no local build/GUI after the hard freezes.

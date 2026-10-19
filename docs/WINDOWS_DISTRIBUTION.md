@@ -118,3 +118,17 @@ The current-runner system files are evidence for that runner only. Source/notice
 binding and product release readiness remain false. Twenty-two tiny synthetic
 reader/collector/CLI tests pass under a 256 MiB address-space/10-second CPU limit;
 actual staged-file collection and complete hosted CI are still pending.
+
+The first real collection attempt (run 39314256438) failed on a rejected import
+basename. The reader now also accepts safe .drv basenames and checks them against
+the explicit system directory: Windows documents its print spooler as
+[Winspool.drv](https://learn.microsoft.com/en-us/windows/win32/printdocs/openprinter).
+This is a supported PE filename, not permission to search other directories.
+The actual rerun is still needed to identify any remaining package gaps.
+
+Collection failure now retains the trusted materials inventory with
+`collectionComplete: false`, `ordinaryClosureComplete: false` and a fixed failure
+classification, without exception contents. Successful collection has
+`collectionComplete: true`; this does not imply ordinary closure or release
+readiness. Twenty-five bounded fixture/CLI tests pass, including malformed-PE
+failed-evidence retention and .drv resolution.

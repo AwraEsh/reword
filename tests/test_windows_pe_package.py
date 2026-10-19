@@ -77,6 +77,9 @@ class WindowsPETest(unittest.TestCase):
         self.assertEqual(self.parse(pe_fixture())['imports'], [])
         self.assertEqual(self.parse(pe_fixture())['delayImports'], [])
 
+    def test_windows_print_spooler_driver_is_a_valid_import_basename(self):
+        self.assertEqual(self.parse(pe_fixture(['WINSPOOL.DRV']))['imports'], ['winspool.drv'])
+
     def test_bad_signatures_architecture_and_headers_are_rejected(self):
         for position, value, code in [(0, 0, 'H'), (0x3c, 0xffffffff, 'I'),
                                       (0x80, 0, 'I'), (0x84, 0x14c, 'H'),
@@ -203,6 +206,15 @@ class WindowsDependencyTest(unittest.TestCase):
         self.assertFalse(report['ordinaryClosureComplete'])
         self.assertEqual(report['missingImports'], ['missing.dll', 'optional.dll'])
 
+    def test_system_driver_import_is_checked_by_exact_bytes(self):
+        self.write(self.stage, 'reword.exe', ['WINSPOOL.DRV'])
+        self.write(self.system, 'winspool.drv')
+        report = self.collect()
+        self.assertTrue(report['ordinaryClosureComplete'])
+        self.assertEqual(report['dependencies']['winspool.drv']['kind'], 'system')
+        self.assertEqual(report['dependencies']['winspool.drv']['bytes'],
+                         (self.system / 'winspool.drv').stat().st_size)
+
     def test_api_contracts_are_separate_from_resolved_system_files(self):
         self.write(self.stage, 'reword.exe', ['api-ms-win-core-file-l1-1-0.dll'])
         report = self.collect()
@@ -281,10 +293,8 @@ class WindowsDependencyTest(unittest.TestCase):
         self.assertTrue(report['dependencyClosure']['ordinaryClosureComplete'])
         self.assertTrue((output / 'audit.json').is_file())
 
-    def test_real_cli_rejects_missing_import_but_keeps_failed_evidence(self):
-        import json
+    def cli(self):
         import subprocess
-        self.write(self.stage, 'reword.exe', ['missing.dll'])
         vendor = self.root / 'vendor'
         vendor.mkdir()
         output = self.root / 'audit'
@@ -294,10 +304,28 @@ class WindowsDependencyTest(unittest.TestCase):
                                  '--vendor', 'qt=' + str(vendor), '--output', str(output),
                                  '--system-directory', str(self.system)],
                                 capture_output=True, text=True, timeout=5)
+        return result, output
+
+    def test_real_cli_rejects_missing_import_but_keeps_failed_evidence(self):
+        import json
+        self.write(self.stage, 'reword.exe', ['missing.dll'])
+        result, output = self.cli()
         self.assertEqual(result.returncode, 1)
         report = json.loads((output / 'audit.json').read_text())
         self.assertFalse(report['dependencyClosure']['ordinaryClosureComplete'])
         self.assertEqual(report['dependencyClosure']['missingImports'], ['missing.dll'])
+
+    def test_invalid_pe_retains_an_explicit_failed_collection_record(self):
+        import json
+        self.write(self.stage, 'reword.exe')
+        (self.stage / 'broken.dll').write_bytes(b'MZ')
+        result, output = self.cli()
+        self.assertEqual(result.returncode, 1)
+        report = json.loads((output / 'audit.json').read_text())
+        closure = report['dependencyClosure']
+        self.assertFalse(closure['ordinaryClosureComplete'])
+        self.assertFalse(closure['collectionComplete'])
+        self.assertEqual(closure['failure'], 'invalid-or-unavailable-pe-metadata')
 
 
 if __name__ == '__main__':

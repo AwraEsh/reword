@@ -132,7 +132,19 @@ def audit(stage, application, vendors, output, system=None):
     }
     if system is not None:
         from package_windows_dependencies import collect_dependencies
-        report['dependencyClosure'] = collect_dependencies(stage, staged, system)
+        try:
+            report['dependencyClosure'] = collect_dependencies(stage, staged, system)
+        except (OSError, ValueError):
+            # Preserve the trusted materials inventory even if PE collection fails.
+            # A fixed classification avoids retaining paths or exception contents.
+            report['dependencyClosure'] = {
+                'schemaVersion': 1,
+                'scope': 'ordinary-and-delay-import-candidates',
+                'releaseReady': False,
+                'ordinaryClosureComplete': False,
+                'collectionComplete': False,
+                'failure': 'invalid-or-unavailable-pe-metadata',
+            }
     # Gather/validate before claiming an output directory. Never replace an older audit.
     output.mkdir(parents=False, exist_ok=False)
     try:

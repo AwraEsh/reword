@@ -83,7 +83,8 @@ def parse_imports(data):
                     decoded = name.decode('ascii')
                 except UnicodeError:
                     raise ValueError('Imported DLL name is not ASCII') from None
-                if not re.fullmatch(r'[a-zA-Z0-9_+.-]+\.dll', decoded, re.IGNORECASE):
+                # Windows' print spooler is an ordinary imported PE named .drv.
+                if not re.fullmatch(r'[a-zA-Z0-9_+.-]+\.(?:dll|drv)', decoded, re.IGNORECASE):
                     raise ValueError('Imported DLL name is not a safe basename')
                 return decoded.lower()
             name.append(value)
