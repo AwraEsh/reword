@@ -125,11 +125,14 @@ jobs:
           path: |
             build/ui-test-results.xml
             build/Testing/Temporary/LastTest.log
+      - name: Windows dependency metadata tests
+        run: python -m unittest discover -s tests -p test_windows_pe_package.py -v
       - name: Bundle and create installer
         shell: pwsh
         run: |
           ./scripts/package-windows.ps1
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: Reword-Windows-Materials-Audit
           path: dist/windows-materials

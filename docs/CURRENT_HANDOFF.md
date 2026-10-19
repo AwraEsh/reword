@@ -624,3 +624,35 @@ infrastructure adjustment. Word-latency limits are unchanged.
 The user authorized continued unattended work and shutdown once work is finished.
 Preserve the local-heavy-work suspension after the hard freezes. Do not shut down
 while owned work is live or treat incomplete release/installation gates as done.
+
+## Hosted native acceptance and Windows dependency evidence — 2026-10-19
+
+PR18 merged as ffd6143857693d3f718c33fc0e9e7097c0dc0f3b. Final source
+a29db456c7e08064048eee176d0170f86f73c6eb passed Linux and Windows in hosted
+runs 39311726138 and 39311733695. The latter log confirms three complete owned
+native shortcut cycles, including held Undo and overlapping shortcut releases.
+This resolves the pending CI gate above, not the packaged active soak/current
+host latency, ordinary Windows desktop, release or installation gates.
+
+The Windows PE dependency branch's first real run 39314256438 passed the
+application tests but failed bundling on an imported name rejected by the reader.
+No installer was produced. The reader originally accepted only .dll; Windows'
+documented print spooler is WINSPOOL.DRV. Two new synthetic regressions establish
+safe .drv parsing and explicit-system byte matching; actual rerun must determine
+whether this resolves the real input failure. No dependency check is bypassed.
+
+Independent review also found that PE collection errors prevented retaining the
+otherwise trusted materials inventory. A CLI regression reproduced the missing
+report; collection errors now produce an explicit incomplete failure record and
+still stop packaging. All 25 PE fixture/CLI tests pass in 0.123 seconds under the
+256 MiB/10 CPU-second limit. Local builds/GUI remain suspended; fresh hosted CI
+and review are required for these follow-ups.
+
+Run 39315174646 at 0561148: Linux passes; Windows tests pass but packaging
+correctly fails the new dependency gate. Downloaded its retained audit to
+.deps/windows-pe-ci-0561148. Collection completed for96 staged PE files, with
+no ambiguous imports; missing libpq.dll and mimapi64.dll come solely from unused
+PostgreSQL/Mimer Qt SQL plugins. Store explicitly opens QSQLITE. The follow-up
+retains qsqlite.dll and removes other SQL driver DLLs, leaving graphics intact.
+Installed smoke acceptance now requires the synthetic SQLite database/header
+after native clean-PATH launch. This follow-up needs fresh Windows CI.

@@ -95,3 +95,49 @@ report separately states that runtime notice coverage is not established.
 The current vcpkg checkout is e456309491fd875487bf02b8a0dca76c1b1b00cc;
 its installed inventory includes Hunspell 1.7.5 and libiconv 1.19, but only the
 Hunspell DLL is copied from that tree. Imported-DLL closure still needs inspection.
+
+## Bounded import dependency collection
+
+The PE evidence work adds a read-only AMD64 PE32+ parser for ordinary and delayed
+DLL imports. It bounds files to 128 MiB, sections to 96, descriptors to 2,048 per
+table and DLL names to 260 bytes; malformed/truncated or ambiguous mappings fail
+instead of becoming empty dependency lists. The implementation follows the
+[Microsoft PE format](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format).
+
+The packager requests collection against only its stage and the runner's explicit
+Windows System32 directory. Parsed bytes must match the existing stage inventory.
+The report maps DLL basenames to relative staged/system candidates and hashes;
+different bytes under the same imported basename are ambiguous. Missing ordinary
+or delayed DLL files return a failing audit exit status and stop installer
+creation, while retaining `audit.json` for diagnosis.
+
+API-set contracts are listed separately, without claiming host resolution.
+Runtime LoadLibrary calls, exported-symbol availability, DLL search-order details
+and Windows 10/11 minimum-OS compatibility are not established by file presence.
+The current-runner system files are evidence for that runner only. Source/notice
+binding and product release readiness remain false. Twenty-two tiny synthetic
+reader/collector/CLI tests pass under a 256 MiB address-space/10-second CPU limit;
+actual staged-file collection and complete hosted CI are still pending.
+
+The first real collection attempt (run 39314256438) failed on a rejected import
+basename. The reader now also accepts safe .drv basenames and checks them against
+the explicit system directory: Windows documents its print spooler as
+[Winspool.drv](https://learn.microsoft.com/en-us/windows/win32/printdocs/openprinter).
+This is a supported PE filename, not permission to search other directories.
+The actual rerun is still needed to identify any remaining package gaps.
+
+Collection failure now retains the trusted materials inventory with
+`collectionComplete: false`, `ordinaryClosureComplete: false` and a fixed failure
+classification, without exception contents. Successful collection has
+`collectionComplete: true`; this does not imply ordinary closure or release
+readiness. Twenty-five bounded fixture/CLI tests pass, including malformed-PE
+failed-evidence retention and .drv resolution.
+
+Run 39315174646 at 0561148 collected all 96 staged PE images successfully.
+It found no conflicting candidates but refused the package for `libpq.dll`
+(sqldrivers/qsqlpsql.dll) and `mimapi64.dll` (sqldrivers/qsqlmimer.dll).
+Store opens only QSQLITE. Deployment now retains the required qsqlite.dll and
+removes other SQL driver DLLs; graphics and other plugin categories are retained.
+The installed clean-PATH smoke check also requires a valid SQLite database
+header, so removing unused clients cannot hide a broken local storage driver.
+Fresh hosted verification is required before declaring this package closed.
