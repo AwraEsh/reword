@@ -3,11 +3,18 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      active_seconds:
+        description: 'Packaged Linux active workload duration (0 skips it)'
+        type: choice
+        options: ['0', '120', '600', '7200']
+        default: '0'
 permissions:
   contents: read
 jobs:
   linux:
     runs-on: ubuntu-24.04
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - name: Install build tools
@@ -46,6 +53,21 @@ jobs:
           REWORD_DATA_DIR: /tmp/reword-smoke
       - name: Controlled native GTK probes
         run: python3 scripts/test-native-linux.py
+      - name: Stage packaged application for active workload
+        if: github.event_name == 'workflow_dispatch' && inputs.active_seconds != '0'
+        run: python3 scripts/package-linux.py
+      - name: Packaged active workload (hosted Ubuntu evidence)
+        if: github.event_name == 'workflow_dispatch' && inputs.active_seconds != '0'
+        env:
+          ACTIVE_SECONDS: ${{ inputs.active_seconds }}
+        run: |
+          python3 scripts/test-native-linux.py --active-app "$PWD/dist/Reword.AppDir/AppRun" --active-seconds "$ACTIVE_SECONDS" --active-output "$PWD/dist/active-workload"
+      - uses: actions/upload-artifact@v4
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.active_seconds != '0'
+        with:
+          name: Reword-Hosted-Active-Workload
+          path: dist/active-workload
+          if-no-files-found: error
   windows:
     runs-on: windows-2022
     steps:
