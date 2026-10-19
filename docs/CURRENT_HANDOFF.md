@@ -684,3 +684,21 @@ paths do not uniformly clear Undo/retry payloads. Review temporary-buffer reset
 ownership and add meaningful regression coverage; this is an identified open
 privacy requirement, not a claim that password text was observed or persisted.
 All local builds/GUI/heavy tests remain suspended after the hard freezes.
+
+The actual packaged run 39316879658 at 56138e6 fails the resource budget after
+65.418 s, not the requested 120 s: sustained app CPU 15.90% of one core after
+30.13 s, helper 2.51%, zero swap, app max RSS 116424 KiB and private growth 176 KiB.
+Normal cleanup completed without forced shutdown. Word 23 samples: p50 upper
+bound 16.1 ms, p95 upper bound 22.3 ms, max 25.261 ms. It completed 110 initial
+history insertions and 10 full cycles, but never reached final selection-limit
+checks. This is failed evidence, not an accepted short run or soak.
+Binary SHA256 0e24b92b94ab149355d256dcae7a88d9c972a33739ae55cb7b0a714be6604206;
+helper 0fac4152b1dae0ab03a1bab1e96a38ce035b094fceb1f090afb6877362ed58bd.
+Report: .deps/hosted-active-56138e6/active-workload/report.json.
+
+Service constructs and destroys a Hunspell-backed Engine on every selected-text
+job. Before changing production code, explicit performance-probe mode compares
+ten fresh-engine passages with ten passages on one engine, collecting CPU/wall
+totals and exact synthetic correctness. Hosted run 39318112831 at 019591a is
+pending. Treat initialization cost as a hypothesis until its measurements arrive;
+keep the CPU and latency budgets unchanged. No long soak started.

@@ -1,5 +1,6 @@
 """Synthetic protocol and acceptance checks for the owned GUI workload."""
 import base64
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -7,19 +8,47 @@ import sys
 import signal
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from active_stability import Evidence, FixtureProtocol, WorkloadFailure, write_report
 
 
 class ActiveStabilityTest(unittest.TestCase):
+    def test_history_read_closes_connection_on_success_and_policy_failure(self):
+        import sqlite3
+        from active_history import HistoryCheck
+        real_connect = sqlite3.connect
+        opened = []
+        def connect(*args, **kwargs):
+            connection = real_connect(*args, **kwargs)
+            opened.append(connection)
+            return connection
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / 'synthetic.sqlite'
+            with closing(real_connect(database)) as connection, connection:
+                connection.execute('CREATE TABLE history(id INTEGER, original TEXT, corrected TEXT, bytes INTEGER)')
+                connection.execute('CREATE TABLE statistics(id INTEGER)')
+            check = HistoryCheck(database, Evidence())
+            with patch('active_history.sqlite3.connect', side_effect=connect):
+                self.assertEqual(check.count(), 0)
+            with self.assertRaises(sqlite3.ProgrammingError):
+                opened[-1].execute('SELECT 1')
+            with closing(real_connect(database)) as connection, connection:
+                connection.execute('INSERT INTO statistics VALUES(1)')
+            with patch('active_history.sqlite3.connect', side_effect=connect):
+                with self.assertRaises(WorkloadFailure):
+                    check.count()
+            with self.assertRaises(sqlite3.ProgrammingError):
+                opened[-1].execute('SELECT 1')
+
     def test_private_database_allows_fixture_and_denies_workload_gui(self):
         import sqlite3
         from active_stability import seed_database
         with tempfile.TemporaryDirectory() as directory:
             database = seed_database(Path(directory) / 'data', Path('/synthetic/fixture'),
                                      Path('/synthetic/reword'))
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection, connection:
                 rows = dict(connection.execute('SELECT id,decision FROM applications'))
             self.assertEqual(rows, {'/synthetic/fixture': 'allow', '/synthetic/reword': 'deny'})
 
@@ -215,6 +244,7 @@ class ActiveStabilityTest(unittest.TestCase):
             watches['helper'] = ProcessWatch(processes[1].pid, 'helper')
             result = cleanup_owned(processes[0], processes[2], watches, desktop, grace=.05)
             self.assertTrue(result['forced'])
+            self.assertEqual(result['forcedProcesses'], ['app', 'fixture', 'helper'])
             self.assertFalse(result['failed'])
             self.assertTrue(desktop.closed)
             self.assertIsNotNone(processes[0].returncode)
@@ -253,7 +283,7 @@ class ActiveStabilityTest(unittest.TestCase):
         from active_history import HistoryCheck
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / 'history.sqlite'
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection, connection:
                 connection.execute('CREATE TABLE history(id INTEGER PRIMARY KEY, original TEXT, corrected TEXT, bytes INTEGER)')
                 connection.execute('CREATE TABLE statistics(id INTEGER)')
                 connection.executemany('INSERT INTO history VALUES(?,?,?,?)',
@@ -261,12 +291,12 @@ class ActiveStabilityTest(unittest.TestCase):
             check = HistoryCheck(database, Evidence())
             self.assertEqual(check.latest_id(), 100)
             self.assertFalse(check.inserted_after(100, 'before', 'after'))
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection, connection:
                 connection.execute('DELETE FROM history WHERE id=1')
                 connection.execute('INSERT INTO history VALUES(101,?,?,11)', ('before', 'wrong'))
             with self.assertRaises(WorkloadFailure):
                 check.inserted_after(100, 'before', 'after')
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection, connection:
                 connection.execute('UPDATE history SET corrected=? WHERE id=101', ('after',))
             self.assertTrue(HistoryCheck(database, Evidence()).inserted_after(100, 'before', 'after'))
             self.assertEqual(check.count(), 100)

@@ -13,6 +13,7 @@ import signal
 import sqlite3
 import subprocess
 import time
+from contextlib import closing
 
 from active_desktop import OwnedDesktop
 from active_fixture import FixtureClient
@@ -32,7 +33,7 @@ def sha256(path):
 def seed_database(directory, fixture, executable):
     directory.mkdir(mode=0o700)
     database = directory / 'reword.sqlite'
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute('CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)')
         connection.execute('CREATE TABLE applications(id TEXT PRIMARY KEY,name TEXT NOT NULL,'
                            'decision TEXT NOT NULL DEFAULT \'unknown\',remind TEXT)')
@@ -119,7 +120,7 @@ def run_owned(args):
             time.sleep(.01)
 
     def setting(key):
-        with sqlite3.connect(f'file:{database}?mode=ro', uri=True, timeout=.5) as connection:
+        with closing(sqlite3.connect(f'file:{database}?mode=ro', uri=True, timeout=.5)) as connection:
             row = connection.execute('SELECT value FROM settings WHERE key=?', (key,)).fetchone()
             return json.loads(row[0])[0] if row else None
 
@@ -284,6 +285,7 @@ def run_owned(args):
         try:
             result = cleanup_owned(fixture, app, watches, desktop)
             metadata['shutdownForced'] = result['forced']
+            metadata['forcedProcesses'] = result['forcedProcesses']
             metadata['cleanupFailed'] = result['failed']
             if (result['forced'] or result['failed']) and evidence.state == 'passed':
                 evidence.fail('shutdown-forced')
