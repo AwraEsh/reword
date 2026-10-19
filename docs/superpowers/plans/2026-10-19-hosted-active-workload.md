@@ -65,3 +65,18 @@ archive was inspected without installation/execution: it owns QtQml/qmldir,
 libqmlplugin.so and imports QtQml.Models/WorkerScript. Add those missing module
 packages plus QtQuick.Shapes (unresolved in the actual scan). Keep the existing
 path/formal-identity validation. No local SDK/compiler/GUI was executed.
+
+Run 39316879658 at 56138e6 successfully stages the real AppDir and executes the
+workload. It fails the unchanged resource budget: app15.90% of one core after
+30.13 sustained seconds, helper2.51%, zero swap, normal cleanup. Word23samples
+p95 upper bound22.3ms/max25.261ms. It completed110 initial history edits and10
+full cycles before resource rejection, not the requested120seconds or final
+oversized-selection checks. No long soak is authorized by this failed baseline.
+
+Before optimization, add an explicit diagnostic mode to the existing performance
+probe: compare10 fresh Engine construction+short passage+destruction operations
+with10 short passages on one Engine, retaining CPU and wall totals and exact
+synthetic correctness only. Service currently constructs a new Hunspell-backed
+Engine for every selected correction. This is a hypothesis until measured.
+Run the diagnostic only on hosted manual executions; do not change production
+code or resource/latency budgets based on this hypothesis alone.

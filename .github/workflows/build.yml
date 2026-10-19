@@ -57,6 +57,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.active_seconds != '0'
         run: |
           mkdir -p dist
+          ./build/reword_performance_probe --passage-startup-profile > dist/passage-startup-profile.json
           /usr/lib/qt6/libexec/qmlimportscanner -rootPath "$PWD/qml" -importPath /usr/lib/x86_64-linux-gnu/qt6/qml > dist/qml-import-scan.json
           python3 scripts/package-linux.py
       - name: Packaged active workload (hosted Ubuntu evidence)
@@ -72,6 +73,7 @@ jobs:
           path: |
             dist/active-workload
             dist/qml-import-scan.json
+            dist/passage-startup-profile.json
             dist/Reword.AppDir/usr/share/reword/runtime-manifest.json
           if-no-files-found: error
   windows:
