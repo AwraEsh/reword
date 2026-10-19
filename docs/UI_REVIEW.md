@@ -125,3 +125,18 @@ lib/fonts path. The Windows workflow now points QT_QPA_FONTDIR at the runner's
 installed Windows Fonts directory after checking Segoe UI exists. This changes
 the offscreen test environment; no fonts are copied into the app or artifacts.
 Fresh Windows CI and actual images must confirm this repair.
+
+## Verified font repair and final footer adjustment
+
+At 83ca324 both Linux/Windows runs 39155786400 and 39155790704 pass. The actual
+artifacts were downloaded: Windows Overview and mixed-text History detail were
+inspected at full size, and both OS ten-dialog contact sheets were reviewed.
+English/Persian glyphs now render correctly; long permission titles wrap and
+all three actions remain visible. This supersedes the missing-font evidence.
+The older Qt light dialogs still inherited a dark footer surface; the shared
+DialogButtonBox now binds its background to the selected surface. Its standard
+Qt footer/button behavior is retained. Local modal/No checks and a regenerated
+History detail capture pass review; final footer CI remains required.
+
+This does not close the populated Applications/Insights/dictionary/replacement
+list, physical desktop scaling/keyboard/tray or full platform acceptance gates.

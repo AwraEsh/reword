@@ -64,6 +64,10 @@ ApplicationWindow {
             color: root.ink
             background: Rectangle { color: root.surface }
         }
+        footer: DialogButtonBox {
+            visible: count > 0
+            background: Rectangle { color: root.surface }
+        }
         onVisibleChanged: if (!visible) Qt.callLater(root.presentPendingConsent)
         palette.window: root.surface
         palette.windowText: root.ink
