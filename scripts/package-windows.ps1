@@ -17,7 +17,7 @@ Copy-Item "$($Crt.FullName)/*.dll" $Stage
 # Keep material evidence outside the installer stage until source/notice mapping is complete.
 $QtRoot = Split-Path -Parent (Split-Path -Parent (Get-Command windeployqt).Source)
 $Materials = Join-Path $Root 'dist/windows-materials'
-python "$PSScriptRoot/package_windows_audit.py" --stage $Stage --application "$Root/build/Release/reword.exe" --vendor "qt=$QtRoot" --vendor "vcpkg=$env:VCPKG_INSTALLATION_ROOT/installed" --vendor "vc-runtime=$($Crt.FullName)" --output $Materials
+python "$PSScriptRoot/package_windows_audit.py" --stage $Stage --application "$Root/build/Release/reword.exe" --vendor "qt=$QtRoot" --vendor "vcpkg=$env:VCPKG_INSTALLATION_ROOT/installed" --vendor "vc-runtime=$($Crt.FullName)" --system-directory "$env:WINDIR/System32" --output $Materials
 if ($LASTEXITCODE -ne 0) { throw 'Windows material audit failed' }
 $QtVersion = & "$QtRoot/bin/qmake.exe" -query QT_VERSION
 if ($LASTEXITCODE -ne 0) { throw 'Qt SDK version query failed' }

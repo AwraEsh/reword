@@ -95,3 +95,26 @@ report separately states that runtime notice coverage is not established.
 The current vcpkg checkout is e456309491fd875487bf02b8a0dca76c1b1b00cc;
 its installed inventory includes Hunspell 1.7.5 and libiconv 1.19, but only the
 Hunspell DLL is copied from that tree. Imported-DLL closure still needs inspection.
+
+## Bounded import dependency collection
+
+The PE evidence work adds a read-only AMD64 PE32+ parser for ordinary and delayed
+DLL imports. It bounds files to 128 MiB, sections to 96, descriptors to 2,048 per
+table and DLL names to 260 bytes; malformed/truncated or ambiguous mappings fail
+instead of becoming empty dependency lists. The implementation follows the
+[Microsoft PE format](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format).
+
+The packager requests collection against only its stage and the runner's explicit
+Windows System32 directory. Parsed bytes must match the existing stage inventory.
+The report maps DLL basenames to relative staged/system candidates and hashes;
+different bytes under the same imported basename are ambiguous. Missing ordinary
+or delayed DLL files return a failing audit exit status and stop installer
+creation, while retaining `audit.json` for diagnosis.
+
+API-set contracts are listed separately, without claiming host resolution.
+Runtime LoadLibrary calls, exported-symbol availability, DLL search-order details
+and Windows 10/11 minimum-OS compatibility are not established by file presence.
+The current-runner system files are evidence for that runner only. Source/notice
+binding and product release readiness remain false. Twenty-two tiny synthetic
+reader/collector/CLI tests pass under a 256 MiB address-space/10-second CPU limit;
+actual staged-file collection and complete hosted CI are still pending.

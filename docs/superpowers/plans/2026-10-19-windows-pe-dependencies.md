@@ -41,9 +41,9 @@ Interface: parse_imports(data: bytes) -> {machine, imports, delayImports}; inspe
 Files: scripts/package_windows_dependencies.py; scripts/package_windows_audit.py; scripts/package-windows.ps1; tests/test_windows_pe_package.py.
 Interface: collect_dependencies(stage: Path, inventory: dict, system: Path) -> portable dependency report. Audit's optional system-directory argument enables strict ordinary closure collection.
 
-- [ ] Observe RED for staged/system matches, missing DLL, differing duplicate basename, missing delay import, API-set separation, binary mutation and linked input rejection.
-- [ ] Implement exact-byte records and resolution using only stage and explicit system directory; include unresolved/ambiguous imports and coverage limits.
-- [ ] Enable it in the real Windows packager; unresolved ordinary imports stop installer creation. Keep source/notice and product release readiness false.
+- [x] Observe RED for staged/system matches, missing DLL, differing duplicate basename, missing delay import, API-set separation, binary mutation and linked input rejection.
+- [x] Implement exact-byte records and resolution using only stage and explicit system directory; include unresolved/ambiguous imports and coverage limits.
+- [x] Enable it in the real Windows packager; unresolved ordinary imports stop installer creation. Keep source/notice and product release readiness false.
 - [ ] Obtain hosted full suite and actual Windows artifact, inspect the DLL map and any failures; resolve actual defects rather than weaken missing-dependency checks.
 
 ### Task 3: Review and integration evidence
@@ -58,3 +58,10 @@ Task 1 evidence: missing parser was RED; all ten reader tests now pass in
 0.021 s under `prlimit --as=268435456 --cpu=10` and low scheduling priority.
 Only small non-executable fixtures are parsed; no local build/GUI is started.
 The full suite and actual vendor PE parsing still require hosted CI.
+
+Task 2 working evidence: missing collector and optional audit argument/CLI were
+observed RED, as were malformed saved hash records. All 22 bounded fixture/CLI
+tests pass in 0.079 s. The real CLI keeps a failed audit report while returning
+nonzero for a missing DLL. Windows CI now runs these tests and retains material
+artifacts even if packaging fails. Actual stage resolution and full CI remain
+pending; fixture success does not establish closure of the real installer.

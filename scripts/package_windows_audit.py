@@ -72,7 +72,7 @@ def metadata(path):
             (name.startswith('qt_lib_') and name.endswith('.pri')))
 
 
-def audit(stage, application, vendors, output):
+def audit(stage, application, vendors, output, system=None):
     stage, application, output = map(Path, (stage, application, output))
     if output.exists() or output.is_symlink():
         raise ValueError('Audit output already exists')
@@ -130,6 +130,9 @@ def audit(stage, application, vendors, output):
         'vendorNotices': notices,
         'vendorBuildMetadata': build_metadata,
     }
+    if system is not None:
+        from package_windows_dependencies import collect_dependencies
+        report['dependencyClosure'] = collect_dependencies(stage, staged, system)
     # Gather/validate before claiming an output directory. Never replace an older audit.
     output.mkdir(parents=False, exist_ok=False)
     try:
@@ -158,6 +161,8 @@ def main():
     parser.add_argument('--application', type=Path, required=True)
     parser.add_argument('--vendor', action='append', required=True, metavar='NAME=PATH')
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--system-directory', type=Path,
+                        help='Explicit current Windows system directory for strict ordinary DLL checks')
     args = parser.parse_args()
     vendors = {}
     for value in args.vendor:
@@ -166,12 +171,15 @@ def main():
             parser.error('Each vendor needs a unique NAME=PATH')
         vendors[name] = Path(path)
     try:
-        report = audit(args.stage, args.application, vendors, args.output)
+        report = audit(args.stage, args.application, vendors, args.output, system=args.system_directory)
     except (OSError, ValueError) as error:
         parser.exit(1, 'Windows materials audit failed: ' + str(error) + '\n')
     print(json.dumps({'files': len(report['files']), 'binaries': len(report['binaries']),
                       'unmatchedBinaries': report['unmatchedBinaries'],
                       'missingVendorNotices': report['missingVendorNotices']}))
+    closure = report.get('dependencyClosure')
+    if closure is not None and not closure['ordinaryClosureComplete']:
+        parser.exit(1, 'Windows DLL dependency audit failed; inspect the retained audit.json.\n')
 
 
 if __name__ == '__main__':

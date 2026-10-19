@@ -160,5 +160,145 @@ class WindowsPETest(unittest.TestCase):
                 inspect_pe(path)
 
 
+class WindowsDependencyTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.stage, self.system = self.root / 'stage', self.root / 'system'
+        self.stage.mkdir()
+        self.system.mkdir()
+
+    def write(self, root, name, imports=(), delayed=()):
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(pe_fixture(imports, delayed))
+        return path
+
+    def manifest(self):
+        from package_windows_audit import inventory
+        return {p.relative_to(self.stage).as_posix(): inventory(p)
+                for p in self.stage.rglob('*') if p.is_file()}
+
+    def collect(self, manifest=None):
+        from package_windows_dependencies import collect_dependencies
+        return collect_dependencies(self.stage, self.manifest() if manifest is None else manifest,
+                                    self.system)
+
+    def test_staged_and_explicit_system_dependencies_are_portable(self):
+        self.write(self.stage, 'reword.exe', ['Qt6Core.DLL'])
+        self.write(self.stage, 'Qt6Core.dll', ['kernel32.dll'])
+        self.write(self.system, 'KERNEL32.DLL')
+        report = self.collect()
+        self.assertTrue(report['ordinaryClosureComplete'])
+        self.assertEqual(report['dependencies']['qt6core.dll']['kind'], 'stage')
+        self.assertEqual(report['dependencies']['kernel32.dll']['kind'], 'system')
+        self.assertEqual(report['dependencies']['kernel32.dll']['candidates'], ['KERNEL32.DLL'])
+        self.assertNotIn(str(self.root), repr(report))
+        self.assertFalse(report['releaseReady'])
+
+    def test_missing_ordinary_and_delayed_imports_are_both_reported(self):
+        self.write(self.stage, 'reword.exe', ['missing.dll'], ['optional.dll'])
+        report = self.collect()
+        self.assertFalse(report['ordinaryClosureComplete'])
+        self.assertEqual(report['missingImports'], ['missing.dll', 'optional.dll'])
+
+    def test_api_contracts_are_separate_from_resolved_system_files(self):
+        self.write(self.stage, 'reword.exe', ['api-ms-win-core-file-l1-1-0.dll'])
+        report = self.collect()
+        self.assertEqual(report['apiSetContracts'], ['api-ms-win-core-file-l1-1-0.dll'])
+        self.assertEqual(report['apiSetHostCoverage'], 'not-established')
+        self.assertEqual(report['dynamicLoadingCoverage'], 'not-established')
+        self.assertFalse(report['releaseReady'])
+
+    def test_differing_duplicate_basenames_are_ambiguous(self):
+        self.write(self.stage, 'reword.exe', ['same.dll'])
+        self.write(self.stage, 'a/same.dll')
+        other = self.write(self.stage, 'b/SAME.dll')
+        with other.open('ab') as stream:
+            stream.write(b'different build bytes')
+        report = self.collect()
+        self.assertFalse(report['ordinaryClosureComplete'])
+        self.assertEqual(report['ambiguousImports'], ['same.dll'])
+
+    def test_identical_duplicate_basenames_keep_all_candidates(self):
+        self.write(self.stage, 'reword.exe', ['same.dll'])
+        for name in ['a/same.dll', 'b/SAME.dll']:
+            self.write(self.stage, name)
+        report = self.collect()
+        self.assertTrue(report['ordinaryClosureComplete'])
+        self.assertEqual(report['dependencies']['same.dll']['candidates'], ['a/same.dll', 'b/SAME.dll'])
+
+    def test_changed_binary_invalidates_saved_inventory(self):
+        path = self.write(self.stage, 'reword.exe')
+        manifest = self.manifest()
+        with path.open('ab') as stream:
+            stream.write(b'changed')
+        with self.assertRaises(ValueError):
+            self.collect(manifest)
+
+    def test_manifest_cannot_escape_stage(self):
+        external = self.write(self.root, 'external.dll')
+        from package_windows_audit import inventory
+        with self.assertRaises(ValueError):
+            self.collect({'../external.dll': inventory(external)})
+
+    def test_malformed_saved_hash_record_is_rejected_cleanly(self):
+        self.write(self.stage, 'reword.exe')
+        for record in [{}, None, {'bytes': 2048, 'sha256': 'bad'}]:
+            with self.subTest(record=record), self.assertRaises(ValueError):
+                self.collect({'reword.exe': record})
+
+    def test_linked_system_input_is_rejected(self):
+        external = self.write(self.root, 'external.dll')
+        self.write(self.stage, 'reword.exe', ['kernel32.dll'])
+        try:
+            (self.system / 'kernel32.dll').symlink_to(external)
+        except OSError:
+            self.skipTest('Account cannot create symlinks')
+        with self.assertRaises(ValueError):
+            self.collect()
+
+    def test_nested_link_cannot_escape_the_stage_with_matching_bytes(self):
+        external = self.write(self.root / 'outside', 'external.dll')
+        from package_windows_audit import inventory
+        try:
+            (self.stage / 'nested').symlink_to(external.parent, target_is_directory=True)
+        except OSError:
+            self.skipTest('Account cannot create symlinks')
+        with self.assertRaises(ValueError):
+            self.collect({'nested/external.dll': inventory(external)})
+
+    def test_audit_can_include_exact_dependency_records(self):
+        import package_windows_audit
+        self.write(self.stage, 'reword.exe', ['kernel32.dll'])
+        self.write(self.system, 'kernel32.dll')
+        vendor = self.root / 'vendor'
+        vendor.mkdir()
+        output = self.root / 'audit'
+        report = package_windows_audit.audit(self.stage, self.stage / 'reword.exe',
+                                            {'qt': vendor}, output, system=self.system)
+        self.assertTrue(report['dependencyClosure']['ordinaryClosureComplete'])
+        self.assertTrue((output / 'audit.json').is_file())
+
+    def test_real_cli_rejects_missing_import_but_keeps_failed_evidence(self):
+        import json
+        import subprocess
+        self.write(self.stage, 'reword.exe', ['missing.dll'])
+        vendor = self.root / 'vendor'
+        vendor.mkdir()
+        output = self.root / 'audit'
+        result = subprocess.run([sys.executable,
+                                 str(Path(__file__).resolve().parents[1] / 'scripts/package_windows_audit.py'),
+                                 '--stage', str(self.stage), '--application', str(self.stage / 'reword.exe'),
+                                 '--vendor', 'qt=' + str(vendor), '--output', str(output),
+                                 '--system-directory', str(self.system)],
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 1)
+        report = json.loads((output / 'audit.json').read_text())
+        self.assertFalse(report['dependencyClosure']['ordinaryClosureComplete'])
+        self.assertEqual(report['dependencyClosure']['missingImports'], ['missing.dll'])
+
+
 if __name__ == '__main__':
     unittest.main()
