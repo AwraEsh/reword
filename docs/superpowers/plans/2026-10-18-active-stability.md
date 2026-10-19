@@ -86,3 +86,45 @@ Undo, Pause, selected history and password exclusion. Protected fix emits no
 changes. Independent final review found no blocking issues. All nine final CTest
 suites pass in 35.77s. This is instrumentation acceptance, not a latency or
 packaged-GUI soak result. Tasks 3–4 remain open.
+
+## Task 3 working evidence — resumed 2026-10-19
+
+The user explicitly resumed after the paused checkpoint. Implementation remains
+in the existing managed `codex/active-gui-workload` worktree. No development
+package is installed or published as a product release.
+
+The runner utilities have 17 passing tests under system Python 3.13, including
+actual owned subprocesses, strict bounded framing, pidfd identity/loss detection,
+bounded TERM/KILL cleanup, cancellation, atomic reports and exact history pairs.
+New missing-cleanup/history/consent cases were observed RED before implementation.
+Full CTest initially failed two pidfd cases because cached CMake selected a local
+Python 3.11 build without pidfd APIs. System Python has both APIs; the harness
+still fails closed if they are missing. Tests explicitly skip those two actual
+pidfd cases on unsupported Python builds; acceptance runs require these APIs.
+
+Short integration baselines 01–04 are failed evidence, never accepted soaks:
+01 native mismatch/p95 56.7 ms (four samples); 02 first live timeout; 03 history
+burst CPU budget; 04 Pause mismatch. Baseline 04 overlapped build/test work and
+its latency is not an uncontended performance result. The GUI self-consent race
+was addressed by seeding an explicit denial for the workload GUI only; the
+synthetic fixture remains explicitly allowed. Hidden Qt menu/tooltip windows
+were being closed instead of the normal application window; filtering the
+normal window removed forced shutdown in baseline 04. Pause had no pipe/input
+barrier: GTK could process its clear after XTest typing. A snapshot acknowledgment
+now precedes typing. These changes need the next controlled integration rerun.
+
+Ruling: retain the 110-edit history burst as separate resource evidence and
+start sustained CPU/growth accounting after it. The burst drives corrections as
+fast as they complete, unlike the paced live workload. Its high CPU remains
+reported in `historyBurstResources`, not erased; absolute RSS and swap limits
+apply throughout. Sustained CPU remains limited to 10% of one core after 30s,
+private growth to 64 MiB, app/helper RSS to 512/256 MiB, swap to zero. Process
+identity stays pinned across phase baselines. Cost if wrong: optimistic sustained
+metrics; the retained burst evidence and final workload review must expose that.
+
+History insertion now needs a newer record ID plus exact original/result pair,
+even at the 100-record cap. Oversize acceptance requires a known correctable
+49,998-character control (50,000 after correction), followed by its 50,001-
+character counterpart with the same correctable prefix. Successful role samples
+are counted only after collection; final acceptance forces fresh role samples
+and cancellation checks. Task 3 remains open pending integration and review.

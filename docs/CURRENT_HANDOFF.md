@@ -494,3 +494,91 @@ captures were downloaded and inspected; the footer repair is confirmed. Local
 integrated eight-suite verification passes in46.32s. The fixture/timing branch
 is incorporating that UI source; its final integrated checks are next. Windows
 normal desktop and the other product release gates remain open.
+## Paused checkpoint — 2026-10-19
+
+The user requested stopping as soon as the current tests or a reasonable stage
+finished. Work is paused; do not resume development, release or installation
+until explicitly requested. Uncommitted Task 3 work is preserved on
+`codex/active-gui-workload` in the managed keyboard-review worktree.
+
+The first short packaged-GUI workload failed (`.deps/active-baseline-01/report.json`):
+native-text-mismatch, forced shutdown, four word-boundary latency samples with
+p95 upper bound 56.7 ms. It is not a passing stability result. The app averaged
+105.18% of one CPU over the reported 19.13-second resource window; investigate
+that observation before any sustained-run acceptance claim.
+
+The cleanup review finding is addressed in the working tree: owned fixture/app
+shutdown now escalates TERM to KILL with bounded waits, helper cleanup uses its
+pinned pidfd with bounded exit observation, and individual cleanup failures do
+not skip the remaining resources. Signal-handler restoration is protected even
+if report publication fails. Cancellation during cleanup invalidates success.
+New tests use real owned subprocesses ignoring SIGTERM. The missing-cleanup
+tests were observed RED (`.deps/active-cleanup-red.log`); all 15 active-stability
+unit tests now pass (0.389 s). This is targeted evidence only: no full CTest,
+fresh desktop rerun or independent follow-up review has been performed after
+this cleanup change. No commit, push, release or installation was made here.
+
+Task 3 remains incomplete. Before acceptance: strengthen oversized-selection
+evidence with a correctable typo and below-limit counterpart; confirm each
+history insertion by advancing ID and exact original/result pair; count actual
+successful role samples; force final process/cancellation checks; diagnose the
+native-text mismatch, CPU observation, latency and forced app shutdown; rerun
+the owned packaged workload and full suite, then obtain follow-up review.
+The final multi-hour workload and all remaining release gates remain open.
+
+## Resumed active-workload verification — 2026-10-19
+
+The user explicitly resumed. The paused checkpoint above is historical.
+All ten CTest suites pass under system Python 3.13 (65.52 s); the cached local
+Python 3.11 build lacked pidfd APIs and initially failed two cases. Acceptance
+runs require these APIs. All 17 dedicated workload tests pass, independently
+repeated by review. The harness review found no new blocking defect; verifying
+the running GUI executable after launcher exec was suggested as extra hardening.
+The inspected generated AppRun currently execs the exact hashed packaged binary.
+
+Baseline 07 completes every functional scenario, including the new correctable
+49,998-character control, rejection of 50,001 characters, password and Pause
+exclusion, 113 exact verified history inserts with pruning to 100, live retry
+and Undo. App/helper shutdown is normal, with no cleanup failure. Its six actual
+word-boundary samples have p50 upper bound 46.0 ms and p95 89.2 ms; the report is
+FAILED for latency, not accepted as a stable release. Dense history-burst CPU
+is retained separately; see the active-stability plan for phase budgets/rulings.
+
+The intermittent initial live timeout was addressed by waiting for the GUI's
+normal window to be mapped before starting the fixture. GTK clear commands now
+have an acknowledgment before Pause typing. Baseline 06 was a runner syntax
+error, fixed before 07; it has no acceptance value. The Service's 80 ms poll is
+now changed to 20 ms in the working tree, and a freshly staged development
+package is being measured. The final full suite, native safety rerun, CI, Git
+integration, sustained CPU/latency result and multi-hour final-package run remain
+pending. No product release or installation has occurred.
+
+## System restart and shortcut root cause — 2026-10-19
+
+The user reported a system crash and requested continuation. After restart,
+all changes are present; no Reword/test/build process remains. The accessible
+journal cannot establish the crash cause, so do not attribute it to this project
+or claim the system crash fixed. Use serial, bounded verification; no multi-hour
+run is currently active. The 18-test diagnostic-era unit run passed after restart
+(0.386 s); the temporary notice observer/classifier is now removed, leaving the
+17 workload tests plus the new numeric last-snapshot assertion.
+
+The 20 ms candidate reduced early word samples, but selected actions timed out
+in the dense history workload. A temporary read-only GUI diagnostic on the
+owned desktop returned only the fixed `unsupported-selection` notice code in
+`.deps/active-poll20-04/report.json`. It collected no text into the report.
+The synthetic setup delay did not resolve this issue and is not a proven fix.
+
+A deterministic native regression holds Ctrl+Alt+R for 200 ms, then releases it.
+The baseline fails: the shortcut is acted on during the X11 passive grab, and
+the selection is rejected as unsupported even though focus returns afterward.
+The source fix dispatches after key release and a 20 ms accessibility interval,
+coalesces held-key repeats, bounds pending actions to eight and event processing
+to 64 per poll, and clears pending actions when shortcuts are reconfigured.
+It requires detectable XKB auto-repeat; unsupported registration fails closed.
+The new native regression is GREEN for one complete owned probe cycle; see
+`.deps/shortcut-release-red.log` and `.deps/shortcut-release-green.log`.
+
+Fresh runtime review, complete CTest/native rerun, a newly staged package and
+active latency/resource verification are still required before claiming this
+change accepted. Existing packaged poll20 binaries predate the release fix.

@@ -5,6 +5,7 @@ The lock service is a controlled fixture, not proof of a physical lock screen.
 No host application or display is read or modified.
 """
 import argparse
+import json
 from contextlib import nullcontext
 import os
 from pathlib import Path
@@ -35,7 +36,15 @@ def main():
     parser.add_argument("--directory", help=argparse.SUPPRESS)
     parser.add_argument("--fixture-timing-only", action="store_true",
                         help="Check only the synthetic watchdog/timing protocol")
+    parser.add_argument("--active-app", help="Exercise this packaged AppDir/AppRun in the owned desktop")
+    parser.add_argument("--active-seconds", type=int, default=120)
+    parser.add_argument("--active-output", help="New directory for content-free workload reports")
     args = parser.parse_args()
+    if args.active_app:
+        if args.fixture_timing_only or not args.active_output or not 5 <= args.active_seconds <= 14400:
+            parser.error("Active workload needs a new report directory and 5–14400 seconds.")
+        args.active_app = str(Path(args.active_app).resolve(strict=True))
+        args.active_output = str(Path(args.active_output).resolve())
     if not args.inside:
         # Own the directory outside D-Bus, so activated services have stopped
         # before any private FUSE mount or temporary file is removed.
@@ -47,6 +56,9 @@ def main():
                 ]
                 if args.fixture_timing_only:
                     command.append("--fixture-timing-only")
+                if args.active_app:
+                    command.extend(["--active-app", args.active_app, "--active-seconds",
+                                    str(args.active_seconds), "--active-output", args.active_output])
                 result = subprocess.run(command)
             finally:
                 detach_test_mounts(directory)
@@ -143,6 +155,34 @@ def main():
                             str(ROOT / "build/reword_fixture")], env=env, timeout=25, check=True)
             if args.fixture_timing_only:
                 return 0
+            if args.active_app:
+                from process_metrics import sample_process
+                context = {key: env[key] for key in
+                           ("DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR")}
+                context.update(xServerPid=xserver.pid,
+                               xServerStartTicks=sample_process(xserver.pid)["startTicks"])
+                context_file = folder / "active-context.json"
+                with context_file.open("x", encoding="utf-8") as stream:
+                    json.dump(context, stream)
+                context_file.chmod(0o600)
+                driver = spawn([sys.executable, str(ROOT / "scripts/active_stability.py"),
+                                "--owned-directory", str(folder), "--app", args.active_app,
+                                "--fixture", str(ROOT / "build/reword_fixture"),
+                                "--seconds", str(args.active_seconds),
+                                "--output", args.active_output], "active-workload")
+                try:
+                    result = driver.wait(timeout=args.active_seconds + 1860)
+                except BaseException:
+                    driver.terminate()
+                    try:
+                        driver.wait(timeout=20)
+                    except subprocess.TimeoutExpired:
+                        driver.kill()
+                        driver.wait()
+                    raise
+                print("PASS: active packaged workload." if result == 0 else
+                      "FAIL: active packaged workload; inspect the content-free report.", flush=True)
+                return result
             repeat = int(os.environ.get("REWORD_NATIVE_REPEAT", "3"))
             if not 1 <= repeat <= 100:
                 raise RuntimeError("Native probe repeat count must be between 1 and 100.")
