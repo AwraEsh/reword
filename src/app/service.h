@@ -34,6 +34,8 @@ class Service : public QObject {
     bool wayland_ = false, jobRunning_ = false;
     QFutureWatcher<Change> *job_ = nullptr;
     std::unique_ptr<QLockFile> jobLock_;
+    void resetRetry();
+    void resetObservation();
     void runText(QString input, bool native, Field field = {});
     void tick();
     Field permitted();

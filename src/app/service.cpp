@@ -4,6 +4,20 @@
 #include <QtConcurrent>
 #include <QElapsedTimer>
 namespace reword {
+void Service::resetRetry() {
+    retry_.reset();
+    retryStart_ = -1;
+    retryPrefix_.clear();
+    retryWord_.clear();
+}
+void Service::resetObservation() {
+    previous_ = {};
+    undoAfter_ = {};
+    undoBefore_.clear();
+    undoCaret_ = 0;
+    undoPassage_ = false;
+    resetRetry();
+}
 void Service::start() {
     try {
         store_ = std::make_unique<Store>(directory_);
@@ -29,9 +43,7 @@ void Service::stop() {
     jobLock_.reset();
     if (timer_)
         timer_->stop();
-    previous_ = {};
-    undoAfter_ = {};
-    undoBefore_.clear();
+    resetObservation();
     adapter_.reset();
     passageEngine_.reset();
     engine_.reset();
@@ -129,11 +141,7 @@ void Service::tick() {
             const Access access{store_->allowed(field.app), browserApp(field.app), store_->paused()};
             if (!safe(field, access, store_->options()) || field.id != previous_.id ||
                 field.app != previous_.app) {
-                previous_ = {};
-                undoAfter_ = {};
-                undoBefore_.clear();
-                retry_.reset();
-                retryStart_ = -1;
+                resetObservation();
             }
             return;
         }
@@ -145,24 +153,17 @@ void Service::tick() {
             return;
         auto f = permitted();
         if (f.id.isEmpty()) {
-            previous_ = {};
-            undoAfter_ = {};
-            undoBefore_.clear();
-            retry_.reset();
-            retryStart_ = -1;
+            resetObservation();
             return;
         }
         if (f.id != previous_.id) {
-            undoAfter_ = {};
-            undoBefore_.clear();
-            retry_.reset();
-            retryStart_ = -1;
+            resetObservation();
             previous_ = f;
             return;
         }
         if (f.text == previous_.text) {
             if (f.caret != previous_.caret)
-                retry_.reset();
+                resetRetry();
             previous_ = f;
             return;
         }
@@ -172,8 +173,7 @@ void Service::tick() {
             static const QRegularExpression continued(R"([\s.,!?،؛؟]+[^\s.,!?،؛؟])");
             if (f.caret < retryStart_ || f.text.left(retryStart_) != retryPrefix_ ||
                 continued.match(f.text.mid(retryStart_, f.caret - retryStart_)).hasMatch()) {
-                retry_.reset();
-                retryStart_ = -1;
+                resetRetry();
             }
         }
         if (jobRunning_)
@@ -199,8 +199,7 @@ void Service::tick() {
             auto correct = engine_->word(token, o, f.text.left(start).right(128));
             if (correct == token) {
                 if (retryStart_ == start && token != retryWord_) {
-                    retry_.reset();
-                    retryStart_ = -1;
+                    resetRetry();
                 }
                 continue;
             }
@@ -233,8 +232,7 @@ void Service::tick() {
         }
 
     } catch (...) {
-        previous_ = {};
-        retry_.reset();
+        resetObservation();
         emit state(lastDescription_, shortcutsHealthy_);
         emit message("An integration operation failed safely. No further edit was attempted.");
     }
@@ -402,11 +400,11 @@ void Service::action(QString name) {
             store_->pause(store_->paused() ? 0 : -1);
             if (store_->paused())
                 cancel();
-            previous_ = {};
-            retry_.reset();
+            resetObservation();
             emit message(store_->paused() ? "Reword paused." : "Reword resumed.");
         }
     } catch (...) {
+        resetObservation();
         if (!job_) {
             jobRunning_ = false;
             jobLock_.reset();

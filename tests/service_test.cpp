@@ -1,6 +1,7 @@
 #include "app/service.h"
 #include <QtTest>
 #include <functional>
+#include <stdexcept>
 #include <QSqlQuery>
 #include <QUuid>
 #include <QScopeGuard>
