@@ -49,4 +49,11 @@ test-native-linux.py --active-app dist/Reword.AppDir/AppRun --active-seconds
 
 Execution ruling: the user explicitly authorized unattended progress. Implement
 inline and obtain review; do not reopen routine implementation choices while
-they sleep. Preserve the local-heavy-work suspension and shutdown condition.
+  they sleep. Preserve the local-heavy-work suspension and shutdown condition.
+
+First hosted run 39315576445 at 9aee694 passed the existing Linux tests and all
+three native cycles, then refused staging because a scanner module path/formal
+identity did not match. No active workload began and no soak is accepted.
+Retain the source-only QML scan JSON on the next run to diagnose the actual
+Ubuntu SDK layout before changing any validation. This contains build metadata,
+not application/user text. Runtime reports remain separate when they exist.

@@ -55,7 +55,10 @@ jobs:
         run: python3 scripts/test-native-linux.py
       - name: Stage packaged application for active workload
         if: github.event_name == 'workflow_dispatch' && inputs.active_seconds != '0'
-        run: python3 scripts/package-linux.py
+        run: |
+          mkdir -p dist
+          /usr/lib/qt6/libexec/qmlimportscanner -rootPath "$PWD/qml" -importPath /usr/lib/x86_64-linux-gnu/qt6/qml > dist/qml-import-scan.json
+          python3 scripts/package-linux.py
       - name: Packaged active workload (hosted Ubuntu evidence)
         if: github.event_name == 'workflow_dispatch' && inputs.active_seconds != '0'
         env:
@@ -66,7 +69,10 @@ jobs:
         if: always() && github.event_name == 'workflow_dispatch' && inputs.active_seconds != '0'
         with:
           name: Reword-Hosted-Active-Workload
-          path: dist/active-workload
+          path: |
+            dist/active-workload
+            dist/qml-import-scan.json
+            dist/Reword.AppDir/usr/share/reword/runtime-manifest.json
           if-no-files-found: error
   windows:
     runs-on: windows-2022
