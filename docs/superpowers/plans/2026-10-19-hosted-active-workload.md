@@ -57,3 +57,11 @@ identity did not match. No active workload began and no soak is accepted.
 Retain the source-only QML scan JSON on the next run to diagnose the actual
 Ubuntu SDK layout before changing any validation. This contains build metadata,
 not application/user text. Runtime reports remain separate when they exist.
+
+Run 39316211634 retained the real scan. QtQml resolves to its parent directory
+but has no plugin metadata; the install list contains WorkerScript, not the
+QtQml module package. The official Ubuntu qml6-module-qtqml6.4.2+dfsg-4build3
+archive was inspected without installation/execution: it owns QtQml/qmldir,
+libqmlplugin.so and imports QtQml.Models/WorkerScript. Add those missing module
+packages plus QtQuick.Shapes (unresolved in the actual scan). Keep the existing
+path/formal-identity validation. No local SDK/compiler/GUI was executed.
