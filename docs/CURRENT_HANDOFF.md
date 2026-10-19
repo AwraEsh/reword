@@ -396,6 +396,25 @@ All 95 local packaging tests pass in 10.107s; independent review's traversal
 finding is fixed and all eight audit tests pass. Full runtime/source/ABI/license
 mapping and final Windows acceptance remain open. See WINDOWS_DISTRIBUTION.md.
 
+## Keyboard/dialog UI and latest delivery instruction
+
+PR #13 merged as 6735cd2 after final-head Linux/Windows runs 39135443045 and
+39135448262 passed. Its Windows material receipt is explicit about unresolved
+runtime license/source binding; no product release has been accepted.
+
+The managed keyboard-review worktree uses codex/dialog-keyboard-focus. It adds
+keyboard modal/sidebar/No acceptance checks and a one-line wrap fix for long
+executable names in the permission heading. The long-title geometry regression
+was RED; focus/navigation already worked. CI now collects synthetic Linux/Windows
+page/dialog captures. All seven local CTest suites pass in 38.63s. See UI_REVIEW.md
+for the exact visual evidence and fixture/evidence limits.
+
+The user now explicitly requires ordinary-user GitHub installation/use docs,
+a real release only after quality/stability is established, and installation of
+that accepted build on this current machine. These are recorded in REQUIREMENTS.
+Do not install a development build or publish a product release merely because CI
+is green. Repository visibility remains intentionally PUBLIC.
+
 ## Source delivery verification and release gate — 2026-10-18
 
 The earlier upload-in-progress checkpoints above are superseded. Archive asset
@@ -414,6 +433,17 @@ local development build was installed. Repository remains intentionally PUBLIC.
 UI PR #14 is still under repair and verification; Windows source/runtime notices,
 final packaged active soak and normal desktop acceptance remain open.
 
+## Current UI repair checkpoint
+
+PR #15 source delivery docs merged as c4e7fb3 after final Linux/Windows runs
+39154247772/39154250601 passed. UI work has incorporated that documentation.
+At 63e1fc2 Windows tests pass but its offscreen screenshots contain missing glyphs;
+Linux Qt 6.4 still fails four popup header contrasts. Explicit heading/body theme
+bindings and a shaped-glyph regression are now added. Local build and all seven
+CTest suites pass in 66.17s; fresh CI and rendered review remain required. Three
+isolated native X11 cycles pass. See UI_REVIEW.md for the actual failures and
+limits; no final UI/platform acceptance or product release is claimed.
+
 ## Active stability harness: process sampler
 
 The storage-access worktree now uses codex/active-stability-harness from c4e7fb3.
@@ -430,3 +460,13 @@ integration are separate. The actual packaged GUI workload, fixture watchdog/
 timing extension and multi-hour acceptance run are NOT implemented by this task.
 The earlier idle soak remains insufficient; no release or installation gate is
 closed by merely adding a resource sampler.
+
+## 2026-10-19 resumed verification
+
+PR #16 merged as d352e45 after final Linux/Windows CI 39155478705 and
+39155551787 passed. UI source 83ca324 also passes both OS runs 39155786400 and
+39155790704. Downloaded Windows Overview/History detail and both ten-dialog
+contact sheets show correct English/Persian glyphs and readable text. A final
+common footer surface adjustment has passed local modal/No checks and review;
+final integrated eight-suite build/CI is next. No ordinary desktop acceptance,
+product release or installation is implied. See UI_REVIEW.md for remaining scope.
