@@ -41,9 +41,9 @@ Interface: sample_process(pid, proc_root=Path('/proc')) returns numeric counters
 Files: tests/native_fixture.cpp, controlled probe tests and runner.
 Interface: explicit test-only lifetime bounded to 5 hours; optional fixed-format monotonic change records with sequence/timestamp only, separate from existing synthetic snapshot protocol.
 
-- [ ] Reproduce short watchdog expiry and missing timing evidence in controlled fixtures.
-- [ ] Add validated lifetime/timing options, retain existing defaults and native checks.
-- [ ] Verify first/second/third, password transition and native edit timestamps in the owned desktop; review and commit.
+- [x] Reproduce short watchdog expiry and missing timing evidence in controlled fixtures.
+- [x] Add validated lifetime/timing options, retain existing defaults and native checks.
+- [x] Verify first/second/third, password transition and native edit timestamps in the owned desktop; review and commit.
 
 ### Task 3: Packaged GUI workload runner
 
@@ -69,3 +69,20 @@ regression was observed RED before preserving/comparing the first CPU count.
 Independent follow-up confirms that fix and all 13 tests. Full local build and
 all eight CTest suites pass in 53.05s. The sampler does not yet drive Reword or
 produce an active-soak acceptance result. Tasks 2–4 remain open.
+
+## Task 2 evidence
+
+Invalid lifetime/timing inputs were RED before validation and now fail before
+GTK initialization. The positive watchdog and quiet-mode probe pass. Missing
+programmatic CHANGE records were reproduced before connecting the signal;
+the first cold-start six-second test deadline was inadequate and is not app
+failure evidence. The probe now allows bounded startup time separately from the
+three-second fixture watchdog.
+
+Review required actual native-edit timestamps, beyond stdin-generated changes.
+The Service probe's new check failed without timing instrumentation, then passed
+with it enabled: three owned native cycles verify first/third edits, retry,
+Undo, Pause, selected history and password exclusion. Protected fix emits no
+changes. Independent final review found no blocking issues. All nine final CTest
+suites pass in 35.77s. This is instrumentation acceptance, not a latency or
+packaged-GUI soak result. Tasks 3–4 remain open.

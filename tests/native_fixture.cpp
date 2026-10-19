@@ -3,6 +3,8 @@
 #include <fcntl.h>
 #include <string>
 #include <cstdio>
+#include <charconv>
+#include <cstring>
 static GtkWidget *entry;
 static std::string pending;
 static gboolean command(gpointer) {
@@ -42,6 +44,24 @@ static gboolean command(gpointer) {
     return TRUE;
 }
 int main(int argc, char **argv) {
+    int lifetime = 120;
+    if (auto setting = g_getenv("REWORD_FIXTURE_LIFETIME_SECONDS")) {
+        auto length = std::strlen(setting);
+        auto parsed = std::from_chars(setting, setting + length, lifetime);
+        if (length == 0 || length > 5 || parsed.ec != std::errc{} ||
+            parsed.ptr != setting + length || lifetime < 1 || lifetime > 18000) {
+            std::fputs("Invalid synthetic fixture lifetime (1 to 18000 seconds).\n", stderr);
+            return 2;
+        }
+    }
+    bool timing = false;
+    if (auto setting = g_getenv("REWORD_FIXTURE_CHANGE_TIMING")) {
+        if (std::strcmp(setting, "0") && std::strcmp(setting, "1")) {
+            std::fputs("Invalid synthetic fixture timing option (0 or 1).\n", stderr);
+            return 2;
+        }
+        timing = std::strcmp(setting, "1") == 0;
+    }
     gtk_init(&argc, &argv);
     auto window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "Reword integration test");
@@ -49,6 +69,15 @@ int main(int argc, char **argv) {
     gtk_container_add(GTK_CONTAINER(window), entry);
     gtk_entry_set_text(GTK_ENTRY(entry), "teh ");
     gtk_editable_set_position(GTK_EDITABLE(entry), 4);
+    guint64 sequence = 0;
+    if (timing)
+        g_signal_connect(entry, "changed", G_CALLBACK(+[](GtkEditable *, gpointer data) {
+                             auto value = ++*static_cast<guint64 *>(data);
+                             std::printf("CHANGE:%" G_GUINT64_FORMAT ":%" G_GINT64_FORMAT "\n",
+                                         value, g_get_monotonic_time());
+                             std::fflush(stdout);
+                         }),
+                         &sequence);
     if (g_getenv("REWORD_FIXTURE_MAXIMIZE"))
         gtk_window_maximize(GTK_WINDOW(window));
     gtk_widget_show_all(window);
@@ -65,7 +94,7 @@ int main(int argc, char **argv) {
     fcntl(0, F_SETFL, O_NONBLOCK);
     g_timeout_add(25, command, nullptr);
     g_timeout_add_seconds(
-        120,
+        lifetime,
         [](gpointer) -> gboolean {
             gtk_main_quit();
             return FALSE;

@@ -33,16 +33,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inside", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--directory", help=argparse.SUPPRESS)
+    parser.add_argument("--fixture-timing-only", action="store_true",
+                        help="Check only the synthetic watchdog/timing protocol")
     args = parser.parse_args()
     if not args.inside:
         # Own the directory outside D-Bus, so activated services have stopped
         # before any private FUSE mount or temporary file is removed.
         with tempfile.TemporaryDirectory(prefix="reword-native-") as directory:
             try:
-                result = subprocess.run([
+                command = [
                     "dbus-run-session", "--", sys.executable, str(Path(__file__).resolve()),
                     "--inside", "--directory", directory,
-                ])
+                ]
+                if args.fixture_timing_only:
+                    command.append("--fixture-timing-only")
+                result = subprocess.run(command)
             finally:
                 detach_test_mounts(directory)
             return result.returncode
@@ -134,6 +139,10 @@ def main():
                 time.sleep(.05)
             else:
                 raise RuntimeError("Controlled lock service failed to start.")
+            subprocess.run([sys.executable, str(ROOT / "tests/fixture_timing_probe.py"),
+                            str(ROOT / "build/reword_fixture")], env=env, timeout=25, check=True)
+            if args.fixture_timing_only:
+                return 0
             repeat = int(os.environ.get("REWORD_NATIVE_REPEAT", "3"))
             if not 1 <= repeat <= 100:
                 raise RuntimeError("Native probe repeat count must be between 1 and 100.")
