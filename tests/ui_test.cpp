@@ -117,7 +117,7 @@ class UiTest : public QObject {
         auto root = engine.rootObjects().first();
         for (auto row : root->findChildren<QObject *>())
             if (row->property("settingKey").toString() == "english")
-                for (auto control : row->findChildren<QObject *>())
+                for (auto control : row->children())
                     if (control->property("checked").isValid())
                         english = control;
         QVERIFY(english);
