@@ -721,3 +721,29 @@ the same staged AppDir and advances only on success. Both reports are retained.
 Do not claim the earlier shutdown-forced baseline's root cause fixed from one
 normal exit. Keep product release, source/notices, privacy-buffer audit,
 current-host latency/final-binary soak and ordinary Windows/Wayland gates open.
+
+## Resume checkpoint — 2026-10-20
+
+The user explicitly resumed. Local builds/GUI/heavy tests remain suspended.
+Manual run 39321497233 at 8570675 failed its short preflight on app CPU 14.11%
+after 30.13 sustained seconds, with word p95 bound 24.8 ms, zero swap and normal
+cleanup. Its two-hour step did not run. Retain this failed evidence beside the
+passing 31ab2cd baseline; engine reuse alone does not close the CPU gate.
+Report: .deps/hosted-active-8570675/active-preflight/report.json.
+
+Main-thread CPU diagnostics now collect only numeric counters from the pinned
+owned processes, separately from aggregate app/helper CPU. The same post-burst
+baseline applies and both burst counters are retained. Five tiny diagnostic
+tests pass in 0.004 s and 18 harness tests in 0.383 s under 256 MiB/10 CPU seconds.
+No production optimization or acceptance limit was changed. Hosted attribution
+and the full suite remain pending.
+
+The stacked privacy branch codex/transient-observation-reset lives in the
+storage-access worktree. Hosted RED 39321745068 at 99f91d3 reproduced seven
+retained-text boundaries plus stale Undo after an inspection error. Reset fix
+d27d3f8 passes Linux; Windows Service failed without Qt stdout. Commit 633e9ed
+adds Service JUnit artifacts to identify the actual failure before another fix.
+Independent static review found no important production reset regression, but
+identified a test timing race in the exception row (safe polling can repopulate
+observation). Whether this caused the Windows failure awaits its XML. Post-write
+authorization/read identity and native-job cancellation audits remain open.

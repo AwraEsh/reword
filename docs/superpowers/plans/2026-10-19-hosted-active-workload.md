@@ -129,3 +129,18 @@ desktops, databases and report directories preserve isolation. A preflight
 failure skips the long step; always retain both reports when present. This
 avoids treating a prior build's short pass as evidence for a rebuilt candidate.
 It remains hosted development evidence, not the final current-host/product soak.
+
+Run 39321497233 at 8570675 correctly refuses the two-hour run: its short preflight
+fails the unchanged CPU budget at app 14.11% after 30.13 s (helper 2.37%, no swap,
+normal cleanup, word p95 bound 24.8 ms). Engine reuse alone is not sufficient on
+every hosted runner. Retain .deps/hosted-active-8570675/active-preflight/report.json;
+no 7200-second workload started.
+
+Next collect numeric main-thread CPU alongside the existing aggregate counters
+to distinguish UI work from worker/Service work before another optimization.
+Main-thread reads use the already pinned PID/start identity and bounded procfs
+reader; missing/reused/rollback data fails, never becomes zero. Reset both
+baselines at the same post-burst boundary and retain burst measurements. No
+content, thread names, command lines or stack arguments enter reports. No CPU,
+latency or cleanup limit changes. Five tiny diagnostic tests are RED before the
+module exists; hosted execution is still needed for actual attribution.
