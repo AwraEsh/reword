@@ -1358,19 +1358,24 @@ ApplicationWindow {
         id: practiceDialog
         anchors.centerIn: parent
         title: "Practice spelling"
+        width: Math.min(root.width - 48, 480)
         modal: true
         standardButtons: Dialog.Close
         property string answer: ""
-        ColumnLayout {
+        contentItem: ColumnLayout {
             Label {
                 color: root.ink
                 textFormat: Text.PlainText
                 text: "Type: " + practiceDialog.answer
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                wrapMode: Text.Wrap
                 font.pixelSize: 20
             }
             TextField {
                 color: root.ink
                 id: practiceWord
+                Layout.fillWidth: true
                 placeholderText: "Write the word"
                 placeholderTextColor: root.muted
                 Accessible.name: "Practice word"

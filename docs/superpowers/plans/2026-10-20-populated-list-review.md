@@ -82,3 +82,15 @@ Require the actual answer/opened contract and stop at that object. This is a
 fixture error, not an activation bug. Add question ink/Close bounds as well as
 popup bounds, since Qt can cap popup size while unwrapped text still overflows.
 Do not claim long-dialog geometry before this corrected test executes remotely.
+
+Corrected test/source 3c4aaac in run 39400345037 reproduces the actual Practice
+layout defect: full question ink is 1323.98 px in an 880 px viewport. All 28 other
+UI cases pass. The actual dark Linux capture shows the question running off the
+right edge while Qt caps the popup itself to the window. Log/captures retained
+under .deps/practice-bounds-red-3c4aaac*. This is genuine geometry RED after
+fixing the earlier object-selection error.
+
+Bound Practice to 480 logical pixels or the window minus 48, make its existing
+ColumnLayout the explicit content item, wrap the complete question and fill the
+input width. Preserve the answer value and existing keyboard/Close behavior.
+Full hosted verification and regenerated Linux/Windows images remain pending.
