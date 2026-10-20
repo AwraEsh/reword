@@ -1,4 +1,59 @@
-# Current handoff — 2026-10-18
+# Current handoff — 2026-10-20
+
+The user resumed autonomous work. The full product goal is active. Requirements
+remain in [REQUIREMENTS.md](REQUIREMENTS.md); the repository is intentionally
+public. No production release or local installation has been accepted.
+
+## Read this checkpoint first
+
+- **Host safety:** two hard freezes required hardware resets. Cause remains
+  unknown. Local C++ builds, GUI workloads and heavy tests stay suspended; use
+  hosted CI. Do not infer host safety from a passing cloud run.
+- **PR20 — workload and CPU:** branch `codex/hosted-active-workload` at ef5db74
+  (documentation after code candidate 0fd1f2e). Full hosted run 39393887050 passes
+  Linux/Windows and the packaged 120-second workload. App CPU 3.44% of one core,
+  main thread 1.86%, helper 1.22%; word p95 upper bound 22.4 ms. Two-hour run
+  39394646024 at 0fd1f2e passed its same-package preflight and started its long
+  workload at 08:42:48 UTC. Its final outcome is pending. Keep earlier failed
+  CPU/cleanup evidence. No budgets were relaxed.
+- **PR21 — guarded native state:** full run 39396472858 passes Linux/Windows at
+  4cc4090: reset/Undo boundaries, post-write authorization and recovery,
+  expected-target native reads, unsafe native-job cancellation and queue-inclusive
+  ten-second deadlines. Each defect had an observed hosted RED regression.
+  Independent static reviews found no important remaining introduced issues.
+  The merge with PR20 is being verified separately; do not transfer acceptance
+  from either parent to the untested combination.
+- **PR22 — populated UI:** branch `codex/populated-list-review`, code 8288a35,
+  reuses the keyboard-review worktree. Tests seed accepted long values and retain
+  light/dark captures. Hosted RED is pending; no production layout change yet.
+  The earlier Windows sample inspection is in [UI_REVIEW.md](UI_REVIEW.md).
+- **Worktrees:** storage-access holds PR21; keyboard-review holds PR22. The main
+  checkout remains `develop` at 15e8ad5. Check status before changing branches.
+  Keep ignored `.deps` evidence and dependencies out of commits/uploads.
+- **Next:** inspect PR21 integration CI, diagnose populated UI cases from actual
+  captures, finish the pending two-hour report, and maintain the source/run/hash
+  distinctions. The workload will need repeating on the final integrated package.
+
+## Remaining product acceptance
+
+Ordinary Windows 10/11 desktop/tray/scaling and broad GNOME Wayland/Fcitx use;
+populated UI and remaining keyboard/screen-reader checks; final current-host
+latency and packaged active stability; exact final runtime/source/notices binding;
+clean reproducible AppImage/.deb/.exe installation and ordinary-user documentation.
+Release and local installation happen only after these gates pass. The user's
+shutdown instruction is conditional on finishing the work; that condition has
+not been met. Do not shut down merely because CI is green.
+
+Cancellation is cooperative. No secure QString erasure or preemptive interruption
+of a native provider is claimed. Expired results are refused before application;
+a blocked worker/provider can delay the refusal. User history/session recovery
+remain explicit, bounded and separate from transient live observation. The Service
+regressions do not establish universal password or application support.
+
+The sections below are an append-only evidence trail; their older pending/paused
+statements describe those revisions, not the current checkpoint above.
+
+## Historical handoff — 2026-10-18
 
 The approved scope is in [REQUIREMENTS.md](REQUIREMENTS.md). The repository is
 intentionally public at the user's later request. Do not change visibility back
@@ -722,6 +777,7 @@ Do not claim the earlier shutdown-forced baseline's root cause fixed from one
 normal exit. Keep product release, source/notices, privacy-buffer audit,
 current-host latency/final-binary soak and ordinary Windows/Wayland gates open.
 
+
 ## Transient privacy reset — 2026-10-20
 
 Stacked branch codex/transient-observation-reset in the storage-access worktree:
@@ -812,3 +868,55 @@ late correction may be delivered. Full hosted verification remains pending.
 The ten-second budget bounds acceptance of a result; an unresponsive provider
 or a saturated external worker pool can still delay delivery of the refusal.
 Cancellation remains cooperative and no secure memory-erasure claim is made.
+
+## Resume checkpoint — 2026-10-20
+
+The user explicitly resumed. Local builds/GUI/heavy tests remain suspended.
+Manual run 39321497233 at 8570675 failed its short preflight on app CPU 14.11%
+after 30.13 sustained seconds, with word p95 bound 24.8 ms, zero swap and normal
+cleanup. Its two-hour step did not run. Retain this failed evidence beside the
+passing 31ab2cd baseline; engine reuse alone does not close the CPU gate.
+Report: .deps/hosted-active-8570675/active-preflight/report.json.
+
+Main-thread CPU diagnostics now collect only numeric counters from the pinned
+owned processes, separately from aggregate app/helper CPU. The same post-burst
+baseline applies and both burst counters are retained. Five tiny diagnostic
+tests pass in 0.004 s and 18 harness tests in 0.383 s under 256 MiB/10 CPU seconds.
+No production optimization or acceptance limit was changed. Hosted attribution
+and the full suite remain pending.
+
+The stacked privacy branch codex/transient-observation-reset lives in the
+storage-access worktree. Hosted RED 39321745068 at 99f91d3 reproduced seven
+retained-text boundaries plus stale Undo after an inspection error. Reset fix
+d27d3f8 passes Linux; Windows Service failed without Qt stdout. Commit 633e9ed
+adds Service JUnit artifacts to identify the actual failure before another fix.
+Independent static review found no important production reset regression, but
+identified a test timing race in the exception row (safe polling can repopulate
+observation). Whether this caused the Windows failure awaits its XML. Post-write
+authorization/read identity and native-job cancellation audits remain open.
+
+## Shared-settings workload checkpoint — 2026-10-20
+
+Hosted39391593030 at7df1da1 attributes10.65% main-thread CPU out of13.50%
+aggregate app CPU. A real QML regression at859b133/run39392713956 reproduces
+37 full settings reads per notification; each read issues roughly25 SQLite
+queries. Main.qml now takes one reactive settings snapshot and passes it to
+all20 SettingRows. The test follows the Switch's direct parent relationship
+instead of inspecting nested style internals; unchanged <=2-read assertion
+and false/true language reactivity both pass on Linux and Windows.
+
+Full manual run39393887050 at0fd1f2e passes both platforms and the complete
+120-second packaged workload. Report .deps/hosted-active-0fd1f2e/active-workload/report.json:
+149.133s including setup/cleanup,43 full cycles,154 selected fixes/history
+insertions,history pruning,50k control/refusal,Pause/password/Undo and normal
+cleanup (forcedProcesses=[]). Word88 samples p95 conservative upper bound
+22.4ms,max25.286ms. Sustained appCPU3.439%,mainthread1.863%,helper1.223%;
+zero swap,private growth3040/1308KiB. App SHA256
+bd86aee2d0a1267c089096ccb94ded0599cd680833f79a18a173b17228822d0d;
+helper0fac4152b1dae0ab03a1bab1e96a38ce035b094fceb1f090afb6877362ed58bd.
+Independent review of the snapshot and numeric sampler found no important
+issues. No budgets were relaxed. Two-hour run39394646024 was dispatched at
+the unchanged0fd1f2e revision, with its own120-second same-AppDir preflight.
+Its outcome is pending. This is hosted Ubuntu evidence; final merged-source,
+current-host,ordinary Windows/Wayland,distribution and release gates remain.
+

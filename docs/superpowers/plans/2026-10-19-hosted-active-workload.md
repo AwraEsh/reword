@@ -129,3 +129,64 @@ desktops, databases and report directories preserve isolation. A preflight
 failure skips the long step; always retain both reports when present. This
 avoids treating a prior build's short pass as evidence for a rebuilt candidate.
 It remains hosted development evidence, not the final current-host/product soak.
+
+Run 39321497233 at 8570675 correctly refuses the two-hour run: its short preflight
+fails the unchanged CPU budget at app 14.11% after 30.13 s (helper 2.37%, no swap,
+normal cleanup, word p95 bound 24.8 ms). Engine reuse alone is not sufficient on
+every hosted runner. Retain .deps/hosted-active-8570675/active-preflight/report.json;
+no 7200-second workload started.
+
+Next collect numeric main-thread CPU alongside the existing aggregate counters
+to distinguish UI work from worker/Service work before another optimization.
+Main-thread reads use the already pinned PID/start identity and bounded procfs
+reader; missing/reused/rollback data fails, never becomes zero. Reset both
+baselines at the same post-burst boundary and retain burst measurements. No
+content, thread names, command lines or stack arguments enter reports. No CPU,
+latency or cleanup limit changes. Five tiny diagnostic tests are RED before the
+module exists; hosted execution is still needed for actual attribution.
+
+Actual diagnostic run39391593030 at7df1da1 fails appCPU13.50% after30.14s;
+main thread accounts for10.65%, leaving about2.85% in other app threads.
+Word p95 bound21.8ms, no forced cleanup or swap. Report is retained in
+.deps/hosted-active-7df1da1/active-workload/report.json. This points the next
+investigation at UI work, not another polling/engine change.
+
+Add a counted Controller subclass only in the real QML UI test. One explicit
+updated signal should read the complete settings map at most twice, rather
+than once per independent binding. The same test must verify English switching
+still updates the actual control both ways. Observe hosted RED before replacing
+Main.qml/SettingRow.qml bindings with one shared root settings snapshot. No
+production diagnostic API, persistent cache, rule, language or UI copy change.
+
+Hosted RED39392713956 at859b133 confirms one backend notification reads the
+full settings map37times in the actual QML interface. Each getter performs
+many SQLite queries. Main.qml now owns one notification-driven settingsSnapshot
+and passes it to every SettingRow; other bindings use that same snapshot.
+This is scoped to rendering, not an authorization/configuration cache in the
+correction service. The test still requires actual English toggle propagation.
+Full remote UI/native/installer checks and new packaged CPU evidence are pending.
+
+## Shared-settings workload checkpoint — 2026-10-20
+
+Hosted39391593030 at7df1da1 attributes10.65% main-thread CPU out of13.50%
+aggregate app CPU. A real QML regression at859b133/run39392713956 reproduces
+37 full settings reads per notification; each read issues roughly25 SQLite
+queries. Main.qml now takes one reactive settings snapshot and passes it to
+all20 SettingRows. The test follows the Switch's direct parent relationship
+instead of inspecting nested style internals; unchanged <=2-read assertion
+and false/true language reactivity both pass on Linux and Windows.
+
+Full manual run39393887050 at0fd1f2e passes both platforms and the complete
+120-second packaged workload. Report .deps/hosted-active-0fd1f2e/active-workload/report.json:
+149.133s including setup/cleanup,43 full cycles,154 selected fixes/history
+insertions,history pruning,50k control/refusal,Pause/password/Undo and normal
+cleanup (forcedProcesses=[]). Word88 samples p95 conservative upper bound
+22.4ms,max25.286ms. Sustained appCPU3.439%,mainthread1.863%,helper1.223%;
+zero swap,private growth3040/1308KiB. App SHA256
+bd86aee2d0a1267c089096ccb94ded0599cd680833f79a18a173b17228822d0d;
+helper0fac4152b1dae0ab03a1bab1e96a38ce035b094fceb1f090afb6877362ed58bd.
+Independent review of the snapshot and numeric sampler found no important
+issues. No budgets were relaxed. Two-hour run39394646024 was dispatched at
+the unchanged0fd1f2e revision, with its own120-second same-AppDir preflight.
+Its outcome is pending. This is hosted Ubuntu evidence; final merged-source,
+current-host,ordinary Windows/Wayland,distribution and release gates remain.

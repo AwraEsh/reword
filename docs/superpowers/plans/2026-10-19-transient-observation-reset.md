@@ -44,27 +44,27 @@ docs/CURRENT_HANDOFF.md.
 
 ## Task 2: Post-write read authorization
 
-- [ ] Reproduce focus/permission changes immediately after native live,
+- [x] Reproduce focus/permission changes immediately after native live,
   selection and Undo writes using a one-shot synthetic adapter callback.
   No follow-up text read may target the newly blocked application.
-- [ ] Replace unguarded post-write inspect(true) calls with policy/metadata
+- [x] Replace unguarded post-write inspect(true) calls with policy/metadata
   authorization. Preserve the original for explicitly requested selection
   recovery even when confirmation/focus is lost; never save uncertain edits
   as confirmed history or retain newly blocked text in observation buffers.
-- [ ] Audit the metadata/read identity gap separately: inspecting a fresh field
+- [x] Audit the metadata/read identity gap separately: inspecting a fresh field
   after authorized metadata must not read text from a different target before
   discovering that its ID changed. Define an expected-target read contract if
   existing adapters cannot enforce it. Retain password/unknown fail-closed rules.
-- [ ] Hosted RED/GREEN, native regressions and independent review.
+- [x] Hosted RED/GREEN, native regressions and independent review.
 
 ## Task 3: Native job cancellation audit
 
-- [ ] Inspect owned worker captures and unsafe-field transitions. Determine
+- [x] Inspect owned worker captures and unsafe-field transitions. Determine
   whether a native job can retain prior permitted input until its deadline.
-- [ ] If confirmed, reproduce with an owned native job and unsafe metadata only;
+- [x] If confirmed, reproduce with an owned native job and unsafe metadata only;
   ensure no password text enters processing. Cancel only stale native jobs while
   preserving explicit workspace jobs and the existing result/Undo safeguards.
-- [ ] Review and remote verification before accepting the privacy requirement.
+- [x] Review and remote verification before accepting the privacy requirement.
 
 This plan records an open release gate. It does not establish password capture,
 persisted text leakage or completion of the full buffer audit.
@@ -256,3 +256,10 @@ late correction may be delivered. Full hosted verification remains pending.
 The ten-second budget bounds acceptance of a result; an unresponsive provider
 or a saturated external worker pool can still delay delivery of the refusal.
 Cancellation remains cooperative and no secure memory-erasure claim is made.
+
+Full hosted run 39396472858 passes Linux and Windows at 4cc4090, including
+queue-delay rejection and controlled native probes. Independent review found no
+important introduced issue in native cancellation or the shared deadline. Tasks
+1–3 and the deadline follow-up are verified for this Service scope. Cancellation
+is cooperative and the global product acceptance gates remain open. Merge PR20
+into this branch and verify the combined source before integration.

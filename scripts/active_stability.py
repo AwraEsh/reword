@@ -20,6 +20,7 @@ from active_fixture import FixtureClient
 from active_cleanup import cleanup_owned
 from active_history import HistoryCheck
 from process_metrics import read_child_pids
+from main_thread_metrics import MainThreadSeries
 
 
 def sha256(path):
@@ -70,6 +71,8 @@ def run_owned(args):
                 'helperSha256': sha256(helper), 'launcherSha256': sha256(app_run),
                 'resources': {}, 'shutdownForced': False, 'stage': 'startup'}
     watches, app, fixture, client = {}, None, None, None
+    main_series = {}
+    metadata['mainThreadCpu'] = {}
     cancelled = False
     started, last_sample, baseline = time.monotonic(), -1.0, False
     previous_handlers = {}
@@ -99,6 +102,12 @@ def run_owned(args):
             for role, watch in watches.items():
                 sample = watch.sample(now - started)
                 metadata['resources'][role] = sample
+                try:
+                    series = main_series.setdefault(role, MainThreadSeries())
+                    metadata['mainThreadCpu'][role] = series.sample(
+                        watch.pid, sample['startTicks'], now - started)
+                except (OSError, ValueError):
+                    raise WorkloadFailure('metrics-unavailable') from None
                 evidence.counter(role + '-sampled')
                 rss_limit = (512 if role == 'app' else 256) * 1024
                 if (sample['rssKiB'] > rss_limit or sample['swapKiB'] > 0 or
@@ -220,6 +229,8 @@ def run_owned(args):
             raise WorkloadFailure('history-bound')
         evidence.counter('history-pruned')
         metadata['historyBurstResources'] = dict(metadata['resources'])
+        metadata['historyBurstMainThreadCpu'] = dict(metadata['mainThreadCpu'])
+        main_series.clear()
         from process_metrics import ProcessSeries
         for watch in watches.values():
             watch.series = ProcessSeries()
