@@ -53,9 +53,11 @@ void Service::stop() {
     shortcutsHealthy_ = false;
     shortcutRevision_ = -1;
 }
-Field Service::permitted() {
+Field Service::permitted(const Field *expected) {
     auto f = adapter_->inspect(false);
     if (f.app.isEmpty())
+        return {};
+    if (expected && (f.id != expected->id || f.app != expected->app))
         return {};
     store_->discover(f.app, QFileInfo(f.app).fileName(), restrictedApp(f.app));
     if (store_->shouldAsk(f.app) && (lastAsk_ != f.app || askDate_ != QDate::currentDate())) {
@@ -217,16 +219,19 @@ void Service::tick() {
                 retry_ = savedRetry;
                 break;
             }
+            auto after = permitted(&f);
+            if (after.id != f.id || after.app != f.app || after.text != updated ||
+                after.caret != caret) {
+                resetObservation();
+                break;
+            }
             undoPassage_ = false;
             undoBefore_ = f.text;
             undoCaret_ = f.caret;
-            undoAfter_ = adapter_->inspect(true);
+            undoAfter_ = after;
             previous_ = undoAfter_;
             store_->count(token, correct, o);
             emit corrected(token, correct);
-            if (undoAfter_.id != f.id || undoAfter_.app != f.app || undoAfter_.text != updated ||
-                undoAfter_.caret != caret)
-                break;
             f = undoAfter_;
             offset += correct.size() - token.size();
         }
@@ -293,7 +298,7 @@ void Service::runText(QString input, bool native, Field field) {
                     return;
                 }
                 try {
-                    auto current = permitted();
+                    auto current = permitted(&field);
                     if (!sameTarget(field, current)) {
                         emit message("The selection changed. Nothing was replaced.");
                         return;
@@ -305,23 +310,36 @@ void Service::runText(QString input, bool native, Field field) {
                         emit message("Cancelled or settings changed. Nothing was replaced.");
                         return;
                     }
+                    // Retain the requested original before attempting a write:
+                    // a provider can reject confirmation after changing text.
+                    emit passageRecoveryAvailable(input, change.corrected);
                     if (!adapter_->replace(field, updated,
                                            field.selectionStart + change.corrected.size())) {
+                        resetObservation();
                         emit message(
-                            "The application did not confirm the replacement. Check its text "
-                            "before continuing.");
+                            "Replacement was not confirmed. Check the text; its original is "
+                            "available in session recovery.");
+                        return;
+                    }
+                    auto after = permitted(&field);
+                    if (after.id != field.id || after.app != field.app || after.text != updated ||
+                        after.caret != field.selectionStart + change.corrected.size() ||
+                        !policyCurrent(after, revision, cancellation)) {
+                        resetObservation();
+                        emit message("The field changed after correction. Copy the original from "
+                                     "session recovery; Undo is unavailable.");
                         return;
                     }
                     undoPassage_ = true;
                     undoBefore_ = field.text;
                     undoCaret_ = field.caret;
-                    undoAfter_ = adapter_->inspect(true);
+                    undoAfter_ = after;
                     previous_ = undoAfter_;
-                    emit passageApplied(input, change.corrected);
                     store_->history(input, change.corrected, store_->options());
                     emit result(input, change.corrected, {}, true);
                 } catch (...) {
-                    emit message("The operation stopped safely.");
+                    resetObservation();
+                    emit message("The operation stopped. Check the application's text before continuing.");
                 }
             } catch (...) {
                 emit result(input, input, "Local storage is unavailable. The operation stopped.",
@@ -370,7 +388,7 @@ void Service::fixSelection() {
 void Service::undo() {
     const auto cancellation = cancellationRevision_.load();
     const auto revision = store_->value("configRevision", 0).toLongLong();
-    auto f = permitted();
+    auto f = permitted(&undoAfter_);
     if (undoBefore_.isEmpty() || !sameTarget(undoAfter_, f)) {
         emit message(undoPassage_ ? "Undo is no longer safe. Copy the latest passage original from "
                                     "session recovery in Reword."
@@ -382,7 +400,14 @@ void Service::undo() {
         return;
     }
     if (adapter_->replace(f, undoBefore_, undoCaret_)) {
-        previous_ = adapter_->inspect(true);
+        auto after = permitted(&f);
+        if (after.id != f.id || after.app != f.app || after.text != undoBefore_ ||
+            after.caret != undoCaret_) {
+            resetObservation();
+            emit message("The field changed after Undo. Check the application's text.");
+            return;
+        }
+        previous_ = after;
         undoBefore_.clear();
         undoAfter_ = {};
         emit message("Correction restored.");

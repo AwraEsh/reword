@@ -70,7 +70,7 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
                                3000);
         emit updated();
     });
-    connect(service_, &Service::passageApplied, this,
+    connect(service_, &Service::passageRecoveryAvailable, this,
             [this](QString original, QString corrected) { rememberPassage(original, corrected); });
     connect(
         service_, &Service::result, this,

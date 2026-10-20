@@ -38,7 +38,7 @@ class Service : public QObject {
     void resetObservation();
     void runText(QString input, bool native, Field field = {});
     void tick();
-    Field permitted();
+    Field permitted(const Field *expected = nullptr);
     bool policyCurrent(const Field &field, qint64 revision, quint64 cancellation);
     void fixSelection();
     void undo();
@@ -64,6 +64,6 @@ class Service : public QObject {
     void message(QString message);
     void state(QString description, bool shortcutsOK);
     void corrected(QString original, QString corrected);
-    void passageApplied(QString original, QString corrected);
+    void passageRecoveryAvailable(QString original, QString corrected);
 };
 } // namespace reword

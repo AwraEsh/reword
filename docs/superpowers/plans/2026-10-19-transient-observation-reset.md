@@ -113,3 +113,18 @@ must not request any follow-up text from that changed target. Selected original
 remains available in session recovery, but uncertain results are not history.
 An unconfirmed selected write must also retain the original for copying. Observe
 hosted RED before changing read/recovery behavior. No real desktop is exercised.
+
+Run39392033809 atcaea11f reproduces all12 post-write target-change cases plus
+missing recovery after an unconfirmed selection on Linux; Windows Service also
+fails. Log .deps/post-write-red-caea11f.log. Task1's exact reset revision2d88084
+passes both platforms in39391695577 after fixing the exception-fixture race.
+
+Post-write follow-up now peeks metadata and requires the expected app/field
+before permission checks and any text read. Live/selected/Undo snapshots are
+accepted only when the guarded result matches the intended text/caret; unsafe
+or mismatched results clear observation and never become selected history.
+Selected original/result recovery is prepared before the write attempt via
+passageRecoveryAvailable (renamed to avoid claiming an unconfirmed edit applied).
+Controller session recovery remains bounded and history-independent. No new
+clipboard access, persistence or logging. The metadata-to-text adapter identity
+gap is still open; do not label the complete read-boundary audit accepted.

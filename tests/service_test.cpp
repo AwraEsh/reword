@@ -158,7 +158,7 @@ class ServiceTest : public QObject {
                 h.adapter->field.known = false;
             h.adapter->onRead = [&] { ++unexpectedReads; };
         };
-        QSignalSpy recovery(&h.service, &Service::passageApplied);
+        QSignalSpy recovery(&h.service, &Service::passageRecoveryAvailable);
         const auto writes = h.adapter->writes;
         if (operation == "live")
             h.adapter->type("teh ");
@@ -185,7 +185,7 @@ class ServiceTest : public QObject {
         h.adapter->field.selectionStart = 0;
         h.adapter->field.selectionEnd = 3;
         h.adapter->rejectNext = true;
-        QSignalSpy recovery(&h.service, &Service::passageApplied);
+        QSignalSpy recovery(&h.service, &Service::passageRecoveryAvailable);
         QSignalSpy messages(&h.service, &Service::message);
         h.service.action("fix");
         QTRY_COMPARE_WITH_TIMEOUT(h.adapter->writes, 1, 12000);
@@ -341,7 +341,7 @@ class ServiceTest : public QObject {
     void confirmedPassageIsRecoverableWithoutHistory() {
         Harness h;
         h.store.setValue("history", false);
-        QSignalSpy recovery(&h.service, SIGNAL(passageApplied(QString, QString)));
+        QSignalSpy recovery(&h.service, SIGNAL(passageRecoveryAvailable(QString, QString)));
         QVERIFY(recovery.isValid());
         h.adapter->type("teh");
         h.adapter->field.selectionStart = 0;
