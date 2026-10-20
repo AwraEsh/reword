@@ -793,3 +793,22 @@ stop and failed startup. Full hosted GREEN and review remain pending.
 Cancellation does not promise secure memory zeroization or instant removal of
 QString copies held by an already running worker. Worker queue time and the
 operation deadline still require a separate regression audit.
+
+## Queue-inclusive operation deadline
+
+Hosted run 39395969290 at f1984bf reproduces the queue deadline defect: after
+10.1 seconds waiting for a worker, the operation still succeeds. All 80 other
+Service cases pass on Linux, including native cancellation and its workspace
+control; Windows Service also fails. Retained failure log:
+.deps/queue-deadline-red-f1984bf.log.
+
+Use one monotonic QDeadlineTimer starting when an operation is accepted. Check
+expiry before worker initialization, pass only its remaining budget to Engine,
+and refuse an expired result on completion or immediately before a native write.
+A cancelled generation is also rejected before initializing the passage engine,
+even if a later prepare() clears the shared cancellation boolean. No partial or
+late correction may be delivered. Full hosted verification remains pending.
+
+The ten-second budget bounds acceptance of a result; an unresponsive provider
+or a saturated external worker pool can still delay delivery of the refusal.
+Cancellation remains cooperative and no secure memory-erasure claim is made.

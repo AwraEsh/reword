@@ -2,7 +2,7 @@
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QtConcurrent>
-#include <QElapsedTimer>
+#include <QDeadlineTimer>
 namespace reword {
 void Service::clearJobTarget() {
     nativeJob_ = false;
@@ -278,6 +278,7 @@ void Service::runText(QString input, bool native, Field field) {
         emit result(input, input, "Reword is paused.", native);
         return;
     }
+    const QDeadlineTimer deadline(10000);
     auto operationLock = std::make_unique<QLockFile>(directory_ + "/operation.lock");
     operationLock->setStaleLockTime(15000);
     if (!operationLock->tryLock(0)) {
@@ -297,7 +298,7 @@ void Service::runText(QString input, bool native, Field field) {
     job_ = new QFutureWatcher<Change>(this);
     connect(
         job_, &QFutureWatcher<Change>::finished, this,
-        [this, input, native, field, revision, cancellation] {
+        [this, input, native, field, revision, cancellation, deadline] {
             auto operationLock = std::move(jobLock_);
             auto completed = job_;
             job_ = nullptr;
@@ -309,6 +310,8 @@ void Service::runText(QString input, bool native, Field field) {
                 if (cancel_.load() || cancellation != cancellationRevision_.load() ||
                     store_->paused() || revision != store_->value("configRevision", 0).toLongLong())
                     change.error = "Cancelled or settings changed. Nothing was replaced.";
+                if (deadline.hasExpired())
+                    change.error = "Operation timed out. Nothing was replaced.";
                 if (!change.error.isEmpty()) {
                     emit result(input, input, change.error, native);
                     return;
@@ -330,17 +333,21 @@ void Service::runText(QString input, bool native, Field field) {
                     QString updated = field.text;
                     updated.replace(field.selectionStart, field.selectionEnd - field.selectionStart,
                                     change.corrected);
-                    if (!policyCurrent(current, revision, cancellation)) {
-                        emit message("Cancelled or settings changed. Nothing was replaced.");
+                    if (deadline.hasExpired() || !policyCurrent(current, revision, cancellation)) {
+                        emit message(deadline.hasExpired()
+                                         ? "Operation timed out. Nothing was replaced."
+                                         : "Cancelled or settings changed. Nothing was replaced.");
                         return;
                     }
                     // Retain the requested original before attempting a write:
                     // a provider can reject confirmation after changing text.
                     emit passageRecoveryAvailable(input, change.corrected);
                     // Signal delivery may synchronously revoke this operation.
-                    if (!policyCurrent(current, revision, cancellation)) {
+                    if (deadline.hasExpired() || !policyCurrent(current, revision, cancellation)) {
                         resetObservation();
-                        emit message("Cancelled or settings changed. Nothing was replaced.");
+                        emit message(deadline.hasExpired()
+                                         ? "Operation timed out. Nothing was replaced."
+                                         : "Cancelled or settings changed. Nothing was replaced.");
                         return;
                     }
                     if (!adapter_->replace(field, updated,
@@ -376,15 +383,17 @@ void Service::runText(QString input, bool native, Field field) {
                             native);
             }
         });
-    job_->setFuture(QtConcurrent::run([this, input, options, words, replacements] {
+    job_->setFuture(QtConcurrent::run([this, input, options, words, replacements, cancellation,
+                                      deadline] {
         try {
-            QElapsedTimer elapsed;
-            elapsed.start();
+            if (cancel_.load() || cancellation != cancellationRevision_.load())
+                return Change{input, input, false, "Operation cancelled. Nothing was replaced."};
+            if (deadline.hasExpired())
+                return Change{input, input, false, "Operation timed out. Nothing was replaced."};
             if (!passageEngine_)
                 passageEngine_ = std::make_unique<Engine>();
             passageEngine_->setPersonal(words, replacements);
-            return passageEngine_->text(input, options, &cancel_,
-                                        std::max(qint64(0), 10000 - elapsed.elapsed()));
+            return passageEngine_->text(input, options, &cancel_, deadline.remainingTime());
         } catch (...) {
             passageEngine_.reset();
             return Change{input, input, false, "Correction failed. The original is unchanged."};
