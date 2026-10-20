@@ -26,3 +26,13 @@ fixtures or source.
   acceptance remains separate.
 
 This plan records remaining UI work; no populated-list result is accepted yet.
+
+Hosted run 39396895276 at 8288a35 reproduces hidden actions in Applications
+(x=2993) and the personal-word button (width=908.6) at 880 pixels. Actual Linux
+captures also show replacement text crossing Remove and overlapping Insights
+word labels, despite their action-only bounds passing. Extend the regression
+to check rendered text extents and pairwise overlap, preserving full label data.
+Retain both themes before assertions. Observe this additional RED before fixing
+all demonstrated layout defects together; no production QML changed yet.
+Reports/captures are ignored under .deps/populated-red-8288a35-linux and the
+failure log .deps/populated-red-8288a35.log.

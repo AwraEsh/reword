@@ -202,6 +202,38 @@ class UiTest : public QObject {
                                                   (dark ? "-dark.png" : "-light.png")));
             }
             const auto bounds = action->mapRectToScene(action->boundingRect());
+            QList<QRectF> textBounds;
+            items = window->contentItem()->childItems();
+            while (!items.isEmpty()) {
+                auto item = items.takeLast();
+                const auto text = item->property("text").toString();
+                const bool expectedText =
+                    (surface == "applications" && text == longName) ||
+                    (surface == "personal" && text == longWord + "  ×") ||
+                    (surface == "replacements" && text == longWord + " → " + QString(128, 'W')) ||
+                    (surface == "insights" && (text == longWord || text == QString(64, 'W')));
+                if (item->isVisible() && expectedText &&
+                    !item->property("checkable").isValid() &&
+                    item->property("contentWidth").isValid()) {
+                    const auto inkWidth = item->property("truncated").toBool()
+                                              ? item->width()
+                                              : item->property("contentWidth").toDouble();
+                    const auto ink = item->mapRectToScene(QRectF(0, 0, inkWidth, item->height()));
+                    const auto rightLimit = surface == "personal" ? bounds.right() : bounds.left();
+                    if (ink.right() > rightLimit + 1.0)
+                        failures << QString("%1 text overlaps or exceeds its action: right=%2 limit=%3")
+                                        .arg(dark ? "dark" : "light")
+                                        .arg(ink.right()).arg(rightLimit);
+                    textBounds << ink;
+                }
+                items.append(item->childItems());
+            }
+            QVERIFY(!textBounds.isEmpty());
+            for (int i = 0; i < textBounds.size(); ++i)
+                for (int j = i + 1; j < textBounds.size(); ++j)
+                    if (textBounds[i].intersected(textBounds[j]).width() > 1.0 &&
+                        textBounds[i].intersected(textBounds[j]).height() > 1.0)
+                        failures << "Populated word labels overlap each other";
             if (bounds.left() < 214 || bounds.right() > window->width() ||
                 bounds.top() < 122 || bounds.bottom() > window->height())
                 failures << QString("%1 action outside viewport: x=%2 y=%3 width=%4 height=%5")
