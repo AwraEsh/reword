@@ -89,3 +89,10 @@ Task2 records this separate boundary audit; no behavioral exploit or password
 capture is claimed before its synthetic regressions run. Native worker capture
 cancellation remains a separate open task. Do not call the full privacy gate
 complete merely because the first reset regressions pass.
+
+Post-fix d27d3f8/run39322671718 passes Linux completely but fails the Windows
+Service suite. Windows CTest captures no QtTest stdout (even passing suites have
+empty output), so the case is unknown. Add JUnit file output to the Service
+test and retain it with the existing diagnostics. Do not guess a production
+fix from the suite exit code. Independent review was interrupted by the agent's
+account usage limit and remains incomplete, not approved.
