@@ -369,6 +369,23 @@ class ServiceTest : public QObject {
         QVERIFY(!results.first()[3].toBool());
         QCOMPARE(h.adapter->writes, 0);
     }
+    void queuedPassageCannotExtendTheOperationDeadline() {
+        Harness h;
+        h.adapter->quiet = true;
+        BlockedWorkerPool workers;
+        QVERIFY(workers.ready());
+        QSignalSpy results(&h.service, &Service::result);
+        h.service.processText("teh");
+        // The ten-second limit includes time waiting for a worker. This wait
+        // runs on hosted CI only; no C++ workloads run on the user's host.
+        QTest::qWait(10100);
+        workers.unblock();
+        QTRY_COMPARE_WITH_TIMEOUT(results.size(), 1, 12000);
+        QVERIFY(!results.first()[2].toString().isEmpty());
+        QCOMPARE(results.first()[1].toString(), QString("teh"));
+        QCOMPARE(h.adapter->writes, 0);
+        QVERIFY(h.store.histories().isEmpty());
+    }
     void cancelledPassageDoesNotPoisonTheNextOperation() {
         Harness h;
         h.adapter->quiet = true;

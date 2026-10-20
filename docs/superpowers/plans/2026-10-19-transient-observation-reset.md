@@ -226,3 +226,14 @@ stop and failed startup. Full hosted GREEN and review remain pending.
 Cancellation does not promise secure memory zeroization or instant removal of
 QString copies held by an already running worker. Worker queue time and the
 operation deadline still require a separate regression audit.
+
+## Operation deadline follow-up
+
+Source inspection shows the ten-second timer starts inside the worker, so a
+queued job receives a fresh full budget after waiting. Add a real queue-delay
+regression using the controlled pool blocker: wait 10.1 seconds on hosted CI,
+release the worker and require the unchanged original with a timeout error.
+Do not shorten or inject the production limit merely to make the test faster.
+Observe RED before starting the deadline at request acceptance and checking
+it before worker initialization and again before delivering/applying a result.
+This is separate from secure memory erasure and normal desktop acceptance.
