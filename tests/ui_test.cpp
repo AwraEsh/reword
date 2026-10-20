@@ -10,6 +10,7 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QQuickItem>
+#include <QPointer>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QQmlNetworkAccessManagerFactory>
@@ -126,6 +127,274 @@ class UiTest : public QObject {
         QTRY_VERIFY(!english->property("checked").toBool());
         controller.set("english", true);
         QTRY_VERIFY(english->property("checked").toBool());
+    }
+    void populatedListsKeepActionsInsideTheViewport_data() {
+        QTest::addColumn<QString>("surface");
+        for (auto surface : {"applications", "personal", "replacements", "insights"})
+            QTest::newRow(surface) << QString(surface);
+    }
+    void populatedListsKeepActionsInsideTheViewport() {
+        QFETCH(QString, surface);
+        QTemporaryDir data;
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
+        reword::Store fixture(data.path());
+        const QString longWord(64, 'm');
+        const QString longName(200, 'm');
+        fixture.discover("/synthetic/reword-ui/" + longName, longName);
+        fixture.decide("/synthetic/reword-ui/" + longName, "allow");
+        fixture.discover("/synthetic/reword-ui/notes", "Notes");
+        fixture.decide("/synthetic/reword-ui/notes", "deny");
+        fixture.discover("/synthetic/reword-ui/reader", "Reader");
+        fixture.decide("/synthetic/reword-ui/reader", "later");
+        controller.addWord(longWord);
+        controller.addWord(QString::fromUtf8("واژه‌آزمایشی"));
+        controller.replacement(longWord, QString(128, 'W'));
+        controller.set("statistics", true);
+        auto options = fixture.options();
+        fixture.count(longWord, QString(64, 'W'), options);
+        fixture.count(QString::fromUtf8("ازمایشی"), QString::fromUtf8("آزمایشی"), options);
+        emit controller.updated();
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        auto window = qobject_cast<QQuickWindow *>(root);
+        QVERIFY(window);
+        window->setWidth(880);
+        window->setHeight(620);
+        root->setProperty("page", surface == "applications" ? 3 : surface == "insights" ? 5 : 2);
+        QStringList failures;
+        for (bool dark : {false, true}) {
+            controller.set("dark", dark);
+            QTest::qWait(150);
+            QQuickItem *action = nullptr;
+            auto items = window->contentItem()->childItems();
+            while (!items.isEmpty()) {
+                auto item = items.takeLast();
+                const auto text = item->property("text").toString();
+                const bool button = item->property("checkable").isValid();
+                if (item->isVisible() &&
+                    ((surface == "applications" && item->property("displayText").toString() == "Allowed") ||
+                     (button && surface == "personal" && text == longWord + "  ×") ||
+                     (button && surface == "replacements" && text == "Remove") ||
+                     (button && surface == "insights" && text == "Practice"))) {
+                    action = item;
+                    break;
+                }
+                items.append(item->childItems());
+            }
+            QVERIFY(action);
+            for (auto parent = action->parentItem(); parent; parent = parent->parentItem()) {
+                if (!parent->property("contentY").isValid())
+                    continue;
+                const auto anchor = surface == "replacements" ? action->parentItem() : action;
+                const auto offset = anchor->mapToItem(parent, QPointF()).y();
+                const auto maximum = std::max(0.0, parent->property("contentHeight").toDouble() -
+                                                       parent->height());
+                parent->setProperty("contentY", std::clamp(
+                    parent->property("contentY").toDouble() + offset - 40.0, 0.0, maximum));
+                break;
+            }
+            QTest::qWait(100);
+            const auto captureDirectory = qEnvironmentVariable("REWORD_UI_CAPTURE_DIR");
+            if (!captureDirectory.isEmpty()) {
+                QVERIFY(QDir().mkpath(captureDirectory));
+                QVERIFY(window->grabWindow().save(captureDirectory + "/populated-" + surface +
+                                                  (dark ? "-dark.png" : "-light.png")));
+            }
+            const auto bounds = action->mapRectToScene(action->boundingRect());
+            QList<QRectF> textBounds;
+            items = window->contentItem()->childItems();
+            while (!items.isEmpty()) {
+                auto item = items.takeLast();
+                const auto text = item->property("text").toString();
+                const bool expectedText =
+                    (surface == "applications" && text == longName) ||
+                    (surface == "personal" && text == longWord + "  ×") ||
+                    (surface == "replacements" && text == longWord + " → " + QString(128, 'W')) ||
+                    (surface == "insights" && (text == longWord || text == QString(64, 'W')));
+                if (item->isVisible() && expectedText &&
+                    !item->property("checkable").isValid() &&
+                    item->property("contentWidth").isValid()) {
+                    const auto inkWidth = item->property("truncated").toBool()
+                                              ? item->width()
+                                              : item->property("contentWidth").toDouble();
+                    const auto ink = item->mapRectToScene(QRectF(0, 0, inkWidth, item->height()));
+                    const auto rightLimit = surface == "personal" ? bounds.right() : bounds.left();
+                    if (ink.right() > rightLimit + 1.0)
+                        failures << QString("%1 text overlaps or exceeds its action: right=%2 limit=%3")
+                                        .arg(dark ? "dark" : "light")
+                                        .arg(ink.right()).arg(rightLimit);
+                    textBounds << ink;
+                }
+                items.append(item->childItems());
+            }
+            QVERIFY(!textBounds.isEmpty());
+            for (int i = 0; i < textBounds.size(); ++i)
+                for (int j = i + 1; j < textBounds.size(); ++j)
+                    if (textBounds[i].intersected(textBounds[j]).width() > 1.0 &&
+                        textBounds[i].intersected(textBounds[j]).height() > 1.0)
+                        failures << "Populated word labels overlap each other";
+            if (bounds.left() < 214 || bounds.right() > window->width() ||
+                bounds.top() < 122 || bounds.bottom() > window->height())
+                failures << QString("%1 action outside viewport: x=%2 y=%3 width=%4 height=%5")
+                                .arg(dark ? "dark" : "light")
+                                .arg(bounds.x()).arg(bounds.y()).arg(bounds.width()).arg(bounds.height());
+        }
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join("; ")));
+    }
+    void permissionIndicatorsStayVisibleInBothThemes() {
+        QTemporaryDir data;
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
+        reword::Store fixture(data.path());
+        fixture.discover("/synthetic/reword-ui/notes", "Notes");
+        fixture.decide("/synthetic/reword-ui/notes", "allow");
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        auto window = qobject_cast<QQuickWindow *>(root);
+        QVERIFY(window);
+        window->setWidth(880);
+        window->setHeight(620);
+        root->setProperty("page", 3);
+        const auto luminance = [](const QColor &color) {
+            const auto linear = [](double value) {
+                return value <= 0.04045 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+            };
+            return 0.2126 * linear(color.redF()) + 0.7152 * linear(color.greenF()) +
+                   0.0722 * linear(color.blueF());
+        };
+        QStringList failures;
+        for (bool dark : {false, true}) {
+            controller.set("dark", dark);
+            QTest::qWait(150);
+            int checked = 0;
+            auto items = window->contentItem()->childItems();
+            while (!items.isEmpty()) {
+                auto item = items.takeLast();
+                items.append(item->childItems());
+                if (!item->isVisible() || !item->property("displayText").isValid())
+                    continue;
+                auto indicator = item->property("indicator").value<QQuickItem *>();
+                auto background = item->property("background").value<QQuickItem *>();
+                if (!indicator || !background)
+                    continue;
+                const auto foreground = indicator->property("color").value<QColor>();
+                const auto surface = background->property("color").value<QColor>();
+                QVERIFY(foreground.isValid() && surface.isValid());
+                const auto first = luminance(foreground), second = luminance(surface);
+                const auto contrast = (std::max(first, second) + 0.05) /
+                                      (std::min(first, second) + 0.05);
+                if (contrast < 3.0)
+                    failures << QString("%1 indicator contrast=%2")
+                                    .arg(dark ? "dark" : "light").arg(contrast);
+                ++checked;
+            }
+            QVERIFY(checked >= 2); // Appearance and the actual application permission.
+        }
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join("; ")));
+    }
+    void practiceDialogFitsLongestAcceptedWord() {
+        QTemporaryDir data;
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
+        reword::Store fixture(data.path());
+        controller.set("statistics", true);
+        const QString answer(64, 'W');
+        fixture.count("misspelling", answer, fixture.options());
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        auto window = qobject_cast<QQuickWindow *>(root);
+        QVERIFY(window);
+        window->setWidth(880);
+        window->setHeight(620);
+        root->setProperty("page", 5);
+        QTRY_VERIFY(controller.platform().startsWith("Controlled UI metadata fixture"));
+        QTest::qWait(150);
+        QQuickItem *practice = nullptr;
+        auto items = window->contentItem()->childItems();
+        while (!items.isEmpty()) {
+            auto item = items.takeLast();
+            if (item->isVisible() && item->property("text").toString() == "Practice" &&
+                item->property("checkable").isValid()) {
+                practice = item;
+                break;
+            }
+            items.append(item->childItems());
+        }
+        QVERIFY(practice);
+        QPointer<QQuickItem> practiceGuard(practice);
+        QSignalSpy clicked(practice, SIGNAL(clicked()));
+        practice->forceActiveFocus();
+        QCOMPARE(window->activeFocusItem(), practice);
+        QTest::keyClick(window, Qt::Key_Space);
+        QVERIFY2(practiceGuard, "The Practice delegate disappeared during activation.");
+        QCOMPARE(clicked.count(), 1);
+        QObject *dialog = nullptr;
+        for (auto object : root->findChildren<QObject *>())
+            if (object->property("title").toString() == "Practice spelling" &&
+                object->property("answer").isValid() && object->property("opened").isValid()) {
+                dialog = object;
+                break;
+            }
+        QVERIFY(dialog);
+        QTRY_VERIFY2(dialog->property("opened").toBool(),
+                     qPrintable(QString("visible=%1 answerCharacters=%2 width=%3")
+                                    .arg(dialog->property("visible").toBool())
+                                    .arg(dialog->property("answer").toString().size())
+                                    .arg(dialog->property("width").toDouble())));
+        QCOMPARE(dialog->property("answer").toString(), answer);
+        QStringList failures;
+        for (bool dark : {false, true}) {
+            controller.set("dark", dark);
+            QTest::qWait(100);
+            const auto captures = qEnvironmentVariable("REWORD_DIALOG_CAPTURE_DIR");
+            if (!captures.isEmpty()) {
+                QVERIFY(QDir().mkpath(captures));
+                QVERIFY(window->grabWindow().save(captures +
+                         (dark ? "/dark-practice-long.png" : "/light-practice-long.png")));
+            }
+            bool foundQuestion = false, foundClose = false;
+            auto visibleItems = window->contentItem()->childItems();
+            while (!visibleItems.isEmpty()) {
+                auto item = visibleItems.takeLast();
+                visibleItems.append(item->childItems());
+                if (!item->isVisible())
+                    continue;
+                const auto text = item->property("text").toString();
+                const bool question = text == "Type: " + answer &&
+                                      item->property("contentWidth").isValid();
+                const bool close = text == "Close" && item->property("checkable").isValid();
+                if (!question && !close)
+                    continue;
+                foundQuestion |= question;
+                foundClose |= close;
+                const auto width = question ? item->property("contentWidth").toDouble()
+                                            : item->width();
+                const auto bounds = item->mapRectToScene(QRectF(0, 0, width, item->height()));
+                if (bounds.left() < 0 || bounds.top() < 0 || bounds.right() > window->width() ||
+                    bounds.bottom() > window->height())
+                    failures << QString("%1 exceeds viewport: x=%2 y=%3 width=%4 height=%5")
+                                    .arg(question ? "Practice question" : "Close action")
+                                    .arg(bounds.x()).arg(bounds.y()).arg(bounds.width()).arg(bounds.height());
+            }
+            QVERIFY(foundQuestion && foundClose);
+            const auto x = dialog->property("x").toDouble();
+            const auto y = dialog->property("y").toDouble();
+            const auto width = dialog->property("width").toDouble();
+            const auto height = dialog->property("height").toDouble();
+            if (x < 0 || y < 0 || x + width > window->width() || y + height > window->height())
+                failures << QString("Practice dialog exceeds viewport: x=%1 y=%2 width=%3 height=%4")
+                                .arg(x).arg(y).arg(width).arg(height);
+        }
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join("; ")));
+        QTest::keyClick(window, Qt::Key_Escape);
+        QTRY_VERIFY(!dialog->property("opened").toBool());
     }
     void renderingFontsCoverBothLanguages() {
         QVERIFY2(!QFontDatabase::families().isEmpty(),
