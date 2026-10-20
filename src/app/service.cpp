@@ -313,6 +313,12 @@ void Service::runText(QString input, bool native, Field field) {
                     // Retain the requested original before attempting a write:
                     // a provider can reject confirmation after changing text.
                     emit passageRecoveryAvailable(input, change.corrected);
+                    // Signal delivery may synchronously revoke this operation.
+                    if (!policyCurrent(current, revision, cancellation)) {
+                        resetObservation();
+                        emit message("Cancelled or settings changed. Nothing was replaced.");
+                        return;
+                    }
                     if (!adapter_->replace(field, updated,
                                            field.selectionStart + change.corrected.size())) {
                         resetObservation();

@@ -30,17 +30,17 @@ docs/CURRENT_HANDOFF.md.
 
 ## Task 1: Reset ownership and behavior
 
-- [ ] Add Service regressions: stop and unsafe metadata must release transient
+- [x] Add Service regressions: stop and unsafe metadata must release transient
   text; an adapter inspection exception after a correction must invalidate Undo
   so a later action cannot resurrect uncertain state. A narrow friend test peer
   returns only a text-retention boolean, never contents or a production API.
-- [ ] Observe those failures in hosted CI before changing production behavior.
-- [ ] Implement private resetRetry()/resetObservation() helpers; audit every
+- [x] Observe those failures in hosted CI before changing production behavior.
+- [x] Implement private resetRetry()/resetObservation() helpers; audit every
   reset, policy/identity/caret/continuation/exception/Pause/stop path. Clear all
   retained QString references and reset related numeric/boolean state together.
-- [ ] Verify existing alternating, held/overlapping shortcuts, safe boundary,
+- [x] Verify existing alternating, held/overlapping shortcuts, safe boundary,
   selection/Undo/cancellation and full Linux/Windows tests remotely.
-- [ ] Independent review, Git checkpoint/PR and authoritative handoff.
+- [x] Independent review, Git checkpoint/PR and authoritative handoff.
 
 ## Task 2: Post-write read authorization
 
@@ -128,3 +128,45 @@ passageRecoveryAvailable (renamed to avoid claiming an unconfirmed edit applied)
 Controller session recovery remains bounded and history-independent. No new
 clipboard access, persistence or logging. The metadata-to-text adapter identity
 gap is still open; do not label the complete read-boundary audit accepted.
+
+Independent Task2 review found a cancellation gap after recovery preparation:
+passageRecoveryAvailable can deliver a direct callback after the last policy
+check and before replace. Add five policy-change regressions (pause, deny,
+language revision, cancel, cancel-then-prepare), observe hosted RED, and recheck
+policy after recovery preparation immediately before writing. The original
+remains copyable; recovery availability must never imply a completed edit.
+
+Expected-target read contract (remaining Task2 scope):
+
+- Add Adapter::readExpected(const Field&) with a fail-closed default. Service
+  passes its authorized metadata; app and field ID must match before text is
+  requested. Keep inspect(false) metadata-only. Existing owned observer probes
+  may retain inspect(true), but product authorization uses readExpected.
+- LinuxProxy sends only expected app/ID in a dedicated bounded read request.
+  Helper rejects a missing identity. LinuxAdapter pins one referenced AT-SPI
+  object before metadata calls, checks its expected identity before text calls,
+  and uses that same validated object for writes. Focus events cannot redirect
+  intermediate calls through mutable focus_. Native pre/post-write reads use
+  the expected identity too.
+- Windows pins its existing local UI Automation element; compare app/ID before
+  nativeSnapshot/GetText, and use guarded reads around replace. Preserve all
+  password, lock, editable, plain-field and size checks.
+- Reproduce metadata-to-read focus change with an owned adapter callback after
+  metadata capture. Assert no text read from the changed field and no writes,
+  history or retained observation. Verify owned Linux/Windows native probes,
+  full hosted suites and an independent review before accepting this boundary.
+
+No readExpected implementation or native-job cancellation is accepted yet.
+
+Task1 accepted at2d88084: full Linux/Windows run39391695577 passes,
+independent static review found no important production reset issue. Partial
+Task2 at58959a8 passes full Linux/Windows run39393054682, including the13
+post-write/recovery regressions. This does not cover the adapter read-identity
+gap or cancellation during recovery signal delivery. Regression commit4853ba6
+is running in39393873509; production behavior must wait for its observed RED.
+
+Hosted39393873509 at4853ba6 reproduces all five recovery-policy cases:
+Linux writes once when zero writes are required (62 other cases pass); Windows
+Service also fails. Saved .deps/recovery-policy-red-4853ba6.log. Recheck policy
+immediately after signal delivery, clear observation on refusal and retain the
+explicit session original. Hosted GREEN remains required.

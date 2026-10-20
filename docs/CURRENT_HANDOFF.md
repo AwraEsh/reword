@@ -735,3 +735,17 @@ Linux/Windows verification remains pending. Static independent review found no
 important production reset regression; post-write read identity/authorization
 and native-job cancellation audits are still separate open privacy gates.
 No local build, GUI workload, product release or installation occurred.
+
+## Privacy checkpoint — 2026-10-20
+
+Task1 reset/exception regression passes full Linux/Windows run39391695577 at
+2d88084 after quiescing the exception fixture before safe polling resumes.
+Partial Task2 post-write authorization/recovery passes full run39393054682 at
+58959a8 (13 new regressions). Independent review found an introduced recovery
+signal cancellation gap: five hosted RED cases at4853ba6/run39393873509 each
+write after policy revocation. Recheck immediately after recovery signal and
+before the write; fresh hosted GREEN pending. Session recovery is explicit,
+bounded and independent of persisted history; availability does not assert a
+confirmed edit. Adapter metadata-to-read identity enforcement and cancellation
+of stale native worker captures remain open in the transient-observation plan.
+No local C++ build, GUI workload, release or installation was performed.
