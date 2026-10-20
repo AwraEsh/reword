@@ -144,3 +144,16 @@ baselines at the same post-burst boundary and retain burst measurements. No
 content, thread names, command lines or stack arguments enter reports. No CPU,
 latency or cleanup limit changes. Five tiny diagnostic tests are RED before the
 module exists; hosted execution is still needed for actual attribution.
+
+Actual diagnostic run39391593030 at7df1da1 fails appCPU13.50% after30.14s;
+main thread accounts for10.65%, leaving about2.85% in other app threads.
+Word p95 bound21.8ms, no forced cleanup or swap. Report is retained in
+.deps/hosted-active-7df1da1/active-workload/report.json. This points the next
+investigation at UI work, not another polling/engine change.
+
+Add a counted Controller subclass only in the real QML UI test. One explicit
+updated signal should read the complete settings map at most twice, rather
+than once per independent binding. The same test must verify English switching
+still updates the actual control both ways. Observe hosted RED before replacing
+Main.qml/SettingRow.qml bindings with one shared root settings snapshot. No
+production diagnostic API, persistent cache, rule, language or UI copy change.

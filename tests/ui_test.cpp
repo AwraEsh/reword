@@ -83,9 +83,50 @@ class UiMetadataAdapter final : public reword::Adapter {
         return "Controlled UI metadata fixture";
     }
 };
+class SettingsReadController final : public reword::Controller {
+    Q_OBJECT
+    Q_PROPERTY(QVariantMap settings READ measuredSettings NOTIFY updated)
+  public:
+    mutable int settingsReads = 0;
+    explicit SettingsReadController(const QString &directory)
+        : reword::Controller(directory, nullptr, std::make_unique<UiMetadataAdapter>()) {}
+    QVariantMap measuredSettings() const {
+        ++settingsReads;
+        return reword::Controller::settings();
+    }
+};
 class UiTest : public QObject {
     Q_OBJECT
   private slots:
+    void oneUpdateSharesSettingsAcrossBindings() {
+        QTemporaryDir data;
+        SettingsReadController controller(data.path());
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        QTest::qWait(300);
+        QVERIFY(controller.settingsReads > 0);
+        controller.settingsReads = 0;
+        emit controller.updated();
+        QTest::qWait(100);
+        QVERIFY2(controller.settingsReads <= 2,
+                 qPrintable(QString("One backend update read settings %1 times")
+                                .arg(controller.settingsReads)));
+        QObject *english = nullptr;
+        auto root = engine.rootObjects().first();
+        for (auto row : root->findChildren<QObject *>())
+            if (row->property("settingKey").toString() == "english")
+                for (auto control : row->findChildren<QObject *>())
+                    if (control->property("checked").isValid())
+                        english = control;
+        QVERIFY(english);
+        QVERIFY(english->property("checked").toBool());
+        controller.set("english", false);
+        QTRY_VERIFY(!english->property("checked").toBool());
+        controller.set("english", true);
+        QTRY_VERIFY(english->property("checked").toBool());
+    }
     void renderingFontsCoverBothLanguages() {
         QVERIFY2(!QFontDatabase::families().isEmpty(),
                  "The offscreen renderer must discover installed font families.");
