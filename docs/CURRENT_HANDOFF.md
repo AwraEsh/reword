@@ -1,4 +1,60 @@
-# Current handoff — 2026-10-18
+# Current handoff — 2026-10-20
+
+The user resumed autonomous work. The full product goal is active. Requirements
+remain in [REQUIREMENTS.md](REQUIREMENTS.md); the repository is intentionally
+public. No production release or local installation has been accepted.
+
+## Read this checkpoint first
+
+- **Host safety:** two hard freezes required hardware resets. Cause remains
+  unknown. Local C++ builds, GUI workloads and heavy tests stay suspended; use
+  hosted CI. Do not infer host safety from a passing cloud run.
+- **PR20 — workload and CPU:** branch `codex/hosted-active-workload` at ef5db74
+  (documentation after code candidate 0fd1f2e). Full hosted run 39393887050 passes
+  Linux/Windows and the packaged 120-second workload. App CPU 3.44% of one core,
+  main thread 1.86%, helper 1.22%; word p95 upper bound 22.4 ms. Two-hour run
+  39394646024 at 0fd1f2e passed its same-package preflight and started its long
+  workload at 08:42:48 UTC. Its final outcome is pending. Keep earlier failed
+  CPU/cleanup evidence. No budgets were relaxed.
+- **PR21 — guarded native state:** full run 39396472858 passes Linux/Windows at
+  4cc4090: reset/Undo boundaries, post-write authorization and recovery,
+  expected-target native reads, unsafe native-job cancellation and queue-inclusive
+  ten-second deadlines. Each defect had an observed hosted RED regression.
+  Independent static reviews found no important remaining introduced issues.
+  Combined-source push run 39397165863 and PR run 39397184524 both pass
+  at merge 41939dc. Documentation-only updates follow that tested code.
+  Final package/desktop acceptance remains separate.
+- **PR22 — populated UI:** branch `codex/populated-list-review`, code 8288a35,
+  reuses the keyboard-review worktree. Tests seed accepted long values and retain
+  light/dark captures. Hosted RED is pending; no production layout change yet.
+  The earlier Windows sample inspection is in [UI_REVIEW.md](UI_REVIEW.md).
+- **Worktrees:** storage-access holds PR21; keyboard-review holds PR22. The main
+  checkout remains `develop` at 15e8ad5. Check status before changing branches.
+  Keep ignored `.deps` evidence and dependencies out of commits/uploads.
+- **Next:** inspect PR21 integration CI, diagnose populated UI cases from actual
+  captures, finish the pending two-hour report, and maintain the source/run/hash
+  distinctions. The workload will need repeating on the final integrated package.
+
+## Remaining product acceptance
+
+Ordinary Windows 10/11 desktop/tray/scaling and broad GNOME Wayland/Fcitx use;
+populated UI and remaining keyboard/screen-reader checks; final current-host
+latency and packaged active stability; exact final runtime/source/notices binding;
+clean reproducible AppImage/.deb/.exe installation and ordinary-user documentation.
+Release and local installation happen only after these gates pass. The user's
+shutdown instruction is conditional on finishing the work; that condition has
+not been met. Do not shut down merely because CI is green.
+
+Cancellation is cooperative. No secure QString erasure or preemptive interruption
+of a native provider is claimed. Expired results are refused before application;
+a blocked worker/provider can delay the refusal. User history/session recovery
+remain explicit, bounded and separate from transient live observation. The Service
+regressions do not establish universal password or application support.
+
+The sections below are an append-only evidence trail; their older pending/paused
+statements describe those revisions, not the current checkpoint above.
+
+## Historical handoff — 2026-10-18
 
 The approved scope is in [REQUIREMENTS.md](REQUIREMENTS.md). The repository is
 intentionally public at the user's later request. Do not change visibility back
@@ -722,6 +778,98 @@ Do not claim the earlier shutdown-forced baseline's root cause fixed from one
 normal exit. Keep product release, source/notices, privacy-buffer audit,
 current-host latency/final-binary soak and ordinary Windows/Wayland gates open.
 
+
+## Transient privacy reset — 2026-10-20
+
+Stacked branch codex/transient-observation-reset in the storage-access worktree:
+99f91d3/run39321745068 reproduced seven retained-text boundaries and stale Undo
+after inspection failure. d27d3f8 centralizes retry/observation cleanup and passes
+Linux. Windows' failure was silent until Service JUnit output was added in
+633e9ed. Diagnostic run39391142137 proves its only failure is the exception
+retention row: safe polling can legitimately refill previous_ after the reset.
+The test now quiesces its synthetic adapter in the throwing callback. Fresh
+Linux/Windows verification remains pending. Static independent review found no
+important production reset regression; post-write read identity/authorization
+and native-job cancellation audits are still separate open privacy gates.
+No local build, GUI workload, product release or installation occurred.
+
+## Privacy checkpoint — 2026-10-20
+
+Task1 reset/exception regression passes full Linux/Windows run39391695577 at
+2d88084 after quiescing the exception fixture before safe polling resumes.
+Partial Task2 post-write authorization/recovery passes full run39393054682 at
+58959a8 (13 new regressions). Independent review found an introduced recovery
+signal cancellation gap: five hosted RED cases at4853ba6/run39393873509 each
+write after policy revocation. Recheck immediately after recovery signal and
+before the write; fresh hosted GREEN pending. Session recovery is explicit,
+bounded and independent of persisted history; availability does not assert a
+confirmed edit. Adapter metadata-to-read identity enforcement and cancellation
+of stale native worker captures remain open in the transient-observation plan.
+No local C++ build, GUI workload, release or installation was performed.
+
+HostedRED39394490601 atc326c84 reproduces four metadata-to-read changes:
+application,field,password and unknown each request text once when zero reads
+are required (67 other Service cases pass). Linux log retained as
+.deps/expected-read-red-c326c84.log. The new readExpected default refuses;
+owned native probes require both a valid guarded read and rejection of wrong
+app/field identity. Native probe GREEN remains pending.
+
+Service now passes the authorized metadata to readExpected. Linux sends only
+app/ID over its private helper pipe; inspect requests are metadata-only and the
+separate read operation requires identity. Linux snapshots pin one referenced
+AT-SPI object through metadata/text, compare app/ID before text interfaces,
+and retain that same validated object through the write. Windows compares
+expected identity on its pinned UI Automation element before any text read.
+Native pre/post-write reads also use expected identity. All existing native
+password/unknown/lock/plain/editable/size checks remain. Hosted full tests and
+independent review are required; queued native worker cancellation stays open.
+
+Cancellation-gap fix a2f9ba2 passes full Linux/Windows run39394352890.
+Independent follow-up review confirms its P2 finding resolved; static review
+is distinct from native desktop acceptance.
+
+## Native job cancellation checkpoint
+
+Full Linux/Windows run 39395053416 passes at f495be3, including guarded native
+reads and controlled platform probes. Independent static review found no
+important introduced issue in the expected-target implementation.
+
+Hosted RED run 39395433922 at b8a5171 reproduces all eight stale native-job
+cases: no cancellation is requested after unsafe metadata, denied permission,
+Pause, changed identity or a metadata exception. The workspace control passes
+and 72 other Service cases pass. Saved log:
+.deps/native-job-red-b8a5171.log.
+
+Track only the active native job's app/field identifiers. While it is pending,
+metadata must still match that target before reading text; unsafe transitions
+and integration exceptions request cooperative cancellation. Pending shortcut
+focus grace remains allowed only for the same safe target. Workspace jobs do
+not inherit this external-focus cancellation. Clear job metadata at completion,
+stop and failed startup. Full hosted GREEN and review remain pending.
+
+Cancellation does not promise secure memory zeroization or instant removal of
+QString copies held by an already running worker. Worker queue time and the
+operation deadline still require a separate regression audit.
+
+## Queue-inclusive operation deadline
+
+Hosted run 39395969290 at f1984bf reproduces the queue deadline defect: after
+10.1 seconds waiting for a worker, the operation still succeeds. All 80 other
+Service cases pass on Linux, including native cancellation and its workspace
+control; Windows Service also fails. Retained failure log:
+.deps/queue-deadline-red-f1984bf.log.
+
+Use one monotonic QDeadlineTimer starting when an operation is accepted. Check
+expiry before worker initialization, pass only its remaining budget to Engine,
+and refuse an expired result on completion or immediately before a native write.
+A cancelled generation is also rejected before initializing the passage engine,
+even if a later prepare() clears the shared cancellation boolean. No partial or
+late correction may be delivered. Full hosted verification remains pending.
+
+The ten-second budget bounds acceptance of a result; an unresponsive provider
+or a saturated external worker pool can still delay delivery of the refusal.
+Cancellation remains cooperative and no secure memory-erasure claim is made.
+
 ## Resume checkpoint — 2026-10-20
 
 The user explicitly resumed. Local builds/GUI/heavy tests remain suspended.
@@ -772,3 +920,12 @@ issues. No budgets were relaxed. Two-hour run39394646024 was dispatched at
 the unchanged0fd1f2e revision, with its own120-second same-AppDir preflight.
 Its outcome is pending. This is hosted Ubuntu evidence; final merged-source,
 current-host,ordinary Windows/Wayland,distribution and release gates remain.
+
+## Combined Service and workload verification
+
+Merge 41939dc preserves both parent evidence trails and combines PR20's
+single-snapshot UI/metrics with PR21's native guards and deadline. Full Linux
+and Windows push run 39397165863 and PR run 39397184524 pass, including controlled
+native probes and installer smoke checks. Independent reviews of each behavioral
+change found no important outstanding issue. These are hosted development checks,
+not ordinary desktop or final-package soak acceptance.

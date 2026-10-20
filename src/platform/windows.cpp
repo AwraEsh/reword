@@ -126,6 +126,17 @@ class WindowsAdapter final : public Adapter {
         return "Windows · UI Automation and native plain edit fields";
     }
     Field inspect(bool read) override {
+        return snapshot(read, nullptr);
+    }
+    Field readExpected(const Field &expected) override {
+        if (expected.app.isEmpty() || expected.id.isEmpty()) {
+            validated_.Reset();
+            return {};
+        }
+        return snapshot(true, &expected);
+    }
+  private:
+    Field snapshot(bool read, const Field *expected) {
         validated_.Reset();
         Field f;
         if (!automation_)
@@ -159,6 +170,8 @@ class WindowsAdapter final : public Adapter {
             }
             SafeArrayDestroy(runtime);
         }
+        if (expected && (f.id != expected->id || f.app != expected->app))
+            return {};
         BOOL password = TRUE, enabled = FALSE, focused = FALSE;
         CONTROLTYPEID type = 0;
         if (FAILED(e->get_CurrentIsPassword(&password)) ||
@@ -241,8 +254,9 @@ class WindowsAdapter final : public Adapter {
         validated_ = e;
         return f;
     }
+  public:
     bool replace(const Field &expected, const QString &text, int caret) override {
-        if (!sameTarget(expected, inspect(true)))
+        if (!sameTarget(expected, readExpected(expected)))
             return false;
         auto e = validated_;
         ComPtr<IUIAutomationValuePattern> v;
@@ -275,8 +289,8 @@ class WindowsAdapter final : public Adapter {
                                   text.left(caret).toUcs4().size(), &moved);
             r->Select();
         }
-        auto after = inspect(true);
-        return after.id == expected.id && after.text == text;
+        auto after = readExpected(expected);
+        return after.id == expected.id && after.app == expected.app && after.text == text;
     }
     bool shortcuts(const QString &fix, const QString &undo, const QString &pause) override {
         if (!window_)
