@@ -45,3 +45,11 @@ Safe relative-only receipt is committed in docs/evidence. Independent static
 review found no important issue. Remaining libiconv/Qt/graphics/VC runtime and
 final-package source/notice work stays open; this task does not prove a fully
 reproducible upstream build or product readiness.
+
+Follow-up source acquisition verifies GNU libiconv 1.19's archive SHA512 and
+all seven recipe input SHA256 values against the retained SPDX. The ABI record
+hash equals its cached package ID and the Hunspell ABI dependency names that
+same ID. A relative-only receipt records this correspondence. No archive was
+executed/extracted; source/recipe candidates remain ignored. No independent
+rebuild, GNU signature authentication or proof of DLL inclusion is claimed.
+Documentation revision 4e73a33 also passes full hosted runs 39400501572/39400507867.

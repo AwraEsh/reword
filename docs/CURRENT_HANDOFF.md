@@ -24,20 +24,24 @@ public. No production release or local installation has been accepted.
   Combined-source push run 39397165863 and PR run 39397184524 both pass
   at merge 41939dc. Documentation-only updates follow that tested code.
   Final package/desktop acceptance remains separate.
-- **PR22 — populated UI:** branch `codex/populated-list-review`, code 8288a35,
-  reuses the keyboard-review worktree. Tests seed accepted long values and retain
-  light/dark captures. Hosted RED is pending; no production layout change yet.
-  The earlier Windows sample inspection is in [UI_REVIEW.md](UI_REVIEW.md).
+- **PR22 — populated UI:** branch `codex/populated-list-review`, code cba5167,
+  reuses the keyboard-review worktree. Full Linux/Windows run 39400869152 passes
+  after observed overflow/contrast failures. Actual regenerated captures confirm
+  the sampled long list values and Practice question fit; see its UI_REVIEW.md.
 - **Build metadata:** branch `codex/windows-build-metadata` follows PR21. Four
   observed Python RED cases now pass with eight existing controls. Exact vendor
-  metadata retention is limited to 1 MiB/file and 8 MiB total; real Windows CI
-  evidence remains pending. This does not authenticate the cached package.
+  metadata retention is limited to 1 MiB/file and 8 MiB total. Full hosted
+  runs 39399260940/39399290932 pass at db871eb; documentation revision 4e73a33
+  also passes 39400501572/39400507867. Actual retained metadata: 158 files,
+  186,979 bytes, all matching reported sizes/hashes. Hunspell and libiconv
+  source/recipe/ABI receipts are under docs/evidence. These match cache records;
+  no independent reproducible build or complete source/notice closure is claimed.
 - **Worktrees:** storage-access now holds the build-metadata branch based on PR21;
   keyboard-review holds PR22. The main
   checkout remains `develop` at 15e8ad5. Check status before changing branches.
   Keep ignored `.deps` evidence and dependencies out of commits/uploads.
-- **Next:** inspect PR21 integration CI, diagnose populated UI cases from actual
-  captures, finish the pending two-hour report, and maintain the source/run/hash
+- **Next:** audit the separate Fcitx cancellation/buffer path, finish the pending
+  two-hour report, and maintain the source/run/hash
   distinctions. The workload will need repeating on the final integrated package.
 
 ## Remaining product acceptance

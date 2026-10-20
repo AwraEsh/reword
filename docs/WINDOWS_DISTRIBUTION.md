@@ -178,7 +178,15 @@ and source archive:
 
 These are recorded recipe/source/payload matches, stronger than assuming the
 current checkout built the cache. They are not an independent reproducible
-build. The recorded libiconv ABI dependency, Qt third-party/graphics materials,
-VC runtime notices and final installer/source pairing still need resolution.
+build. Qt third-party/graphics materials, VC runtime notices and final
+installer/source pairing still need resolution.
 The retained Qt qconfig.pri reports Qt 6.8.3 and SDK compiler 19.39.33520; the
 application build toolchain is recorded separately. releaseReady remains false.
+
+The [libiconv receipt](evidence/windows-libiconv-cache-db871eb.json) follows the
+recorded Hunspell dependency: the acquired GNU libiconv 1.19 archive SHA512 and
+all seven frozen vcpkg recipe inputs match the retained SPDX records. Its ABI
+file hashes to the same package identifier named by Hunspell's ABI record.
+The archive and recipe files remain ignored local source candidates. This is
+record correspondence, not an independent rebuild, GNU signature verification,
+proof of inclusion in the staged Hunspell DLL or completed source delivery.
