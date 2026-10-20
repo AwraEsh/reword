@@ -25,7 +25,8 @@ fixtures or source.
   source/run identities and bounds. Normal desktop/DPI/tray/screen-reader
   acceptance remains separate.
 
-This plan records remaining UI work; no populated-list result is accepted yet.
+The execution record below distinguishes initial failures from the final scoped
+layout verification. Physical-desktop acceptance remains open.
 
 Hosted run 39396895276 at 8288a35 reproduces hidden actions in Applications
 (x=2993) and the personal-word button (width=908.6) at 880 pixels. Actual Linux
@@ -94,3 +95,12 @@ Bound Practice to 480 logical pixels or the window minus 48, make its existing
 ColumnLayout the explicit content item, wrap the complete question and fill the
 input width. Preserve the answer value and existing keyboard/Close behavior.
 Full hosted verification and regenerated Linux/Windows images remain pending.
+
+At cba5167 the complete hosted push run 39400869152 passes Linux and Windows,
+including installer/native probes. Linux UI JUnit reports 29/29 passing cases;
+diagnostics have no binding-loop, assignment, ReferenceError or TypeError warning.
+Downloaded both actual UI artifacts and inspected the four long Practice
+captures plus populated Applications, Insights, personal words and replacements.
+The full question wraps within the dialog, Close remains visible and themed
+indicators are legible. Independent static review found no actionable issue.
+See docs/UI_REVIEW.md for the exact sample and remaining physical-desktop limits.

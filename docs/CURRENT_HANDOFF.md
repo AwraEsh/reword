@@ -1,5 +1,17 @@
 # Current handoff — 2026-10-18
 
+## UI branch checkpoint — 2026-10-20
+
+PR #22, codex/populated-list-review, is stacked on PR #20. At cba5167 the
+complete Linux/Windows run 39400869152 passes, including 29 Linux UI cases,
+installer and controlled native checks. Actual downloaded captures confirm the
+sampled long list values and Practice question wrap without covering actions;
+dark ComboBox indicator contrast also passes. See docs/UI_REVIEW.md and the
+2026-10-20 populated-list plan for observed RED cases and final inspection.
+Physical desktop/scaling/tray and full product acceptance remain open. Local
+compilation and Qt workloads remain suspended after the two host freezes.
+The older narrative below is historical evidence, not current release approval.
+
 The approved scope is in [REQUIREMENTS.md](REQUIREMENTS.md). The repository is
 intentionally public at the user's later request. Do not change visibility back
 to private. Keep runtime data, local captures, dependencies and build outputs out
