@@ -106,3 +106,10 @@ cannot repopulate the observation before the assertion. The original code
 still fails because its retained retry/Undo references are not cleared. Fresh
 hosted verification is required; this change neither relaxes the assertion nor
 alters production exception handling.
+
+Task2 regressions add a one-shot native-write callback, then change application,
+field identity, password role or metadata certainty. Live/selection/Undo paths
+must not request any follow-up text from that changed target. Selected original
+remains available in session recovery, but uncertain results are not history.
+An unconfirmed selected write must also retain the original for copying. Observe
+hosted RED before changing read/recovery behavior. No real desktop is exercised.

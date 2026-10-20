@@ -27,7 +27,7 @@ class FixtureAdapter final : public Adapter {
     QStringList activeShortcuts;
     bool rejectRestore = false, rejectedShortcut = false;
     int rejectedShortcutAttempts = 0;
-    std::function<void()> onShortcutRejected, onRead;
+    std::function<void()> onShortcutRejected, onRead, onWrite;
     bool quiet = false;
     QString pendingAction;
     QString takeAction() override {
@@ -67,6 +67,8 @@ class FixtureAdapter final : public Adapter {
             return false;
         type(text);
         field.caret = caret;
+        if (auto callback = std::exchange(onWrite, {}))
+            callback();
         return true;
     }
     QString description() const override {
@@ -124,6 +126,75 @@ struct Harness {
 class ServiceTest : public QObject {
     Q_OBJECT
   private slots:
+    void postWriteReadStaysOnThePermittedTarget_data() {
+        QTest::addColumn<QString>("operation");
+        QTest::addColumn<QString>("transition");
+        for (auto operation : {"live", "selection", "undo"})
+            for (auto transition : {"application", "field", "password", "unknown"}) {
+                auto name = QString(operation) + '-' + transition;
+                QTest::newRow(name.toUtf8().constData()) << QString(operation) << QString(transition);
+            }
+    }
+    void postWriteReadStaysOnThePermittedTarget() {
+        QFETCH(QString, operation);
+        QFETCH(QString, transition);
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        if (operation == "undo") {
+            h.adapter->type("teh ");
+            QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        }
+        h.adapter->quiet = operation != "live";
+        int unexpectedReads = 0;
+        h.adapter->onWrite = [&] {
+            h.adapter->quiet = true;
+            if (transition == "application")
+                h.adapter->field.app = "synthetic-unapproved-app";
+            else if (transition == "field")
+                h.adapter->field.id = "another-synthetic-field";
+            else if (transition == "password")
+                h.adapter->field.password = true;
+            else
+                h.adapter->field.known = false;
+            h.adapter->onRead = [&] { ++unexpectedReads; };
+        };
+        QSignalSpy recovery(&h.service, &Service::passageApplied);
+        const auto writes = h.adapter->writes;
+        if (operation == "live")
+            h.adapter->type("teh ");
+        else if (operation == "selection") {
+            h.adapter->type("teh");
+            h.adapter->field.selectionStart = 0;
+            h.adapter->field.selectionEnd = 3;
+            h.service.action("fix");
+        } else
+            h.service.action("undo");
+        QTRY_COMPARE_WITH_TIMEOUT(h.adapter->writes, writes + 1, 12000);
+        QCOMPARE(unexpectedReads, 0);
+        QVERIFY(!ServiceTestAccess::retainsTransientText(h.service));
+        if (operation == "selection") {
+            QCOMPARE(recovery.size(), 1);
+            QCOMPARE(recovery.first()[0].toString(), QString("teh"));
+            QVERIFY(h.store.histories().isEmpty());
+        }
+    }
+    void unconfirmedSelectionPreservesSessionOriginal() {
+        Harness h;
+        h.adapter->quiet = true;
+        h.adapter->type("teh");
+        h.adapter->field.selectionStart = 0;
+        h.adapter->field.selectionEnd = 3;
+        h.adapter->rejectNext = true;
+        QSignalSpy recovery(&h.service, &Service::passageApplied);
+        QSignalSpy messages(&h.service, &Service::message);
+        h.service.action("fix");
+        QTRY_COMPARE_WITH_TIMEOUT(h.adapter->writes, 1, 12000);
+        QCOMPARE(recovery.size(), 1);
+        QCOMPARE(recovery.first()[0].toString(), QString("teh"));
+        QCOMPARE(h.adapter->field.text, QString("teh"));
+        QVERIFY(h.store.histories().isEmpty());
+        QVERIFY(!messages.isEmpty());
+    }
     void unsafeBoundaryReleasesTransientText_data() {
         QTest::addColumn<QString>("boundary");
         for (auto value : {"password", "locked", "unknown", "denied", "paused", "exception", "stop"})
