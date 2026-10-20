@@ -157,3 +157,11 @@ than once per independent binding. The same test must verify English switching
 still updates the actual control both ways. Observe hosted RED before replacing
 Main.qml/SettingRow.qml bindings with one shared root settings snapshot. No
 production diagnostic API, persistent cache, rule, language or UI copy change.
+
+Hosted RED39392713956 at859b133 confirms one backend notification reads the
+full settings map37times in the actual QML interface. Each getter performs
+many SQLite queries. Main.qml now owns one notification-driven settingsSnapshot
+and passes it to every SettingRow; other bindings use that same snapshot.
+This is scoped to rendering, not an authorization/configuration cache in the
+correction service. The test still requires actual English toggle propagation.
+Full remote UI/native/installer checks and new packaged CPU evidence are pending.
