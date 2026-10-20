@@ -541,6 +541,40 @@ class ServiceTest : public QObject {
         QCOMPARE(h.adapter->writes, 0);
         QVERIFY(h.store.histories().isEmpty());
     }
+    void recoveryPreparationHonorsChangedPolicy_data() {
+        liveBurstStopsWhenPolicyChanges_data();
+    }
+    void recoveryPreparationHonorsChangedPolicy() {
+        QFETCH(QString, policy);
+        Harness h;
+        h.adapter->quiet = true;
+        h.adapter->type("teh");
+        h.adapter->field.selectionStart = 0;
+        h.adapter->field.selectionEnd = 3;
+        QSignalSpy recovery(&h.service, &Service::passageRecoveryAvailable);
+        QSignalSpy messages(&h.service, &Service::message);
+        connect(&h.service, &Service::passageRecoveryAvailable, &h.service, [&] {
+            if (policy == "pause")
+                h.store.pause(-1);
+            else if (policy == "deny")
+                h.store.decide(h.adapter->field.app, "deny");
+            else if (policy == "language") {
+                h.store.setValue("english", false);
+                h.store.setValue("configRevision",
+                                 h.store.value("configRevision", 0).toLongLong() + 1);
+            } else {
+                h.service.cancel();
+                if (policy == "cancel-reset")
+                    h.service.prepare();
+            }
+        });
+        h.service.action("fix");
+        QTRY_VERIFY_WITH_TIMEOUT(!messages.isEmpty(), 12000);
+        QCOMPARE(recovery.count(), 1);
+        QCOMPARE(h.adapter->writes, 0);
+        QCOMPARE(h.adapter->field.text, QString("teh"));
+        QVERIFY(h.store.histories().isEmpty());
+    }
     void undoStopsWhenPolicyChangesDuringFinalRead_data() {
         liveBurstStopsWhenPolicyChanges_data();
     }
