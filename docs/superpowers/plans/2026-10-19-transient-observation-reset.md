@@ -203,3 +203,26 @@ Use a test-only boolean cancellation observation, never user contents. Observe
 hosted RED before adding native-job identity tracking and cancellation. Running
 worker cancellation remains cooperative; do not claim QString zeroization or
 immediate destruction of copies already captured by QtConcurrent.
+
+## Native job cancellation checkpoint
+
+Full Linux/Windows run 39395053416 passes at f495be3, including guarded native
+reads and controlled platform probes. Independent static review found no
+important introduced issue in the expected-target implementation.
+
+Hosted RED run 39395433922 at b8a5171 reproduces all eight stale native-job
+cases: no cancellation is requested after unsafe metadata, denied permission,
+Pause, changed identity or a metadata exception. The workspace control passes
+and 72 other Service cases pass. Saved log:
+.deps/native-job-red-b8a5171.log.
+
+Track only the active native job's app/field identifiers. While it is pending,
+metadata must still match that target before reading text; unsafe transitions
+and integration exceptions request cooperative cancellation. Pending shortcut
+focus grace remains allowed only for the same safe target. Workspace jobs do
+not inherit this external-focus cancellation. Clear job metadata at completion,
+stop and failed startup. Full hosted GREEN and review remain pending.
+
+Cancellation does not promise secure memory zeroization or instant removal of
+QString copies held by an already running worker. Worker queue time and the
+operation deadline still require a separate regression audit.

@@ -31,9 +31,13 @@ class Service : public QObject {
     bool shortcutsHealthy_ = false;
     std::atomic_bool cancel_{false};
     std::atomic<quint64> cancellationRevision_{0};
-    bool wayland_ = false, jobRunning_ = false;
+    bool wayland_ = false, jobRunning_ = false, nativeJob_ = false;
+    // Metadata only: never duplicate a native job's text in its target guard.
+    QString nativeJobApp_, nativeJobField_;
     QFutureWatcher<Change> *job_ = nullptr;
     std::unique_ptr<QLockFile> jobLock_;
+    void clearJobTarget();
+    void cancelNativeJob();
     void resetRetry();
     void resetObservation();
     void runText(QString input, bool native, Field field = {});

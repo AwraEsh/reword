@@ -4,6 +4,15 @@
 #include <QtConcurrent>
 #include <QElapsedTimer>
 namespace reword {
+void Service::clearJobTarget() {
+    nativeJob_ = false;
+    nativeJobApp_.clear();
+    nativeJobField_.clear();
+}
+void Service::cancelNativeJob() {
+    if (jobRunning_ && nativeJob_ && !cancel_.load())
+        cancel();
+}
 void Service::resetRetry() {
     retry_.reset();
     retryStart_ = -1;
@@ -41,6 +50,8 @@ void Service::stop() {
         job_ = nullptr;
     }
     jobLock_.reset();
+    jobRunning_ = false;
+    clearJobTarget();
     if (timer_)
         timer_->stop();
     resetObservation();
@@ -141,6 +152,10 @@ void Service::tick() {
             // All other policy/identity boundaries still erase observation.
             field.focused = true;
             const Access access{store_->allowed(field.app), browserApp(field.app), store_->paused()};
+            if (jobRunning_ && nativeJob_ &&
+                (!safe(field, access, store_->options()) || field.app != nativeJobApp_ ||
+                 field.id != nativeJobField_))
+                cancelNativeJob();
             if (!safe(field, access, store_->options()) || field.id != previous_.id ||
                 field.app != previous_.app) {
                 resetObservation();
@@ -153,8 +168,12 @@ void Service::tick() {
         }
         if (!adapter_->changed())
             return;
-        auto f = permitted();
+        Field jobTarget;
+        jobTarget.app = nativeJobApp_;
+        jobTarget.id = nativeJobField_;
+        auto f = permitted(jobRunning_ && nativeJob_ ? &jobTarget : nullptr);
         if (f.id.isEmpty()) {
+            cancelNativeJob();
             resetObservation();
             return;
         }
@@ -237,6 +256,7 @@ void Service::tick() {
         }
 
     } catch (...) {
+        cancelNativeJob();
         resetObservation();
         emit state(lastDescription_, shortcutsHealthy_);
         emit message("An integration operation failed safely. No further edit was attempted.");
@@ -266,6 +286,9 @@ void Service::runText(QString input, bool native, Field field) {
     }
     jobLock_ = std::move(operationLock);
     jobRunning_ = true;
+    nativeJob_ = native;
+    nativeJobApp_ = native ? field.app : QString{};
+    nativeJobField_ = native ? field.id : QString{};
     const auto cancellation = cancellationRevision_.load();
     const auto revision = store_->value("configRevision", 0).toLongLong();
     auto options = store_->options();
@@ -279,6 +302,7 @@ void Service::runText(QString input, bool native, Field field) {
             auto completed = job_;
             job_ = nullptr;
             jobRunning_ = false;
+            clearJobTarget();
             completed->deleteLater();
             try {
                 auto change = completed->result();
@@ -372,6 +396,7 @@ void Service::processText(QString input) {
         runText(input, false);
     } catch (...) {
         jobRunning_ = false;
+        clearJobTarget();
         jobLock_.reset();
         emit result(input, input, "Correction could not start. Check local storage access.", false);
     }
@@ -435,9 +460,11 @@ void Service::action(QString name) {
             emit message(store_->paused() ? "Reword paused." : "Reword resumed.");
         }
     } catch (...) {
+        cancelNativeJob();
         resetObservation();
         if (!job_) {
             jobRunning_ = false;
+            clearJobTarget();
             jobLock_.reset();
         }
         emit message("The operation stopped safely.");
