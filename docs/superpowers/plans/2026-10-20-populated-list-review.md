@@ -49,3 +49,17 @@ wrap their label, and reserve enough permission-control width for Ask tomorrow.
 No stored word/name/replacement is truncated. Reveal the complete replacement
 row for captures rather than centering its now taller label around the button.
 Full hosted tests and actual regenerated images remain required.
+
+Full hosted push run 39397991807 and PR run 39397997914 pass at baf6773.
+Inspected the actual Linux/Windows regenerated populated captures: full wrapped
+text and actions fit. Linux diagnostic XML has no binding-loop, assignment,
+ReferenceError or TypeError warnings. Independent code review found no actionable
+sizing cycle, stored-value change or handler regression.
+
+Follow-up real evidence: Windows dark ComboBox arrows are almost black. The
+verified Qt 6.8.3 source archive's Basic/ComboBox.qml uses control.palette.dark
+for indicator color; the current application does not set this palette role.
+Add a real indicator/background contrast check (3:1 non-text minimum), and open
+Practice from the populated Insights action with a 64-character accepted answer.
+Retain both long-dialog captures and require its full bounds inside 880×620.
+Observe hosted results before changing the palette role or dialog sizing.

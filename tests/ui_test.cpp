@@ -243,6 +243,120 @@ class UiTest : public QObject {
         }
         QVERIFY2(failures.isEmpty(), qPrintable(failures.join("; ")));
     }
+    void permissionIndicatorsStayVisibleInBothThemes() {
+        QTemporaryDir data;
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
+        reword::Store fixture(data.path());
+        fixture.discover("/synthetic/reword-ui/notes", "Notes");
+        fixture.decide("/synthetic/reword-ui/notes", "allow");
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        auto window = qobject_cast<QQuickWindow *>(root);
+        QVERIFY(window);
+        window->setWidth(880);
+        window->setHeight(620);
+        root->setProperty("page", 3);
+        const auto luminance = [](const QColor &color) {
+            const auto linear = [](double value) {
+                return value <= 0.04045 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+            };
+            return 0.2126 * linear(color.redF()) + 0.7152 * linear(color.greenF()) +
+                   0.0722 * linear(color.blueF());
+        };
+        QStringList failures;
+        for (bool dark : {false, true}) {
+            controller.set("dark", dark);
+            QTest::qWait(150);
+            int checked = 0;
+            auto items = window->contentItem()->childItems();
+            while (!items.isEmpty()) {
+                auto item = items.takeLast();
+                items.append(item->childItems());
+                if (!item->isVisible() || !item->property("displayText").isValid())
+                    continue;
+                auto indicator = item->property("indicator").value<QQuickItem *>();
+                auto background = item->property("background").value<QQuickItem *>();
+                if (!indicator || !background)
+                    continue;
+                const auto foreground = indicator->property("color").value<QColor>();
+                const auto surface = background->property("color").value<QColor>();
+                QVERIFY(foreground.isValid() && surface.isValid());
+                const auto first = luminance(foreground), second = luminance(surface);
+                const auto contrast = (std::max(first, second) + 0.05) /
+                                      (std::min(first, second) + 0.05);
+                if (contrast < 3.0)
+                    failures << QString("%1 indicator contrast=%2")
+                                    .arg(dark ? "dark" : "light").arg(contrast);
+                ++checked;
+            }
+            QVERIFY(checked >= 2); // Appearance and the actual application permission.
+        }
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join("; ")));
+    }
+    void practiceDialogFitsLongestAcceptedWord() {
+        QTemporaryDir data;
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
+        reword::Store fixture(data.path());
+        controller.set("statistics", true);
+        const QString answer(64, 'W');
+        fixture.count("misspelling", answer, fixture.options());
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        auto window = qobject_cast<QQuickWindow *>(root);
+        QVERIFY(window);
+        window->setWidth(880);
+        window->setHeight(620);
+        root->setProperty("page", 5);
+        QTest::qWait(150);
+        QQuickItem *practice = nullptr;
+        auto items = window->contentItem()->childItems();
+        while (!items.isEmpty()) {
+            auto item = items.takeLast();
+            if (item->isVisible() && item->property("text").toString() == "Practice" &&
+                item->property("checkable").isValid()) {
+                practice = item;
+                break;
+            }
+            items.append(item->childItems());
+        }
+        QVERIFY(practice);
+        practice->forceActiveFocus();
+        QTest::keyClick(window, Qt::Key_Space);
+        QObject *dialog = nullptr;
+        for (auto object : root->findChildren<QObject *>())
+            if (object->property("title").toString() == "Practice spelling")
+                dialog = object;
+        QVERIFY(dialog);
+        QTRY_VERIFY(dialog->property("opened").toBool());
+        QCOMPARE(dialog->property("answer").toString(), answer);
+        QStringList failures;
+        for (bool dark : {false, true}) {
+            controller.set("dark", dark);
+            QTest::qWait(100);
+            const auto captures = qEnvironmentVariable("REWORD_DIALOG_CAPTURE_DIR");
+            if (!captures.isEmpty()) {
+                QVERIFY(QDir().mkpath(captures));
+                QVERIFY(window->grabWindow().save(captures +
+                         (dark ? "/dark-practice-long.png" : "/light-practice-long.png")));
+            }
+            const auto x = dialog->property("x").toDouble();
+            const auto y = dialog->property("y").toDouble();
+            const auto width = dialog->property("width").toDouble();
+            const auto height = dialog->property("height").toDouble();
+            if (x < 0 || y < 0 || x + width > window->width() || y + height > window->height())
+                failures << QString("Practice dialog exceeds viewport: x=%1 y=%2 width=%3 height=%4")
+                                .arg(x).arg(y).arg(width).arg(height);
+        }
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join("; ")));
+        QTest::keyClick(window, Qt::Key_Escape);
+        QTRY_VERIFY(!dialog->property("opened").toBool());
+    }
     void renderingFontsCoverBothLanguages() {
         QVERIFY2(!QFontDatabase::families().isEmpty(),
                  "The offscreen renderer must discover installed font families.");
