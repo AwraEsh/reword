@@ -152,7 +152,12 @@ class ServiceTest : public QObject {
             else if (boundary == "paused")
                 h.store.pause(-1);
             else
-                h.adapter->onRead = [] { throw std::runtime_error("Synthetic inspection failure"); };
+                h.adapter->onRead = [&] {
+                    // Observe this failure boundary before a later permitted
+                    // timer tick legitimately caches the safe field again.
+                    h.adapter->quiet = true;
+                    throw std::runtime_error("Synthetic inspection failure");
+                };
             QTRY_VERIFY(h.adapter->inspections > inspections);
             if (boundary != "exception")
                 QCOMPARE(h.adapter->reads, reads);

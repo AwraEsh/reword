@@ -721,3 +721,17 @@ the same staged AppDir and advances only on success. Both reports are retained.
 Do not claim the earlier shutdown-forced baseline's root cause fixed from one
 normal exit. Keep product release, source/notices, privacy-buffer audit,
 current-host latency/final-binary soak and ordinary Windows/Wayland gates open.
+
+## Transient privacy reset — 2026-10-20
+
+Stacked branch codex/transient-observation-reset in the storage-access worktree:
+99f91d3/run39321745068 reproduced seven retained-text boundaries and stale Undo
+after inspection failure. d27d3f8 centralizes retry/observation cleanup and passes
+Linux. Windows' failure was silent until Service JUnit output was added in
+633e9ed. Diagnostic run39391142137 proves its only failure is the exception
+retention row: safe polling can legitimately refill previous_ after the reset.
+The test now quiesces its synthetic adapter in the throwing callback. Fresh
+Linux/Windows verification remains pending. Static independent review found no
+important production reset regression; post-write read identity/authorization
+and native-job cancellation audits are still separate open privacy gates.
+No local build, GUI workload, product release or installation occurred.

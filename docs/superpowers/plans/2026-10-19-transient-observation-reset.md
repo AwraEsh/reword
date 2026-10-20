@@ -96,3 +96,13 @@ empty output), so the case is unknown. Add JUnit file output to the Service
 test and retain it with the existing diagnostics. Do not guess a production
 fix from the suite exit code. Independent review was interrupted by the agent's
 account usage limit and remains incomplete, not approved.
+
+Resumed review found no important production reset regression and identified
+the exception-row polling race. Diagnostic run39391142137 at633e9ed confirms
+the only Windows failure is unsafeBoundaryReleasesTransientText(exception).
+Its JUnit is retained under .deps/transient-reset-633e9ed-windows. Quiesce
+the synthetic adapter inside the throwing callback so a later permitted tick
+cannot repopulate the observation before the assertion. The original code
+still fails because its retained retry/Undo references are not cleared. Fresh
+hosted verification is required; this change neither relaxes the assertion nor
+alters production exception handling.
