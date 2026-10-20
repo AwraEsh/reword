@@ -30,7 +30,15 @@ int main(int argc, char **argv) {
         return fail("Fixture focus was not observed.");
     if (!f.text.isEmpty())
         return fail("Metadata inspection read text.");
-    f = adapter->inspect(true);
+    auto otherTarget = f;
+    otherTarget.id += "-different-target";
+    if (!adapter->readExpected(otherTarget).text.isEmpty())
+        return fail("Expected-target read accepted a different field.");
+    otherTarget = f;
+    otherTarget.app += "-different-application";
+    if (!adapter->readExpected(otherTarget).text.isEmpty())
+        return fail("Expected-target read accepted a different application.");
+    f = adapter->readExpected(f);
     std::cerr << "metadata: known=" << f.known << " locked=" << f.locked << " plain=" << f.plain
               << " focused=" << f.focused << " editable=" << f.editable
               << " chars=" << f.text.size() << " caret=" << f.caret << "\n";

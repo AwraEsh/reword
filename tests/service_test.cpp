@@ -27,7 +27,7 @@ class FixtureAdapter final : public Adapter {
     QStringList activeShortcuts;
     bool rejectRestore = false, rejectedShortcut = false;
     int rejectedShortcutAttempts = 0;
-    std::function<void()> onShortcutRejected, onRead, onWrite;
+    std::function<void()> onShortcutRejected, onRead, onWrite, onMetadata;
     bool quiet = false;
     QString pendingAction;
     QString takeAction() override {
@@ -57,9 +57,18 @@ class FixtureAdapter final : public Adapter {
                 auto callback = std::exchange(onRead, {});
                 callback();
             }
-        } else
+        } else {
             value.text.clear();
+            if (auto callback = std::exchange(onMetadata, {}))
+                callback();
+        }
         return value;
+    }
+    Field readExpected(const Field &expected) override {
+        if (expected.app != field.app || expected.id != field.id || field.password ||
+            !field.known || !field.editable || !field.focused || field.locked || !field.plain)
+            return {};
+        return inspect(true);
     }
     bool replace(const Field &expected, const QString &text, int caret) override {
         ++writes;
@@ -540,6 +549,34 @@ class ServiceTest : public QObject {
         QCOMPARE(h.adapter->field.text, QString("teh"));
         QCOMPARE(h.adapter->writes, 0);
         QVERIFY(h.store.histories().isEmpty());
+    }
+    void changedMetadataTargetIsNotRead_data() {
+        QTest::addColumn<QString>("boundary");
+        for (auto boundary : {"application", "field", "password", "unknown"})
+            QTest::newRow(boundary) << QString(boundary);
+    }
+    void changedMetadataTargetIsNotRead() {
+        QFETCH(QString, boundary);
+        Harness h;
+        h.adapter->quiet = true;
+        h.adapter->type("teh");
+        h.adapter->field.selectionStart = 0;
+        h.adapter->field.selectionEnd = 3;
+        h.adapter->onMetadata = [&] {
+            if (boundary == "application")
+                h.adapter->field.app = "different-unapproved-fixture";
+            else if (boundary == "field")
+                h.adapter->field.id = "different-field";
+            else if (boundary == "password")
+                h.adapter->field.password = true;
+            else
+                h.adapter->field.known = false;
+        };
+        h.service.action("fix");
+        QCOMPARE(h.adapter->reads, 0);
+        QCOMPARE(h.adapter->writes, 0);
+        QVERIFY(h.store.histories().isEmpty());
+        QVERIFY(!ServiceTestAccess::retainsTransientText(h.service));
     }
     void recoveryPreparationHonorsChangedPolicy_data() {
         liveBurstStopsWhenPolicyChanges_data();
