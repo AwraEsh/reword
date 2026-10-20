@@ -127,6 +127,89 @@ class UiTest : public QObject {
         controller.set("english", true);
         QTRY_VERIFY(english->property("checked").toBool());
     }
+    void populatedListsKeepActionsInsideTheViewport_data() {
+        QTest::addColumn<QString>("surface");
+        for (auto surface : {"applications", "personal", "replacements", "insights"})
+            QTest::newRow(surface) << QString(surface);
+    }
+    void populatedListsKeepActionsInsideTheViewport() {
+        QFETCH(QString, surface);
+        QTemporaryDir data;
+        reword::Controller controller(data.path(), nullptr, std::make_unique<UiMetadataAdapter>());
+        reword::Store fixture(data.path());
+        const QString longWord(64, 'm');
+        const QString longName(200, 'm');
+        fixture.discover("/synthetic/reword-ui/" + longName, longName);
+        fixture.decide("/synthetic/reword-ui/" + longName, "allow");
+        fixture.discover("/synthetic/reword-ui/notes", "Notes");
+        fixture.decide("/synthetic/reword-ui/notes", "deny");
+        fixture.discover("/synthetic/reword-ui/reader", "Reader");
+        fixture.decide("/synthetic/reword-ui/reader", "later");
+        controller.addWord(longWord);
+        controller.addWord(QString::fromUtf8("واژه‌آزمایشی"));
+        controller.replacement(longWord, QString(128, 'W'));
+        controller.set("statistics", true);
+        auto options = fixture.options();
+        fixture.count(longWord, QString(64, 'W'), options);
+        fixture.count(QString::fromUtf8("ازمایشی"), QString::fromUtf8("آزمایشی"), options);
+        emit controller.updated();
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        auto window = qobject_cast<QQuickWindow *>(root);
+        QVERIFY(window);
+        window->setWidth(880);
+        window->setHeight(620);
+        root->setProperty("page", surface == "applications" ? 3 : surface == "insights" ? 5 : 2);
+        QStringList failures;
+        for (bool dark : {false, true}) {
+            controller.set("dark", dark);
+            QTest::qWait(150);
+            QQuickItem *action = nullptr;
+            auto items = window->contentItem()->childItems();
+            while (!items.isEmpty()) {
+                auto item = items.takeLast();
+                const auto text = item->property("text").toString();
+                const bool button = item->property("checkable").isValid();
+                if (item->isVisible() &&
+                    ((surface == "applications" && item->property("displayText").toString() == "Allowed") ||
+                     (button && surface == "personal" && text == longWord + "  ×") ||
+                     (button && surface == "replacements" && text == "Remove") ||
+                     (button && surface == "insights" && text == "Practice"))) {
+                    action = item;
+                    break;
+                }
+                items.append(item->childItems());
+            }
+            QVERIFY(action);
+            for (auto parent = action->parentItem(); parent; parent = parent->parentItem()) {
+                if (!parent->property("contentY").isValid())
+                    continue;
+                const auto offset = action->mapToItem(parent, QPointF()).y();
+                const auto maximum = std::max(0.0, parent->property("contentHeight").toDouble() -
+                                                       parent->height());
+                parent->setProperty("contentY", std::clamp(
+                    parent->property("contentY").toDouble() + offset - 40.0, 0.0, maximum));
+                break;
+            }
+            QTest::qWait(100);
+            const auto captureDirectory = qEnvironmentVariable("REWORD_UI_CAPTURE_DIR");
+            if (!captureDirectory.isEmpty()) {
+                QVERIFY(QDir().mkpath(captureDirectory));
+                QVERIFY(window->grabWindow().save(captureDirectory + "/populated-" + surface +
+                                                  (dark ? "-dark.png" : "-light.png")));
+            }
+            const auto bounds = action->mapRectToScene(action->boundingRect());
+            if (bounds.left() < 214 || bounds.right() > window->width() ||
+                bounds.top() < 122 || bounds.bottom() > window->height())
+                failures << QString("%1 action outside viewport: x=%2 y=%3 width=%4 height=%5")
+                                .arg(dark ? "dark" : "light")
+                                .arg(bounds.x()).arg(bounds.y()).arg(bounds.width()).arg(bounds.height());
+        }
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join("; ")));
+    }
     void renderingFontsCoverBothLanguages() {
         QVERIFY2(!QFontDatabase::families().isEmpty(),
                  "The offscreen renderer must discover installed font families.");

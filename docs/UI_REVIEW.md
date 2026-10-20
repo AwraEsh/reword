@@ -145,3 +145,30 @@ Final integrated local verification at 116ad51: complete build and all eight
 CTest suites pass in 46.32s, including the process sampler integrated from PR #16.
 The final footer and existing consent/modal checks pass. Final branch CI must
 still confirm this integrated source on both operating systems.
+
+## Windows capture inspection — 2026-10-20
+
+Downloaded `Reword-Windows-UI-Review` from hosted run 39395053416 at f495be3
+into ignored `.deps/ui-windows-f495be3`. Inspected these actual 880×620 captures:
+light Overview, Correction, Applications and History; dark Languages, Insights
+and Privacy; dark Saved correction and Practice; light Pause and long consent.
+
+The inspected captures show readable English labels, visible selected navigation
+and switch states, bounded long consent wrapping, visible No/Not now/Yes actions,
+and legible mixed Persian/English content. History detail keeps its two copy
+actions and Close visible while long text scrolls. No clipping of the sampled
+primary actions or unreadable theme contrast was observed in these images.
+This is a sample of software-rendered Windows Qt output, not normal desktop,
+DPI, screen-reader, tray or complete interaction acceptance.
+
+Applications and Insights are empty in this fixture. The lower personal-word
+and replacement lists are below the captured viewport. Their populated/long-data
+coverage is still open. Source inspection finds labels without width/wrapping
+constraints in application names, replacement rows and insight words; capture
+these cases and reproduce any actual overflow before changing layout. Do not
+mark populated-list acceptance from empty-state images.
+
+Impeccable visual-review guidance was consulted. Its context launcher could not
+execute (permission denied); existing product requirements, QML and this evidence
+record supplied the context. Its web/mobile detectors do not establish Qt desktop
+quality, so no detector score or complete Impeccable audit is claimed.
