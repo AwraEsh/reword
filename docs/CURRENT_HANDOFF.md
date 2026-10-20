@@ -945,3 +945,14 @@ still requires inspecting actual hosted contents; releaseReady stays false.
 PR21 documentation head 8a105c4 passes full push/PR runs 39398173948/39398182802.
 The populated-list layout passes at baf6773; its long-Practice/indicator follow-up
 at ef9d446 is currently under failure inspection and not accepted.
+
+## Actual Windows metadata evidence
+
+PR23 code db871eb passes full Linux/Windows push/PR runs 39399260940/39399290932.
+Downloaded materials under .deps/windows-metadata-db871eb contain 158 retained
+metadata files (186,979 bytes), all verified against the audit hashes. Hunspell
+staged DLL, frozen recipe/patch, source archive and ABI package ID match its
+retained SPDX/ABI records; see docs/evidence/windows-hunspell-cache-db871eb.json.
+This is recorded cache correspondence, not an independent reproducible build.
+Qt/graphics/VC runtime and declared libiconv dependency material remain open.
+Independent static review found no important implementation issue.

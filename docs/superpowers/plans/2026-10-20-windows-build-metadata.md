@@ -36,3 +36,12 @@ safe vendor-relative names and exact recorded hashes. Per-file and aggregate
 bounds reject before output publication; changed copies remove the owned partial
 audit. The releaseReady/source-authentication fields remain unchanged and false.
 Full hosted tests and real Windows material inspection are still pending.
+
+Full push/PR runs 39399260940/39399290932 pass at db871eb. Actual artifact:
+158 metadata files, 186,979 bytes, all copied hashes/sizes match. The Hunspell
+SPDX DLL hash matches the stage; recipe/patch hashes and source SHA512 match
+previously acquired frozen inputs; ABI-record hash matches its package ID.
+Safe relative-only receipt is committed in docs/evidence. Independent static
+review found no important issue. Remaining libiconv/Qt/graphics/VC runtime and
+final-package source/notice work stays open; this task does not prove a fully
+reproducible upstream build or product readiness.

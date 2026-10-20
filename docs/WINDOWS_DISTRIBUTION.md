@@ -16,6 +16,8 @@ contains:
   DLLs/executables, unmatched binaries, missing vendor notices and metadata hashes.
 - `notices/`: available vendor license/copyright files with their original relative
   paths under stable vendor identifiers.
+- `build-metadata/`: exact whitelisted Qt/vcpkg metadata under stable vendor-relative
+  names, checked against the recorded bytes and SHA256.
 - `vendor-versions.json`: queried Qt version, installed vcpkg package listing and
   the checkout commit observed during the build.
 
@@ -30,7 +32,10 @@ Unreadable directories, links, unusual files and over-limit notices stop the
 audit. The caller must own and keep the build trees unchanged during collection.
 Notice files are limited to 4 MiB each and 32 MiB in total; copied notice bytes
 are rechecked against the inventory. An existing evidence directory is refused.
-Build metadata is hashed rather than copied verbatim into public evidence.
+Build metadata is retained separately with a 1 MiB per-file and 8 MiB total
+limit. Only the explicit metadata filename whitelist is copied; altered copies
+remove the owned partial audit. This evidence contains vendor build records,
+not application runtime data.
 
 The audit is separate from the installer payload. Its `releaseReady` field stays
 false: inventory is not source authentication or a completed redistribution
@@ -152,3 +157,28 @@ PR #19 merged as 15e8ad5. Audit artifact 12218965126 contains audit.json SHA256
 This closes the ordinary candidate-file gate for that runner/build only.
 Dynamic/API-set/OS compatibility, source/notice binding and product release
 acceptance remain open.
+
+## Retained cached-package evidence — 2026-10-20
+
+Full hosted push run 39399260940 and PR run 39399290932 pass at db871eb.
+The actual artifact retains 158 metadata files totaling 186,979 bytes; every
+copied file matches its reported size and SHA256. Twelve targeted audit fixtures
+passed after four observed RED cases for missing retention, per-file/aggregate
+limits and changed-input refusal. Independent review found no important issue.
+
+The [bounded Hunspell receipt](evidence/windows-hunspell-cache-db871eb.json)
+compares actual cached-package SPDX/ABI records with the acquired frozen recipe
+and source archive:
+
+- Patch, portfile.cmake and vcpkg.json SHA256 all match the recorded port inputs
+  from vcpkg commit e456309491fd875487bf02b8a0dca76c1b1b00cc.
+- Hunspell 1.7.5 source archive SHA512 matches the SPDX resource record.
+- The staged hunspell-1.7-0.dll SHA256 matches the SPDX binary-file record.
+- The ABI metadata SHA256 matches the cached binary package identifier.
+
+These are recorded recipe/source/payload matches, stronger than assuming the
+current checkout built the cache. They are not an independent reproducible
+build. The recorded libiconv ABI dependency, Qt third-party/graphics materials,
+VC runtime notices and final installer/source pairing still need resolution.
+The retained Qt qconfig.pri reports Qt 6.8.3 and SDK compiler 19.39.33520; the
+application build toolchain is recorded separately. releaseReady remains false.
