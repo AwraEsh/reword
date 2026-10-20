@@ -33,3 +33,11 @@ worker cancellation not being reset while it still runs; unsafe observations
 never confirming history/statistics; fail-closed session/lock behavior. A later
 deadline audit must cover addon acceptance/worker/completion, not only Engine's
 own timer. Broader GNOME/application compatibility remains a separate gate.
+
+## Paused checkpoint
+
+The user requested a temporary pause. Test-only source 104482e failed compilation
+in run 39482104028 because CapabilityFlag enums require an explicit flags wrapper
+for operator|. Fixture follow-up f478026 is pushed. No behavioral RED has yet
+been verified, and no production guard change was made. Inspect that run before
+continuing; a compile error does not establish the suspected retention defect.

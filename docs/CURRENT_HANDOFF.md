@@ -1,8 +1,40 @@
 # Current handoff — 2026-10-20
 
-The user resumed autonomous work. The full product goal is active. Requirements
+The user requested a temporary pause on 2026-10-20. The project is paused: do not
+resume implementation, builds, tests, installation or release until explicitly
+asked to continue. Requirements
 remain in [REQUIREMENTS.md](REQUIREMENTS.md); the repository is intentionally
 public. No production release or local installation has been accepted.
+
+## Pause checkpoint — 2026-10-20
+
+- Main develop is unchanged at 15e8ad5. PRs #20–#23 remain unmerged drafts.
+- PR22 code cba5167 passed full Linux/Windows run 39400869152. Its actual
+  long-data captures were inspected; documentation fb1020d is pushed.
+- PR23 metadata code db871eb passed full runs 39399260940/39399290932;
+  documentation/source-correspondence receipts through 1605c0c are pushed.
+- The two-hour run 39394646024 at 0fd1f2e FAILED after 1,819.969 seconds,
+  during the live retry sequence: native-text-mismatch, 632 complete cycles.
+  Its first/second/third counters are 634/633/633. No duration-complete event.
+  Helper cleanup required escalation; app CPU 5.86%, helper 2.11%, no swap.
+  Word p95 upper bound 23.6 ms is partial-run evidence only. Binary SHA256
+  037a68b4e5f9173f39325d1d7ff1002d99b78f0b208215e765d52ff92621c131.
+  Actual reports are ignored under .deps/hosted-active-2h-0fd1f2e. Do not claim
+  two-hour acceptance or blindly rerun: first add content-free attempt/timing
+  diagnostics and determine why the expected second attempt did not match.
+- Storage-access holds codex/fcitx-transient-guards at f478026 before this
+  checkpoint. It is pushed, with a plan and a real Fcitx/Store/recovery fixture.
+  Production behavior is unchanged; only friend access was added for inspection.
+  First CI 39482104028 failed to compile the test's capability-flag expression;
+  f478026 fixes that fixture expression. No behavioral RED or fix is accepted.
+  Inspect its latest hosted outcome before editing the addon after resume.
+- Keyboard-review holds clean local codex/active-workload-diagnostics at ef5db74,
+  with no diagnostic implementation yet. PR22 remains on its pushed branch.
+- Local C++/Qt/heavy workloads remain suspended after the two hard freezes.
+  No installation, release, PR merge or shutdown was performed at this checkpoint.
+
+The next checkpoint section predates this pause; its pending two-hour statement
+is superseded by the failed result above.
 
 ## Read this checkpoint first
 
