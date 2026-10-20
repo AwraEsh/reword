@@ -191,3 +191,15 @@ independent review are required; queued native worker cancellation stays open.
 Cancellation-gap fix a2f9ba2 passes full Linux/Windows run39394352890.
 Independent follow-up review confirms its P2 finding resolved; static review
 is distinct from native desktop acceptance.
+
+Task3 source audit confirms unsafe tick paths reset observation but do not
+request cancellation of a running native selected job. Add a controlled worker
+pool blocker in Service tests so unsafe metadata arrives before computation;
+always release the blocker before Service teardown, including assertion exits.
+Require cancellation for password,unknown,locked,denied,paused,changed app/field
+and metadata exceptions, with no extra text reads/writes/history. An independent
+workspace job must still complete while an external password field is focused.
+Use a test-only boolean cancellation observation, never user contents. Observe
+hosted RED before adding native-job identity tracking and cancellation. Running
+worker cancellation remains cooperative; do not claim QString zeroization or
+immediate destruction of copies already captured by QtConcurrent.

@@ -5,10 +5,16 @@
 #include <QSqlQuery>
 #include <QUuid>
 #include <QScopeGuard>
+#include <QSemaphore>
+#include <QThreadPool>
+#include <QtConcurrent>
 using namespace reword;
 
 namespace reword {
 struct ServiceTestAccess {
+    static bool cancellationRequested(const Service &service) {
+        return service.cancel_.load();
+    }
     static bool retainsTransientText(const Service &service) {
         return !service.previous_.text.isEmpty() || !service.undoAfter_.text.isEmpty() ||
                !service.undoBefore_.isEmpty() || !service.retryPrefix_.isEmpty() ||
@@ -130,6 +136,38 @@ struct Harness {
     }
     ~Harness() {
         service.stop();
+    }
+};
+// Hold only this test process's worker pool; release before Service teardown,
+// including on assertion failures, so a queued correction cannot deadlock stop.
+struct BlockedWorkerPool {
+    QThreadPool *pool = QThreadPool::globalInstance();
+    int previousMaximum = pool->maxThreadCount();
+    QSemaphore started, release;
+    QFuture<void> blocker;
+    bool released = false;
+    BlockedWorkerPool() {
+        pool->waitForDone();
+        pool->setMaxThreadCount(1);
+        blocker = QtConcurrent::run([this] {
+            started.release();
+            release.acquire();
+        });
+    }
+    bool ready() {
+        return started.tryAcquire(1, 2000);
+    }
+    void unblock() {
+        if (!released) {
+            released = true;
+            release.release();
+            blocker.waitForFinished();
+        }
+    }
+    ~BlockedWorkerPool() {
+        unblock();
+        pool->waitForDone();
+        pool->setMaxThreadCount(previousMaximum);
     }
 };
 class ServiceTest : public QObject {
@@ -257,6 +295,79 @@ class ServiceTest : public QObject {
         h.service.action("undo");
         QCOMPARE(h.adapter->writes, writes);
         QCOMPARE(h.adapter->field.text, QString("the "));
+    }
+    void unsafeNativeJobRequestsCancellation_data() {
+        QTest::addColumn<QString>("boundary");
+        for (auto boundary : {"password", "unknown", "locked", "deny", "pause", "field",
+                              "application", "exception"})
+            QTest::newRow(boundary) << QString(boundary);
+    }
+    void unsafeNativeJobRequestsCancellation() {
+        QFETCH(QString, boundary);
+        Harness h;
+        h.adapter->quiet = true;
+        BlockedWorkerPool workers;
+        QVERIFY(workers.ready());
+        h.adapter->type("teh");
+        h.adapter->field.selectionStart = 0;
+        h.adapter->field.selectionEnd = 3;
+        QSignalSpy results(&h.service, &Service::result);
+        h.service.action("fix");
+        QVERIFY(!ServiceTestAccess::cancellationRequested(h.service));
+        const auto reads = h.adapter->reads;
+        if (boundary == "password")
+            h.adapter->field.password = true;
+        else if (boundary == "unknown")
+            h.adapter->field.known = false;
+        else if (boundary == "locked")
+            h.adapter->field.locked = true;
+        else if (boundary == "deny")
+            h.store.decide(h.adapter->field.app, "deny");
+        else if (boundary == "pause")
+            h.store.pause(-1);
+        else if (boundary == "field")
+            h.adapter->field.id = "different-field";
+        else if (boundary == "application")
+            h.adapter->field.app = "different-unapproved-fixture";
+        bool inspected = false;
+        h.adapter->onMetadata = [&] {
+            inspected = true;
+            h.adapter->quiet = true;
+            if (boundary == "exception")
+                throw std::runtime_error("Synthetic metadata failure");
+        };
+        h.adapter->quiet = false;
+        QTRY_VERIFY(inspected);
+        QVERIFY(ServiceTestAccess::cancellationRequested(h.service));
+        QCOMPARE(h.adapter->reads, reads);
+        workers.unblock();
+        QTRY_COMPARE_WITH_TIMEOUT(results.size(), 1, 12000);
+        QVERIFY(!results.first()[2].toString().isEmpty());
+        QCOMPARE(h.adapter->writes, 0);
+        QVERIFY(h.store.histories().isEmpty());
+    }
+    void unsafeExternalFieldPreservesWorkspaceJob() {
+        Harness h;
+        h.adapter->quiet = true;
+        BlockedWorkerPool workers;
+        QVERIFY(workers.ready());
+        QSignalSpy results(&h.service, &Service::result);
+        h.service.processText("teh");
+        h.adapter->field.password = true;
+        bool inspected = false;
+        h.adapter->onMetadata = [&] {
+            inspected = true;
+            h.adapter->quiet = true;
+        };
+        h.adapter->quiet = false;
+        QTRY_VERIFY(inspected);
+        QVERIFY(!ServiceTestAccess::cancellationRequested(h.service));
+        workers.unblock();
+        QTRY_COMPARE_WITH_TIMEOUT(results.size(), 1, 12000);
+        QCOMPARE(results.first()[1].toString(), QString("the"));
+        QVERIFY(results.first()[2].toString().isEmpty());
+        QVERIFY(!results.first()[3].toBool());
+        QCOMPARE(h.adapter->writes, 0);
     }
     void cancelledPassageDoesNotPoisonTheNextOperation() {
         Harness h;
