@@ -165,3 +165,28 @@ and passes it to every SettingRow; other bindings use that same snapshot.
 This is scoped to rendering, not an authorization/configuration cache in the
 correction service. The test still requires actual English toggle propagation.
 Full remote UI/native/installer checks and new packaged CPU evidence are pending.
+
+## Shared-settings workload checkpoint — 2026-10-20
+
+Hosted39391593030 at7df1da1 attributes10.65% main-thread CPU out of13.50%
+aggregate app CPU. A real QML regression at859b133/run39392713956 reproduces
+37 full settings reads per notification; each read issues roughly25 SQLite
+queries. Main.qml now takes one reactive settings snapshot and passes it to
+all20 SettingRows. The test follows the Switch's direct parent relationship
+instead of inspecting nested style internals; unchanged <=2-read assertion
+and false/true language reactivity both pass on Linux and Windows.
+
+Full manual run39393887050 at0fd1f2e passes both platforms and the complete
+120-second packaged workload. Report .deps/hosted-active-0fd1f2e/active-workload/report.json:
+149.133s including setup/cleanup,43 full cycles,154 selected fixes/history
+insertions,history pruning,50k control/refusal,Pause/password/Undo and normal
+cleanup (forcedProcesses=[]). Word88 samples p95 conservative upper bound
+22.4ms,max25.286ms. Sustained appCPU3.439%,mainthread1.863%,helper1.223%;
+zero swap,private growth3040/1308KiB. App SHA256
+bd86aee2d0a1267c089096ccb94ded0599cd680833f79a18a173b17228822d0d;
+helper0fac4152b1dae0ab03a1bab1e96a38ce035b094fceb1f090afb6877362ed58bd.
+Independent review of the snapshot and numeric sampler found no important
+issues. No budgets were relaxed. Two-hour run39394646024 was dispatched at
+the unchanged0fd1f2e revision, with its own120-second same-AppDir preflight.
+Its outcome is pending. This is hosted Ubuntu evidence; final merged-source,
+current-host,ordinary Windows/Wayland,distribution and release gates remain.
