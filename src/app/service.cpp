@@ -68,7 +68,7 @@ Field Service::permitted(const Field *expected) {
     Access access{store_->allowed(f.app), browserApp(f.app), store_->paused()};
     if (!safe(f, access, store_->options()))
         return {};
-    auto read = adapter_->inspect(true);
+    auto read = adapter_->readExpected(f);
     access = {store_->allowed(f.app), browserApp(f.app), store_->paused()};
     if (read.id != f.id || read.app != f.app || !safe(read, access, store_->options()))
         return {};

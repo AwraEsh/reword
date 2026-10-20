@@ -18,6 +18,7 @@ template <class T> using GRef = std::unique_ptr<T, decltype(&g_object_unref)>;
 class LinuxAdapter final : public Adapter {
     bool available_ = false;
     AtspiAccessible *focus_ = nullptr;
+    GRef<AtspiAccessible> validated_{nullptr, g_object_unref};
     AtspiEventListener *listener_ = nullptr;
     static inline Display *trapped_ = nullptr;
     static inline int trapError_ = 0;
@@ -153,6 +154,7 @@ class LinuxAdapter final : public Adapter {
             g_object_unref(focus_);
         if (display_)
             XCloseDisplay(display_);
+        validated_.reset();
         if (available_)
             atspi_exit();
     }
@@ -176,6 +178,18 @@ class LinuxAdapter final : public Adapter {
         return changed;
     }
     Field inspect(bool includeText) override {
+        return snapshot(includeText, nullptr);
+    }
+    Field readExpected(const Field &expected) override {
+        if (expected.app.isEmpty() || expected.id.isEmpty()) {
+            validated_.reset();
+            return {};
+        }
+        return snapshot(true, &expected);
+    }
+  private:
+    Field snapshot(bool includeText, const Field *expected) {
+        validated_.reset();
         if (!available_)
             return {};
         for (int i = 0; i < 32 && g_main_context_pending(nullptr); ++i)
@@ -184,8 +198,11 @@ class LinuxAdapter final : public Adapter {
         Field f;
         if (!focus_)
             return f;
+        // AT-SPI calls can dispatch focus events. Pin this object for the whole
+        // snapshot so metadata and text cannot follow different focus_ values.
+        GRef<AtspiAccessible> target(ATSPI_ACCESSIBLE(g_object_ref(focus_)), g_object_unref);
         GError *error = nullptr;
-        auto pid = atspi_accessible_get_process_id(focus_, &error);
+        auto pid = atspi_accessible_get_process_id(target.get(), &error);
         if (error) {
             g_error_free(error);
             return f;
@@ -193,15 +210,17 @@ class LinuxAdapter final : public Adapter {
         f.app = QFileInfo(QString("/proc/%1/exe").arg(pid)).symLinkTarget();
         if (f.app.isEmpty() || (pid == getpid() || pid == getppid()))
             return Field{};
-        auto obj = ATSPI_OBJECT(focus_);
+        auto obj = ATSPI_OBJECT(target.get());
         f.id = QString::fromUtf8(obj->app->bus_name) + QString::fromUtf8(obj->path);
-        auto role = atspi_accessible_get_role(focus_, &error);
+        if (expected && (f.id != expected->id || f.app != expected->app))
+            return {};
+        auto role = atspi_accessible_get_role(target.get(), &error);
         if (error) {
             g_error_free(error);
             return f;
         }
         f.password = role == ATSPI_ROLE_PASSWORD_TEXT;
-        auto states = atspi_accessible_get_state_set(focus_);
+        auto states = atspi_accessible_get_state_set(target.get());
         if (!states)
             return f;
         f.focused = atspi_state_set_contains(states, ATSPI_STATE_FOCUSED);
@@ -216,8 +235,8 @@ class LinuxAdapter final : public Adapter {
         if (!includeText || f.password || !f.known || !f.editable || !f.focused || f.locked ||
             !sensitive)
             return f;
-        GRef<AtspiText> text(atspi_accessible_get_text_iface(focus_), g_object_unref);
-        GRef<AtspiEditableText> editable(atspi_accessible_get_editable_text_iface(focus_),
+        GRef<AtspiText> text(atspi_accessible_get_text_iface(target.get()), g_object_unref);
+        GRef<AtspiEditableText> editable(atspi_accessible_get_editable_text_iface(target.get()),
                                          g_object_unref);
         if (!text || !editable) {
             f.known = false;
@@ -260,15 +279,20 @@ class LinuxAdapter final : public Adapter {
             f.known = false;
             f.text.clear();
         }
+        if (f.known)
+            validated_.reset(ATSPI_ACCESSIBLE(g_object_ref(target.get())));
         return f;
     }
+  public:
     bool replace(const Field &expected, const QString &newText, int caret) override {
-        auto current = inspect(true);
-        if (!sameTarget(expected, current))
+        auto current = readExpected(expected);
+        if (!sameTarget(expected, current) || !validated_)
             return false;
-        GRef<AtspiEditableText> editable(atspi_accessible_get_editable_text_iface(focus_),
+        GRef<AtspiAccessible> target(ATSPI_ACCESSIBLE(g_object_ref(validated_.get())),
+                                     g_object_unref);
+        GRef<AtspiEditableText> editable(atspi_accessible_get_editable_text_iface(target.get()),
                                          g_object_unref);
-        GRef<AtspiText> text(atspi_accessible_get_text_iface(focus_), g_object_unref);
+        GRef<AtspiText> text(atspi_accessible_get_text_iface(target.get()), g_object_unref);
         if (!editable || !text)
             return false;
         GError *error = nullptr;
@@ -282,8 +306,8 @@ class LinuxAdapter final : public Adapter {
             return false;
         atspi_text_set_caret_offset(text.get(), newText.left(caret).toUcs4().size(), nullptr);
         // A single set-contents call avoids delete/insert windows in supported plain fields.
-        auto after = inspect(true);
-        return after.id == expected.id && after.text == newText;
+        auto after = readExpected(expected);
+        return after.id == expected.id && after.app == expected.app && after.text == newText;
     }
     bool shortcuts(const QString &fix, const QString &undo, const QString &pause) override {
         if (!display_)

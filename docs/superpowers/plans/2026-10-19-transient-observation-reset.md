@@ -170,3 +170,24 @@ Linux writes once when zero writes are required (62 other cases pass); Windows
 Service also fails. Saved .deps/recovery-policy-red-4853ba6.log. Recheck policy
 immediately after signal delivery, clear observation on refusal and retain the
 explicit session original. Hosted GREEN remains required.
+
+HostedRED39394490601 atc326c84 reproduces four metadata-to-read changes:
+application,field,password and unknown each request text once when zero reads
+are required (67 other Service cases pass). Linux log retained as
+.deps/expected-read-red-c326c84.log. The new readExpected default refuses;
+owned native probes require both a valid guarded read and rejection of wrong
+app/field identity. Native probe GREEN remains pending.
+
+Service now passes the authorized metadata to readExpected. Linux sends only
+app/ID over its private helper pipe; inspect requests are metadata-only and the
+separate read operation requires identity. Linux snapshots pin one referenced
+AT-SPI object through metadata/text, compare app/ID before text interfaces,
+and retain that same validated object through the write. Windows compares
+expected identity on its pinned UI Automation element before any text read.
+Native pre/post-write reads also use expected identity. All existing native
+password/unknown/lock/plain/editable/size checks remain. Hosted full tests and
+independent review are required; queued native worker cancellation stays open.
+
+Cancellation-gap fix a2f9ba2 passes full Linux/Windows run39394352890.
+Independent follow-up review confirms its P2 finding resolved; static review
+is distinct from native desktop acceptance.
