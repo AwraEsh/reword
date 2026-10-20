@@ -33,6 +33,7 @@ ApplicationWindow {
     palette.base: surface
     palette.button: surface
     palette.buttonText: ink
+    palette.dark: muted
     palette.highlight: accent
     palette.highlightedText: Backend.dark ? "#101b17" : "white"
     onClosing: function (close) {

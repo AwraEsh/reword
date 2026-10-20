@@ -63,3 +63,12 @@ Add a real indicator/background contrast check (3:1 non-text minimum), and open
 Practice from the populated Insights action with a 64-character accepted answer.
 Retain both long-dialog captures and require its full bounds inside 880×620.
 Observe hosted results before changing the palette role or dialog sizing.
+
+Run 39398850249 at ef9d446 confirms indicator contrast 1.147:1 in dark mode on
+both Qt versions. Bind the inherited palette.dark role to the existing muted
+foreground; preserve control geometry and copy. Practice fails earlier than its
+geometry assertion (opened=false), so do not change dialog sizing yet. Wait for
+the actual controlled Service startup before fetching its delegate, and observe
+active focus, click delivery, delegate lifetime and popup metadata. This separates
+initial model-refresh timing from a callback/popup defect without bypassing the
+real keyboard action or weakening the final bounds assertion.

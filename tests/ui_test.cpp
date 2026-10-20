@@ -10,6 +10,7 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QQuickItem>
+#include <QPointer>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QQmlNetworkAccessManagerFactory>
@@ -313,6 +314,7 @@ class UiTest : public QObject {
         window->setWidth(880);
         window->setHeight(620);
         root->setProperty("page", 5);
+        QTRY_VERIFY(controller.platform().startsWith("Controlled UI metadata fixture"));
         QTest::qWait(150);
         QQuickItem *practice = nullptr;
         auto items = window->contentItem()->childItems();
@@ -326,14 +328,23 @@ class UiTest : public QObject {
             items.append(item->childItems());
         }
         QVERIFY(practice);
+        QPointer<QQuickItem> practiceGuard(practice);
+        QSignalSpy clicked(practice, SIGNAL(clicked()));
         practice->forceActiveFocus();
+        QCOMPARE(window->activeFocusItem(), practice);
         QTest::keyClick(window, Qt::Key_Space);
+        QVERIFY2(practiceGuard, "The Practice delegate disappeared during activation.");
+        QCOMPARE(clicked.count(), 1);
         QObject *dialog = nullptr;
         for (auto object : root->findChildren<QObject *>())
             if (object->property("title").toString() == "Practice spelling")
                 dialog = object;
         QVERIFY(dialog);
-        QTRY_VERIFY(dialog->property("opened").toBool());
+        QTRY_VERIFY2(dialog->property("opened").toBool(),
+                     qPrintable(QString("visible=%1 answerCharacters=%2 width=%3")
+                                    .arg(dialog->property("visible").toBool())
+                                    .arg(dialog->property("answer").toString().size())
+                                    .arg(dialog->property("width").toDouble())));
         QCOMPARE(dialog->property("answer").toString(), answer);
         QStringList failures;
         for (bool dark : {false, true}) {
