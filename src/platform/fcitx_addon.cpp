@@ -26,6 +26,7 @@
 
 namespace {
 class RewordAddon final : public fcitx::AddonInstance {
+    friend class FcitxAddonTest;
     int argc_ = 1;
     char name_[7] = "reword";
     char *argv_[2] = {name_, nullptr};

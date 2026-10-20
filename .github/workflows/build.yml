@@ -43,6 +43,7 @@ jobs:
           path: |
             build/ui-test-results.xml
             build/service-test-results.xml
+            build/fcitx-test-results.xml
             build/Testing/Temporary/LastTest.log
       - name: Reject a foreign-account recovery server
         run: sudo ./build/reword_recovery_tests crossAccountServerNeverReceivesGreeting
