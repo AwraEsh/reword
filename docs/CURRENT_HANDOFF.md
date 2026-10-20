@@ -28,7 +28,12 @@ public. No production release or local installation has been accepted.
   reuses the keyboard-review worktree. Tests seed accepted long values and retain
   light/dark captures. Hosted RED is pending; no production layout change yet.
   The earlier Windows sample inspection is in [UI_REVIEW.md](UI_REVIEW.md).
-- **Worktrees:** storage-access holds PR21; keyboard-review holds PR22. The main
+- **Build metadata:** branch `codex/windows-build-metadata` follows PR21. Four
+  observed Python RED cases now pass with eight existing controls. Exact vendor
+  metadata retention is limited to 1 MiB/file and 8 MiB total; real Windows CI
+  evidence remains pending. This does not authenticate the cached package.
+- **Worktrees:** storage-access now holds the build-metadata branch based on PR21;
+  keyboard-review holds PR22. The main
   checkout remains `develop` at 15e8ad5. Check status before changing branches.
   Keep ignored `.deps` evidence and dependencies out of commits/uploads.
 - **Next:** inspect PR21 integration CI, diagnose populated UI cases from actual
@@ -929,3 +934,14 @@ and Windows push run 39397165863 and PR run 39397184524 pass, including controll
 native probes and installer smoke checks. Independent reviews of each behavioral
 change found no important outstanding issue. These are hosted development checks,
 not ordinary desktop or final-package soak acceptance.
+
+## Windows metadata retention checkpoint
+
+The existing audit retained notice contents but only hashes of Qt/vcpkg build
+metadata. Four observed RED fixtures preceded bounded exact retention under
+build-metadata. All 12 targeted Python fixtures pass in 0.186 seconds under the
+local 256 MiB/10 CPU-second limit. No local C++/GUI work ran. Source/ABI binding
+still requires inspecting actual hosted contents; releaseReady stays false.
+PR21 documentation head 8a105c4 passes full push/PR runs 39398173948/39398182802.
+The populated-list layout passes at baf6773; its long-Practice/indicator follow-up
+at ef9d446 is currently under failure inspection and not accepted.

@@ -29,3 +29,10 @@ Observed local RED under 256 MiB/10 CPU seconds: 12 functional fixtures in
 0.090 seconds, eight existing controls pass and four new cases fail as expected
 (no retained metadata, no per-file/aggregate cap, no changed-input rejection).
 Failure log is ignored at .deps/windows-metadata-red.log. No C++ build or GUI ran.
+
+Local GREEN: all 12 Windows-audit fixtures pass in 0.186 seconds under 256 MiB
+and 10 CPU seconds. Metadata is retained under build-metadata with the existing
+safe vendor-relative names and exact recorded hashes. Per-file and aggregate
+bounds reject before output publication; changed copies remove the owned partial
+audit. The releaseReady/source-authentication fields remain unchanged and false.
+Full hosted tests and real Windows material inspection are still pending.
