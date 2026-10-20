@@ -12,6 +12,7 @@ ApplicationWindow {
     visible: true
     title: "Reword"
     property int page: 0
+    property var settingsSnapshot: Backend.settings
     property color ink: Backend.dark ? "#eef0f3" : "#202733"
     property color muted: Backend.dark ? "#929ba8" : "#647080"
     property color surface: Backend.dark ? "#191e26" : "#ffffff"
@@ -332,7 +333,7 @@ ApplicationWindow {
                                 if (restoringText)
                                     return;
                                 const count = Backend.characterCount(text);
-                                if (count > Backend.settings.maxCharacters && count > Backend.characterCount(acceptedText)) {
+                                if (count > root.settingsSnapshot.maxCharacters && count > Backend.characterCount(acceptedText)) {
                                     restoringText = true;
                                     text = acceptedText;
                                     restoringText = false;
@@ -387,8 +388,8 @@ ApplicationWindow {
                         }
                         Label {
                             textFormat: Text.PlainText
-                            text: Backend.characterCount(editor.text).toLocaleString() + " / " + Backend.settings.maxCharacters.toLocaleString()
-                            color: Backend.characterCount(editor.text) > Backend.settings.maxCharacters ? "#e48c80" : root.muted
+                            text: Backend.characterCount(editor.text).toLocaleString() + " / " + root.settingsSnapshot.maxCharacters.toLocaleString()
+                            color: Backend.characterCount(editor.text) > root.settingsSnapshot.maxCharacters ? "#e48c80" : root.muted
                             font.pixelSize: 12
                         }
                     }
@@ -455,11 +456,13 @@ ApplicationWindow {
                             Layout.rightMargin: 32
                             spacing: 20
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Spelling"
                                 detail: "Correct confident mistakes at word boundaries. Preserve letter case."
                                 settingKey: "spelling"
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Correction notifications"
                                 detail: "Show the spelling after a live correction. Off by default."
                                 settingKey: "notifications"
@@ -472,7 +475,7 @@ ApplicationWindow {
                                 }
                                 ComboBox {
                                     model: ["Conservative", "Balanced"]
-                                    currentIndex: Backend.settings.sensitivity
+                                    currentIndex: root.settingsSnapshot.sensitivity
                                     onActivated: Backend.set("sensitivity", currentIndex)
                                 }
                             }
@@ -488,58 +491,69 @@ ApplicationWindow {
                                 font.weight: Font.Medium
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Expand abbreviations"
                                 detail: "Expand recognized forms such as im → I am."
                                 settingKey: "abbreviations"
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Capitalize sentence beginnings"
                                 detail: "Capitalize English text after sentence or paragraph breaks."
                                 settingKey: "capitalization"
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Periods"
                                 detail: "Fix duplicate periods while keeping intentional ellipses."
                                 settingKey: "periods"
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Finish prose paragraphs"
                                 detail: "Add a terminal period to unpunctuated paragraphs of three or more words."
                                 settingKey: "paragraphPeriods"
-                                enabled: Backend.settings.periods
+                                enabled: root.settingsSnapshot.periods
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Commas"
                                 detail: "Fix repeated English and Persian commas."
                                 settingKey: "commas"
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Commas after introductory phrases"
                                 detail: "Recognize openings such as However and بنابراین."
                                 settingKey: "introductoryCommas"
-                                enabled: Backend.settings.commas
+                                enabled: root.settingsSnapshot.commas
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Question marks"
                                 detail: "Enable spacing fixes for English and Persian question marks."
                                 settingKey: "questionMarks"
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Exclamation marks"
                                 detail: "Enable spacing fixes for exclamation marks."
                                 settingKey: "exclamationMarks"
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Semicolons"
                                 detail: "Enable spacing fixes for English and Persian semicolons."
                                 settingKey: "semicolons"
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Colons"
                                 detail: "Enable spacing fixes for colons."
                                 settingKey: "colons"
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Punctuation spacing"
                                 detail: "Remove spaces before the punctuation categories you enable."
                                 settingKey: "spacing"
@@ -586,7 +600,7 @@ ApplicationWindow {
                                     }
                                     TextField {
                                         id: shortcut
-                                        text: Backend.settings[modelData.key]
+                                        text: root.settingsSnapshot[modelData.key]
                                         implicitWidth: 170
                                         Accessible.name: modelData.title + " shortcut"
                                     }
@@ -598,7 +612,7 @@ ApplicationWindow {
                             }
                             Label {
                                 textFormat: Text.PlainText
-                                text: Backend.settings.shortcutsAvailable ? "Global shortcuts registered." : "Global shortcuts unavailable here. Wayland uses input-method integration."
+                                text: root.settingsSnapshot.shortcutsAvailable ? "Global shortcuts registered." : "Global shortcuts unavailable here. Wayland uses input-method integration."
                                 color: root.muted
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
@@ -624,21 +638,25 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             spacing: 24
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "English"
                                 detail: "Enable English spelling and writing rules."
                                 settingKey: "english"
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Persian"
                                 detail: "Enable Persian spelling and writing rules."
                                 settingKey: "persian"
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Normalize Persian characters"
                                 detail: "Use Persian forms of Arabic yeh and kaf."
                                 settingKey: "normalizePersian"
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Persian half-space"
                                 detail: "Join recognized verb prefixes with a half-space."
                                 settingKey: "halfSpace"
@@ -755,6 +773,7 @@ ApplicationWindow {
                     Layout.margins: 32
                     spacing: 20
                     SettingRow {
+                        settingsSnapshot: root.settingsSnapshot
                         title: "Allow browsers"
                         detail: "Individual browsers also need your permission."
                         settingKey: "browsers"
@@ -910,7 +929,7 @@ ApplicationWindow {
                     }
                     Label {
                         textFormat: Text.PlainText
-                        text: "Up to " + Backend.settings.historyCount + " records · " + Backend.settings.historyMiB + " MiB · " + Backend.settings.historyDays + " days. Oldest records are removed first."
+                        text: "Up to " + root.settingsSnapshot.historyCount + " records · " + root.settingsSnapshot.historyMiB + " MiB · " + root.settingsSnapshot.historyDays + " days. Oldest records are removed first."
                         color: root.muted
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
@@ -923,6 +942,7 @@ ApplicationWindow {
                     Layout.margins: 32
                     spacing: 20
                     SettingRow {
+                        settingsSnapshot: root.settingsSnapshot
                         title: "Count spelling mistakes"
                         detail: "Save word pairs and counts from live corrections. Never sentences."
                         settingKey: "statistics"
@@ -990,7 +1010,7 @@ ApplicationWindow {
                             textFormat: Text.PlainText
                             anchors.centerIn: parent
                             visible: Backend.insights.length === 0
-                            text: Backend.settings.statistics ? "Words appear after live corrections." : "Counting is off. Enable it when you want to track mistakes."
+                            text: root.settingsSnapshot.statistics ? "Words appear after live corrections." : "Counting is off. Enable it when you want to track mistakes."
                             color: root.muted
                             wrapMode: Text.WordWrap
                             width: parent.width - 40
@@ -1024,6 +1044,7 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                             }
                             SettingRow {
+                                settingsSnapshot: root.settingsSnapshot
                                 title: "Save correction history"
                                 detail: "Store originals and results only for explicit passage corrections."
                                 settingKey: "history"
@@ -1073,7 +1094,7 @@ ApplicationWindow {
                                     SpinBox {
                                         from: modelData.min
                                         to: modelData.max
-                                        value: Backend.settings[modelData.key]
+                                        value: root.settingsSnapshot[modelData.key]
                                         editable: true
                                         onValueModified: Backend.set(modelData.key, value)
                                         Accessible.name: modelData.title

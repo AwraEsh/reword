@@ -141,3 +141,14 @@ removes other SQL driver DLLs; graphics and other plugin categories are retained
 The installed clean-PATH smoke check also requires a valid SQLite database
 header, so removing unused clients cannot hide a broken local storage driver.
 Fresh hosted verification is required before declaring this package closed.
+
+The follow-up at 7284138 passes both Linux and Windows in runs 39315937141 and
+39315944368. The actual 93-image report has 89 candidate names, no missing or
+ambiguous ordinary imports, 16 explicitly unresolved API-set host contracts and
+only sqldrivers/qsqlite.dll. Installed clean-PATH launch created a SQLite
+database; install/hash/uninstall and native field/shortcut checks also passed.
+PR #19 merged as 15e8ad5. Audit artifact 12218965126 contains audit.json SHA256
+5cc59ae4ed660092f34f082290a0a226afe2ec29beac56bb95ac30061f612d49.
+This closes the ordinary candidate-file gate for that runner/build only.
+Dynamic/API-set/OS compatibility, source/notice binding and product release
+acceptance remain open.

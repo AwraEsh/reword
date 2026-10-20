@@ -44,13 +44,13 @@ Interface: collect_dependencies(stage: Path, inventory: dict, system: Path) -> p
 - [x] Observe RED for staged/system matches, missing DLL, differing duplicate basename, missing delay import, API-set separation, binary mutation and linked input rejection.
 - [x] Implement exact-byte records and resolution using only stage and explicit system directory; include unresolved/ambiguous imports and coverage limits.
 - [x] Enable it in the real Windows packager; unresolved ordinary imports stop installer creation. Keep source/notice and product release readiness false.
-- [ ] Obtain hosted full suite and actual Windows artifact, inspect the DLL map and any failures; resolve actual defects rather than weaken missing-dependency checks.
+- [x] Obtain hosted full suite and actual Windows artifact, inspect the DLL map and any failures; resolve actual defects rather than weaken missing-dependency checks.
 
 ### Task 3: Review and integration evidence
 
-- [ ] Independent code review; reproduce/fix important findings, with fresh hosted tests.
-- [ ] Record exact source/run/artifact/hash results and remaining API-set, dynamic-loading, source/notice and normal-desktop gates in WINDOWS_DISTRIBUTION and CURRENT_HANDOFF.
-- [ ] Publish the reviewed branch/PR; attach created PR. Do not release/install or shut down with owned work still active.
+- [x] Independent code review; reproduce/fix important findings, with fresh hosted tests.
+- [x] Record exact source/run/artifact/hash results and remaining API-set, dynamic-loading, source/notice and normal-desktop gates in WINDOWS_DISTRIBUTION and CURRENT_HANDOFF.
+- [x] Publish the reviewed branch/PR; attach created PR. Do not release/install or shut down with owned work still active.
 
 Ruling: use the existing clean managed storage-access worktree on codex/windows-pe-dependencies, based on origin/develop. Keep PR18's native stability work separate. Full baseline evidence is the recorded passing CI at the unchanged base; rebuilding locally is suspended after hard freezes. This plan is a required distribution-evidence increment, not a narrowed replacement for the full product scope.
 
@@ -72,3 +72,10 @@ stopped on a rejected import basename. Microsoft's Winspool.drv is a legitimate
 PE import; parser/system-candidate .drv regressions were RED then GREEN. All 25
 tiny tests pass in 0.123 s. No actual closure claim until hosted rerun/artifact
 inspection, and no local build/GUI after the hard freezes.
+
+Final 7284138: push 39315937141 and PR 39315944368 both pass Linux/Windows.
+Actual metadata identified unused PostgreSQL/Mimer plugin runtime gaps; retain
+only the application's required SQLite driver and verify the installed database
+header. No ordinary candidate remains missing/ambiguous across 93 PE files.
+Independent follow-up review found no important issues. PR #19 attached/merged as
+15e8ad5. Full run/artifact/hash and limits are recorded in distribution/handoff.

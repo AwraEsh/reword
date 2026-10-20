@@ -656,3 +656,119 @@ PostgreSQL/Mimer Qt SQL plugins. Store explicitly opens QSQLITE. The follow-up
 retains qsqlite.dll and removes other SQL driver DLLs, leaving graphics intact.
 Installed smoke acceptance now requires the synthetic SQLite database/header
 after native clean-PATH launch. This follow-up needs fresh Windows CI.
+
+PR #19 merged as 15e8ad5c3ebbaa5348bde098d58363e3b23da7ab after both hosted
+runs 39315937141 and 39315944368 passed at 7284138. Linux: 10 CTest suites plus
+three native cycles. Windows: 6 CTest suites, 25 PE tests, installer/native clean
+PATH launch, SQLite header, uninstall and native field/shortcut tests pass.
+The downloaded audit has 93 PE files, 89 candidate names, 16 separate API-set
+contracts, no missing/ambiguous ordinary imports and only qsqlite.dll as a SQL
+driver. Its SHA256 is 5cc59ae4ed660092f34f082290a0a226afe2ec29beac56bb95ac30061f612d49;
+artifact 12218965126. Product release readiness remains false. No local install.
+
+## Hosted packaged workload — 2026-10-19
+
+PR #20 adds an explicitly selected manual workload duration to the existing CI;
+normal push/PR runs do not start it. Runs39315576445 and 39316211634 refused
+staging before the active workload. The retained scanner JSON identifies a
+QtQml directory without module metadata, while CI installed WorkerScript but
+not QtQml/Models. The official Ubuntu module archive owns the missing metadata
+and plugin. Added QtQml, Models and Shapes packages; run 39316879658 at 56138e6
+is pending. Keep the path/formal-module validation intact. Do not count failed
+staging as an active soak. Ubuntu CI evidence cannot establish current-host
+Debian latency or final-package acceptance.
+
+Source audit follow-up before release: Service clears RetryCycle on unsafe
+boundaries but leaves retryPrefix_/retryWord_ QString references, and exception
+paths do not uniformly clear Undo/retry payloads. Review temporary-buffer reset
+ownership and add meaningful regression coverage; this is an identified open
+privacy requirement, not a claim that password text was observed or persisted.
+All local builds/GUI/heavy tests remain suspended after the hard freezes.
+
+The actual packaged run 39316879658 at 56138e6 fails the resource budget after
+65.418 s, not the requested 120 s: sustained app CPU 15.90% of one core after
+30.13 s, helper 2.51%, zero swap, app max RSS 116424 KiB and private growth 176 KiB.
+Normal cleanup completed without forced shutdown. Word 23 samples: p50 upper
+bound 16.1 ms, p95 upper bound 22.3 ms, max 25.261 ms. It completed 110 initial
+history insertions and 10 full cycles, but never reached final selection-limit
+checks. This is failed evidence, not an accepted short run or soak.
+Binary SHA256 0e24b92b94ab149355d256dcae7a88d9c972a33739ae55cb7b0a714be6604206;
+helper 0fac4152b1dae0ab03a1bab1e96a38ce035b094fceb1f090afb6877362ed58bd.
+Report: .deps/hosted-active-56138e6/active-workload/report.json.
+
+Service constructs and destroys a Hunspell-backed Engine on every selected-text
+job. Before changing production code, explicit performance-probe mode compares
+ten fresh-engine passages with ten passages on one engine, collecting CPU/wall
+totals and exact synthetic correctness. Hosted run 39318112831 at 019591a is
+pending. Treat initialization cost as a hypothesis until its measurements arrive;
+keep the CPU and latency budgets unchanged. No long soak started.
+
+Run 39319638562 at 31ab2cd passes Linux and Windows plus the full 120-second
+staged workload. App SHA256
+0c3aaade2fca52d92712efee130a1064e6002630bb6f8e9e2a8a7e810dcaf22c;
+helper unchanged 0fac4152b1dae0ab03a1bab1e96a38ce035b094fceb1f090afb6877362ed58bd.
+44 full cycles, 155 selected fixes/history inserts, both 50k control/refusal
+checks, all Pause/password/Undo checks and normal cleanup pass. Word 90 samples:
+p95 bound 21.8 ms/max 22.505 ms; sustained CPU app 6.64%/helper 1.06%, swap zero,
+private growth 1316/1224 KiB. Report:
+.deps/hosted-active-31ab2cd/active-workload/report.json.
+Independent review found no important issues in isolated passage-engine reuse
+and deterministic harness cleanup; 18 tiny harness tests pass. Full hosted runs
+39320326333/39320337032 at afa301b also pass the added C++ cancellation recovery
+regression. The manual 7200-second mode now first runs a 120-second preflight on
+the same staged AppDir and advances only on success. Both reports are retained.
+
+Do not claim the earlier shutdown-forced baseline's root cause fixed from one
+normal exit. Keep product release, source/notices, privacy-buffer audit,
+current-host latency/final-binary soak and ordinary Windows/Wayland gates open.
+
+## Resume checkpoint — 2026-10-20
+
+The user explicitly resumed. Local builds/GUI/heavy tests remain suspended.
+Manual run 39321497233 at 8570675 failed its short preflight on app CPU 14.11%
+after 30.13 sustained seconds, with word p95 bound 24.8 ms, zero swap and normal
+cleanup. Its two-hour step did not run. Retain this failed evidence beside the
+passing 31ab2cd baseline; engine reuse alone does not close the CPU gate.
+Report: .deps/hosted-active-8570675/active-preflight/report.json.
+
+Main-thread CPU diagnostics now collect only numeric counters from the pinned
+owned processes, separately from aggregate app/helper CPU. The same post-burst
+baseline applies and both burst counters are retained. Five tiny diagnostic
+tests pass in 0.004 s and 18 harness tests in 0.383 s under 256 MiB/10 CPU seconds.
+No production optimization or acceptance limit was changed. Hosted attribution
+and the full suite remain pending.
+
+The stacked privacy branch codex/transient-observation-reset lives in the
+storage-access worktree. Hosted RED 39321745068 at 99f91d3 reproduced seven
+retained-text boundaries plus stale Undo after an inspection error. Reset fix
+d27d3f8 passes Linux; Windows Service failed without Qt stdout. Commit 633e9ed
+adds Service JUnit artifacts to identify the actual failure before another fix.
+Independent static review found no important production reset regression, but
+identified a test timing race in the exception row (safe polling can repopulate
+observation). Whether this caused the Windows failure awaits its XML. Post-write
+authorization/read identity and native-job cancellation audits remain open.
+
+## Shared-settings workload checkpoint — 2026-10-20
+
+Hosted39391593030 at7df1da1 attributes10.65% main-thread CPU out of13.50%
+aggregate app CPU. A real QML regression at859b133/run39392713956 reproduces
+37 full settings reads per notification; each read issues roughly25 SQLite
+queries. Main.qml now takes one reactive settings snapshot and passes it to
+all20 SettingRows. The test follows the Switch's direct parent relationship
+instead of inspecting nested style internals; unchanged <=2-read assertion
+and false/true language reactivity both pass on Linux and Windows.
+
+Full manual run39393887050 at0fd1f2e passes both platforms and the complete
+120-second packaged workload. Report .deps/hosted-active-0fd1f2e/active-workload/report.json:
+149.133s including setup/cleanup,43 full cycles,154 selected fixes/history
+insertions,history pruning,50k control/refusal,Pause/password/Undo and normal
+cleanup (forcedProcesses=[]). Word88 samples p95 conservative upper bound
+22.4ms,max25.286ms. Sustained appCPU3.439%,mainthread1.863%,helper1.223%;
+zero swap,private growth3040/1308KiB. App SHA256
+bd86aee2d0a1267c089096ccb94ded0599cd680833f79a18a173b17228822d0d;
+helper0fac4152b1dae0ab03a1bab1e96a38ce035b094fceb1f090afb6877362ed58bd.
+Independent review of the snapshot and numeric sampler found no important
+issues. No budgets were relaxed. Two-hour run39394646024 was dispatched at
+the unchanged0fd1f2e revision, with its own120-second same-AppDir preflight.
+Its outcome is pending. This is hosted Ubuntu evidence; final merged-source,
+current-host,ordinary Windows/Wayland,distribution and release gates remain.

@@ -33,6 +33,7 @@ void Service::stop() {
     undoAfter_ = {};
     undoBefore_.clear();
     adapter_.reset();
+    passageEngine_.reset();
     engine_.reset();
     store_.reset();
     shortcutSettings_.clear();
@@ -333,11 +334,13 @@ void Service::runText(QString input, bool native, Field field) {
         try {
             QElapsedTimer elapsed;
             elapsed.start();
-            Engine engine;
-            engine.setPersonal(words, replacements);
-            return engine.text(input, options, &cancel_,
-                               std::max(qint64(0), 10000 - elapsed.elapsed()));
+            if (!passageEngine_)
+                passageEngine_ = std::make_unique<Engine>();
+            passageEngine_->setPersonal(words, replacements);
+            return passageEngine_->text(input, options, &cancel_,
+                                        std::max(qint64(0), 10000 - elapsed.elapsed()));
         } catch (...) {
+            passageEngine_.reset();
             return Change{input, input, false, "Correction failed. The original is unchanged."};
         }
     }));
