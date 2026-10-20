@@ -64,9 +64,9 @@ class FcitxAddonTest : public QObject {
         result.set_value({});
 
         if (boundary == "password")
-            context.setCapabilityFlags(fcitx::CapabilityFlag::SurroundingText | fcitx::CapabilityFlag::Password);
+            context.setCapabilityFlags(fcitx::CapabilityFlags(fcitx::CapabilityFlag::SurroundingText) | fcitx::CapabilityFlag::Password);
         else if (boundary == "sensitive")
-            context.setCapabilityFlags(fcitx::CapabilityFlag::SurroundingText | fcitx::CapabilityFlag::Sensitive);
+            context.setCapabilityFlags(fcitx::CapabilityFlags(fcitx::CapabilityFlag::SurroundingText) | fcitx::CapabilityFlag::Sensitive);
         else if (boundary == "no-surrounding")
             context.setCapabilityFlags({});
         else if (boundary == "denied")
