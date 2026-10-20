@@ -72,3 +72,13 @@ the actual controlled Service startup before fetching its delegate, and observe
 active focus, click delivery, delegate lifetime and popup metadata. This separates
 initial model-refresh timing from a callback/popup defect without bypassing the
 real keyboard action or weakening the final bounds assertion.
+
+Diagnostic run 39399695073 at a3fd67a passes indicator contrast and all prior
+UI cases. The Practice action has correct active focus, a surviving delegate and
+one clicked signal. Its test selected the wrong QObject: the search kept walking
+after finding AppDialog and overwrote it with the internal PopupItem whose title
+is forwarded, but which has no answer/opened properties (visible=1,width=880).
+Require the actual answer/opened contract and stop at that object. This is a
+fixture error, not an activation bug. Add question ink/Close bounds as well as
+popup bounds, since Qt can cap popup size while unwrapped text still overflows.
+Do not claim long-dialog geometry before this corrected test executes remotely.

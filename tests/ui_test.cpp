@@ -337,8 +337,11 @@ class UiTest : public QObject {
         QCOMPARE(clicked.count(), 1);
         QObject *dialog = nullptr;
         for (auto object : root->findChildren<QObject *>())
-            if (object->property("title").toString() == "Practice spelling")
+            if (object->property("title").toString() == "Practice spelling" &&
+                object->property("answer").isValid() && object->property("opened").isValid()) {
                 dialog = object;
+                break;
+            }
         QVERIFY(dialog);
         QTRY_VERIFY2(dialog->property("opened").toBool(),
                      qPrintable(QString("visible=%1 answerCharacters=%2 width=%3")
@@ -356,6 +359,31 @@ class UiTest : public QObject {
                 QVERIFY(window->grabWindow().save(captures +
                          (dark ? "/dark-practice-long.png" : "/light-practice-long.png")));
             }
+            bool foundQuestion = false, foundClose = false;
+            auto visibleItems = window->contentItem()->childItems();
+            while (!visibleItems.isEmpty()) {
+                auto item = visibleItems.takeLast();
+                visibleItems.append(item->childItems());
+                if (!item->isVisible())
+                    continue;
+                const auto text = item->property("text").toString();
+                const bool question = text == "Type: " + answer &&
+                                      item->property("contentWidth").isValid();
+                const bool close = text == "Close" && item->property("checkable").isValid();
+                if (!question && !close)
+                    continue;
+                foundQuestion |= question;
+                foundClose |= close;
+                const auto width = question ? item->property("contentWidth").toDouble()
+                                            : item->width();
+                const auto bounds = item->mapRectToScene(QRectF(0, 0, width, item->height()));
+                if (bounds.left() < 0 || bounds.top() < 0 || bounds.right() > window->width() ||
+                    bounds.bottom() > window->height())
+                    failures << QString("%1 exceeds viewport: x=%2 y=%3 width=%4 height=%5")
+                                    .arg(question ? "Practice question" : "Close action")
+                                    .arg(bounds.x()).arg(bounds.y()).arg(bounds.width()).arg(bounds.height());
+            }
+            QVERIFY(foundQuestion && foundClose);
             const auto x = dialog->property("x").toDouble();
             const auto y = dialog->property("y").toDouble();
             const auto width = dialog->property("width").toDouble();
