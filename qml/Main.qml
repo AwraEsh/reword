@@ -705,9 +705,11 @@ ApplicationWindow {
                                     delegate: Button {
                                         required property string modelData
                                         text: modelData + "  ×"
+                                        width: Math.min(implicitWidth, parent.width)
                                         contentItem: Label {
                                             textFormat: Text.PlainText
                                             text: parent.text
+                                            wrapMode: Text.Wrap
                                             horizontalAlignment: Text.AlignHCenter
                                             verticalAlignment: Text.AlignVCenter
                                         }
@@ -754,6 +756,8 @@ ApplicationWindow {
                                         textFormat: Text.PlainText
                                         text: modelData.original + " → " + modelData.corrected
                                         Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                        wrapMode: Text.Wrap
                                     }
                                     Button {
                                         text: "Remove"
@@ -794,16 +798,21 @@ ApplicationWindow {
                         delegate: Rectangle {
                             required property var modelData
                             width: ListView.view.width
-                            height: 86
+                            height: Math.max(86, applicationRow.implicitHeight + 32)
                             color: root.surface
                             RowLayout {
+                                id: applicationRow
                                 anchors.fill: parent
                                 anchors.margins: 16
                                 ColumnLayout {
                                     Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
                                     Label {
                                         textFormat: Text.PlainText
                                         text: modelData.name
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                        wrapMode: Text.Wrap
                                         font.weight: Font.Medium
                                     }
                                     Label {
@@ -823,6 +832,7 @@ ApplicationWindow {
                                     }
                                 }
                                 ComboBox {
+                                    Layout.minimumWidth: 170
                                     model: ["Allowed", "Disabled", "Ask tomorrow"]
                                     displayText: currentIndex < 0 ? "Not decided" : model[currentIndex]
                                     currentIndex: modelData.decision === "allow" ? 0 : modelData.decision === "deny" ? 1 : modelData.decision === "later" ? 2 : -1
@@ -969,10 +979,11 @@ ApplicationWindow {
                         delegate: Rectangle {
                             required property var modelData
                             width: ListView.view.width
-                            height: 64
+                            height: Math.max(64, insightRow.implicitHeight + 32)
                             color: root.surface
                             radius: 4
                             RowLayout {
+                                id: insightRow
                                 anchors.fill: parent
                                 anchors.margins: 16
                                 Label {
@@ -980,6 +991,8 @@ ApplicationWindow {
                                     text: modelData.original
                                     color: root.muted
                                     Layout.preferredWidth: 140
+                                    Layout.minimumWidth: 0
+                                    wrapMode: Text.Wrap
                                 }
                                 Label {
                                     textFormat: Text.PlainText
@@ -990,6 +1003,8 @@ ApplicationWindow {
                                     textFormat: Text.PlainText
                                     text: modelData.corrected
                                     Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    wrapMode: Text.Wrap
                                 }
                                 Label {
                                     textFormat: Text.PlainText

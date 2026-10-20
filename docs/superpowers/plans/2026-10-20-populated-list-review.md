@@ -36,3 +36,16 @@ Retain both themes before assertions. Observe this additional RED before fixing
 all demonstrated layout defects together; no production QML changed yet.
 Reports/captures are ignored under .deps/populated-red-8288a35-linux and the
 failure log .deps/populated-red-8288a35.log.
+
+Hosted RED 39397419557 at 0db2be6 reproduces all four populated surfaces:
+application permission at x=2993; personal action width=908.6; replacement text
+reaches x=2941.6 across Remove; Insights words overlap each other and Practice.
+Both platform UI suites fail; Linux has 23 other UI cases passing. Saved log:
+.deps/populated-text-red-0db2be6.log.
+
+Let existing rows grow vertically for wrapped full text; release label minimum
+width so controls keep their space. Bound personal-word buttons to their Flow,
+wrap their label, and reserve enough permission-control width for Ask tomorrow.
+No stored word/name/replacement is truncated. Reveal the complete replacement
+row for captures rather than centering its now taller label around the button.
+Full hosted tests and actual regenerated images remain required.

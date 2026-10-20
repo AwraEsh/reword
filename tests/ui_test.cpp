@@ -187,7 +187,8 @@ class UiTest : public QObject {
             for (auto parent = action->parentItem(); parent; parent = parent->parentItem()) {
                 if (!parent->property("contentY").isValid())
                     continue;
-                const auto offset = action->mapToItem(parent, QPointF()).y();
+                const auto anchor = surface == "replacements" ? action->parentItem() : action;
+                const auto offset = anchor->mapToItem(parent, QPointF()).y();
                 const auto maximum = std::max(0.0, parent->property("contentHeight").toDouble() -
                                                        parent->height());
                 parent->setProperty("contentY", std::clamp(
