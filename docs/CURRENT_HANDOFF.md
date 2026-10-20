@@ -21,8 +21,9 @@ public. No production release or local installation has been accepted.
   expected-target native reads, unsafe native-job cancellation and queue-inclusive
   ten-second deadlines. Each defect had an observed hosted RED regression.
   Independent static reviews found no important remaining introduced issues.
-  The merge with PR20 is being verified separately; do not transfer acceptance
-  from either parent to the untested combination.
+  Combined-source push run 39397165863 and PR run 39397184524 both pass
+  at merge 41939dc. Documentation-only updates follow that tested code.
+  Final package/desktop acceptance remains separate.
 - **PR22 — populated UI:** branch `codex/populated-list-review`, code 8288a35,
   reuses the keyboard-review worktree. Tests seed accepted long values and retain
   light/dark captures. Hosted RED is pending; no production layout change yet.
@@ -920,3 +921,11 @@ the unchanged0fd1f2e revision, with its own120-second same-AppDir preflight.
 Its outcome is pending. This is hosted Ubuntu evidence; final merged-source,
 current-host,ordinary Windows/Wayland,distribution and release gates remain.
 
+## Combined Service and workload verification
+
+Merge 41939dc preserves both parent evidence trails and combines PR20's
+single-snapshot UI/metrics with PR21's native guards and deadline. Full Linux
+and Windows push run 39397165863 and PR run 39397184524 pass, including controlled
+native probes and installer smoke checks. Independent reviews of each behavioral
+change found no important outstanding issue. These are hosted development checks,
+not ordinary desktop or final-package soak acceptance.
