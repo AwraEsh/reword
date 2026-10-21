@@ -12,9 +12,14 @@ public. No production release or local installation has been accepted.
   owner job text on unsafe observation. Scoped reset 7ad9a99 passes the complete
   Linux/Windows run 39539160624 and independent static review. Worker/future and
   operation-lock lifetime are preserved; cancellation remains cooperative.
-  Follow-up test source 575b4d6 adds a private D-Bus lock provider and actual
-  timer checks for Pause/denial/lock while a future remains pending, without an
-  input event or pending Undo. Run 39539553700 is pending. No timer fix yet.
+  Timer-only policy fix and corrected fixture at cc13055 pass full Linux/Windows
+  push/PR runs 39540890991/39540896152. Actual Fcitx JUnit: 11/11 passing cases.
+  Negative proof 93326bf/run 39541257155 removes only the timer guard and fails
+  exactly Pause/denial/lock cancellation with the same valid loop controls.
+  Do not merge codex/fcitx-timer-red-proof. The periodic witness proves timer
+  policy behavior, not a production 160 ms bound; native accuracy stays 250 ms.
+  Reviews found no important issue. Deadline/UI-cancel coordination and ordinary
+  Wayland acceptance remain open. See the Fcitx plan for exact evidence/limits.
   Branch codex/fcitx-transient-guards remains in storage-access, stacked on PR23.
 - **PR24, workload diagnostics:** 2aa59d3 passes full push/PR Linux/Windows runs
   39538716534/39538809182 and independent static review. Two small diagnostic
@@ -27,6 +32,13 @@ public. No production release or local installation has been accepted.
   logic, typing delays, resource budgets or pass assertions changed in PR24.
   Prior 632-cycle partial evidence is not two-hour acceptance. PR20's GitHub
   description now records the failure. No release, installation or shutdown.
+- **PR23:** matching Mesa and D3DCompiler SDK archives are verified against
+  official Qt SHA256 metadata. Each sole DLL matches the actual staged bytes
+  from run 39399260940. Receipts through 1c423bf contain no host paths; neither
+  DLL was loaded/executed. The archives contain no notice text. Source/notice
+  closure and Microsoft signature/redistribution material are still open.
+  Documentation-only parent receipts are now merged into this guard branch;
+  application/test source remains identical to tested cc13055.
 
 The pause record and older checkpoint below are historical and superseded by
 this resumed status. Main develop remains 15e8ad5; PR20–25 remain unmerged.

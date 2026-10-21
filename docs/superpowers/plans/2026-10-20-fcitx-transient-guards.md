@@ -25,9 +25,9 @@ this record and docs/CURRENT_HANDOFF.md. No new runtime dependency.
 - [x] Centralize the demonstrated invalidation boundary and use it on unsafe
   observation, focus/session loss, invalid text and exceptions. Keep confirmed
   recovery/history separate and do not erase user-authorized saved originals.
-- [ ] Cover timer-only Pause/denial/lock changes while a future is outstanding;
+- [x] Cover timer-only Pause/denial/lock changes while a future is outstanding;
   observe RED, then cancel and release owner state without waiting for completion.
-- [ ] Run the complete hosted Linux/Windows workflow; inspect exact results,
+- [x] Run the complete hosted Linux/Windows workflow; inspect exact results,
   request independent static review and record evidence. No local GUI/compiler.
 
 Review focus: callback ordering on focus loss; retained asynchronous job text;
@@ -106,3 +106,26 @@ the addon's actual accuracy. Preserve the 160 ms cancellation check and all
 policy assertions; production timer precision is unchanged until this correctly
 controlled test runs. The isolated loops do dispatch and exit successfully;
 the hypothesis of a reused stopped loop is not supported by the diagnostics.
+
+## Verified scoped result
+
+Full push/PR runs 39540890991/39540896152 pass Linux and Windows at cc13055.
+Actual downloaded Fcitx JUnit contains 11 cases, zero failures/errors/skips.
+Each controlled timer case runs 160 ms with 16 witness callbacks. The addon's
+reported accuracy remains 250,000 microseconds; production scheduling was not
+changed. The witness drives loop wakeups, so this proves invalidation on timer
+dispatch, not a production 160 ms cancellation guarantee.
+
+Negative proof branch codex/fcitx-timer-red-proof at 93326bf removes only the
+six-line timer policy guard from cc13055. Run 39541257155 then fails exactly
+Pause/denial/lock cancellation, with the same 160 ms/16-tick controls; all six
+unsafe-observation cases and the other Linux suites pass. This validates the
+corrected fixture's regression sensitivity without weakening assertions. It is
+an evidence-only branch and must never be merged. The feature remains at the
+correct implementation; log is ignored at .deps/fcitx-timer-proof-93326bf.log.
+
+Independent static reviews found no important issue in the reset, timer guard
+or corrected fixture, and explicitly confirmed the timing scope limitation.
+The task is complete for owner-state invalidation and timer policy checking.
+Worker deadline enforcement, UI cancel coordination, scheduling/resource and
+ordinary Wayland desktop acceptance remain open parts of the product goal.
