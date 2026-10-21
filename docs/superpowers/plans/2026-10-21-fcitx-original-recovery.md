@@ -16,9 +16,10 @@ add network access, clipboard fallback or a blocking wait on the input loop.
   policy, identity, selection, cancellation and the same acceptance deadline
   after ACK before committing. Ignore stale ACKs after cancellation and keep
   futures owned until reaped. No duplicate submission at confirmation.
-- [ ] Verify local focused/full tests within safe bounds, independent review,
-  and required Windows CI without repeated large artifact downloads. Record
-  exact source and checks; ordinary Wayland and GUI IPC Cancel remain separate.
+- [x] Verify local focused and full tests within safe resource bounds and obtain
+  independent static review. Record exact source and checks.
+- [ ] Run required Windows CI without repeated large artifact downloads.
+  Ordinary Wayland and GUI IPC Cancel remain separate acceptance work.
 
 Design choice: waiting for the existing client ACK proves the GUI-side passage
 receiver ran before write. Merely submitting then committing cannot prove this.
@@ -43,4 +44,7 @@ new selection while an older frame may still acknowledge. Recovery delivery
 rechecks exact selection and policy before native commit; confirmed history no
 longer submits a duplicate. Added Cancel/password/older-ACK controls. Local
 core/recovery/Fcitx suites pass in 22.69 s; Fcitx JUnit: 22 cases, zero failures,
-errors or skips. Full serial build and broader verification remain pending.
+errors or skips. The complete source build succeeds at 611be89 under a serial
+1200 MiB aggregate/no-swap/80% CPU scope. All 12 registered CTest targets pass
+with software rendering in 178.04 s. Independent static review found no important
+finding. This local run is not Windows CI or ordinary Wayland desktop acceptance.

@@ -1,10 +1,11 @@
 # Current handoff — 2026-10-21
 
 The user explicitly resumed work on 2026-10-21. The full product goal is active.
-Local C++/Qt/heavy workloads remain suspended after the host freezes; use hosted
-CI. Requirements
-remain in [REQUIREMENTS.md](REQUIREMENTS.md); the repository is intentionally
-public. No production release or local installation has been accepted.
+After two unexplained host freezes, local C++/Qt work has resumed only as serial,
+resource-bounded jobs using existing dependencies. This is evidence for the tested
+source, not general host-stability acceptance. Requirements remain in
+[REQUIREMENTS.md](REQUIREMENTS.md); the repository is intentionally public. No
+production release or local installation has been accepted.
 
 ## Current resumed work
 
@@ -23,8 +24,10 @@ public. No production release or local installation has been accepted.
   requested local tests where practical to reduce downloads. One-job bounded
   local builds are being reintroduced using existing dependencies (1 GiB per
   process, CPU/time limits, nice 19); no parallel build or desktop workload.
-  The core target build and its one-second test passed locally. Prior host
-  freezes remain unexplained; this is not general host-stability acceptance.
+  The complete source build and all 12 registered CTest targets passed locally
+  in a 1200 MiB aggregate cgroup with no permitted swap, CPUQuota 80%, software
+  rendering and serial execution. CTest took 178.04 seconds. Prior host freezes
+  remain unexplained; this is not general host-stability acceptance.
 - **Fcitx recovery work:** storage-access now holds codex/fcitx-original-recovery
   based on ae6ecd7. Test-only real-acceptance regressions require original
   delivery before native commit, no write after disconnect/revocation/selection
@@ -33,9 +36,10 @@ public. No production release or local installation has been accepted.
   delivery ACK while retaining the operation lock/deadline, rejects older ACK
   overlap, and rechecks selection/policy before write. Local core/recovery/Fcitx
   suites pass in 22.69 s; Fcitx JUnit has 22 cases and zero failures/errors/skips,
-  including added Cancel/password/older-ACK controls. Full serial build is
-  running under a 1200 MiB aggregate cgroup with no swap and CPUQuota 80%.
-  Broader tests and independent review remain pending.
+  including added Cancel/password/older-ACK controls. The complete serial build
+  and all 12 CTest targets pass at 611be89; the full test run took 178.04 s.
+  Independent static review found no important finding. Windows CI, ordinary
+  Wayland acceptance and GUI IPC Cancel remain pending and separate.
 - **PR27, native operation UI:** storage-access holds codex/native-operation-ui.
   Tested source a6c2471 passes full Linux/Windows push/PR runs
   39544490522/39544493641. Downloaded UI JUnit on each OS: 26 cases, zero
