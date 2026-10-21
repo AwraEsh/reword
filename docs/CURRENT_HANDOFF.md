@@ -28,7 +28,14 @@ public. No production release or local installation has been accepted.
 - **Fcitx recovery work:** storage-access now holds codex/fcitx-original-recovery
   based on ae6ecd7. Test-only real-acceptance regressions require original
   delivery before native commit, no write after disconnect/revocation/selection
-  change/expiry, and history only after confirmation. Local RED is pending.
+  change/expiry, and history only after confirmation. Local RED 9c05958 fails
+  all six new cases (2.901 s). Implementation now waits for authenticated local
+  delivery ACK while retaining the operation lock/deadline, rejects older ACK
+  overlap, and rechecks selection/policy before write. Local core/recovery/Fcitx
+  suites pass in 22.69 s; Fcitx JUnit has 22 cases and zero failures/errors/skips,
+  including added Cancel/password/older-ACK controls. Full serial build is
+  running under a 1200 MiB aggregate cgroup with no swap and CPUQuota 80%.
+  Broader tests and independent review remain pending.
 - **PR27, native operation UI:** storage-access holds codex/native-operation-ui.
   Tested source a6c2471 passes full Linux/Windows push/PR runs
   39544490522/39544493641. Downloaded UI JUnit on each OS: 26 cases, zero

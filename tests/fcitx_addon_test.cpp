@@ -207,7 +207,7 @@ class FcitxAddonTest : public QObject {
     }
     void originalIsDeliveredBeforeNativeWrite_data() {
         QTest::addColumn<QString>("boundary");
-        for (const auto name : {"unchanged-field", "disconnect", "deny", "pause", "selection", "expired"})
+        for (const auto name : {"unchanged-field", "disconnect", "deny", "pause", "selection", "expired", "cancel", "password", "older-ack"})
             QTest::newRow(name) << QString(name);
     }
     void originalIsDeliveredBeforeNativeWrite() {
@@ -237,13 +237,21 @@ class FcitxAddonTest : public QObject {
         QVERIFY(addon.unlocked());
         QString recoveredOriginal, recoveredResult;
         int deliveries = 0;
-        bool copyableAtWrite = false;
+        bool copyableAtWrite = false, olderAckRefused = false, heldLockAtReceipt = false;
         context.onCommit = [&] {
             copyableAtWrite = recoveredOriginal == "teh" && recoveredResult == "the";
         };
         QObject::connect(&recovery, &reword::RecoveryServer::passage, &recovery,
                          [&](QString original, QString corrected) {
+            if (original == "previous original") {
+                fcitx::KeyEvent early(&context, fcitx::Key("Control+Alt+r"));
+                addon.handle(early);
+                olderAckRefused = !early.filtered() && !addon.future_.valid() &&
+                                  !addon.operationLock_;
+                return;
+            }
             ++deliveries;
+            heldLockAtReceipt = bool(addon.operationLock_);
             recoveredOriginal = original;
             recoveredResult = corrected;
             // Revoke the write after recovery receives the passage but before
@@ -258,7 +266,18 @@ class FcitxAddonTest : public QObject {
                 context.surroundingText().setText("user edit", 9, 0);
             else if (boundary == "expired")
                 addon.job_.operationDeadline = QDeadlineTimer(0, Qt::PreciseTimer);
+            else if (boundary == "cancel")
+                addon.cancel_.store(true);
+            else if (boundary == "password")
+                context.setCapabilityFlags(fcitx::CapabilityFlags(fcitx::CapabilityFlag::SurroundingText) |
+                                           fcitx::CapabilityFlag::Password);
         });
+        if (boundary == "older-ack") {
+            QVERIFY(addon.recovery_->submit("previous original", "previous result"));
+            QTRY_VERIFY(olderAckRefused);
+            QTRY_VERIFY(addon.recovery_->ready());
+            QVERIFY(context.commits.isEmpty());
+        }
         fcitx::KeyEvent shortcut(&context, fcitx::Key("Control+Alt+r"));
         addon.handle(shortcut);
         QVERIFY(shortcut.filtered());
@@ -267,7 +286,7 @@ class FcitxAddonTest : public QObject {
         addon.future_ = result.get_future(); // Join the actual accepted worker.
         result.set_value({"teh", "the", true, {}});
         addon.completed();
-        if (boundary == "unchanged-field") {
+        if (boundary == "unchanged-field" || boundary == "older-ack") {
             QTRY_COMPARE(context.commits, QStringList{"the"});
             QVERIFY2(copyableAtWrite, "Native write occurred before original recovery delivery.");
         } else {
@@ -276,10 +295,11 @@ class FcitxAddonTest : public QObject {
             QVERIFY(!addon.pending_.valid);
         }
         QCOMPARE(deliveries, 1);
+        QVERIFY(heldLockAtReceipt);
         QCOMPARE(recoveredOriginal, QString("teh"));
         QCOMPARE(recoveredResult, QString("the"));
         QVERIFY(addon.store_->histories().isEmpty());
-        if (boundary == "unchanged-field") {
+        if (boundary == "unchanged-field" || boundary == "older-ack") {
             // The frontend intentionally never confirmed the write above.
             // Recovery must survive, but persistent history requires confirmation.
             context.surroundingText().setText("the", 3, 3);
@@ -338,7 +358,7 @@ class FcitxAddonTest : public QObject {
             QVERIFY(context.commits.isEmpty());
             QVERIFY(!addon.pending_.valid);
         } else {
-            QCOMPARE(context.commits, QStringList{"the"});
+            QTRY_COMPARE(context.commits, QStringList{"the"});
             QVERIFY(addon.pending_.valid);
         }
         QCOMPARE(QString::fromStdString(context.surroundingText().text()), QString("teh"));

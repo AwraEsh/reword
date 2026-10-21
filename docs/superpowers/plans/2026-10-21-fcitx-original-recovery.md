@@ -11,7 +11,7 @@ add network access, clipboard fallback or a blocking wait on the input loop.
   Pause, changed selection and expiry after receipt must prevent a write.
   History stays empty without confirmation and inserts once after confirmation.
   Observe local RED under one-job resource bounds.
-- [ ] Hold the prepared job and operation lock while awaiting recovery ACK.
+- [x] Hold the prepared job and operation lock while awaiting recovery ACK.
   Accept a selection only when the client has no prior queued delivery. Recheck
   policy, identity, selection, cancellation and the same acceptance deadline
   after ACK before committing. Ignore stale ACKs after cancellation and keep
@@ -36,3 +36,11 @@ Built serially under 1 GiB address-space/90 CPU seconds with existing dependenci
 ran under 512 MiB/20 CPU seconds in a private D-Bus session. Core also passes.
 Fcitx reports disabled keyboard/input-method addons because the fixture deliberately
 has no real desktop frontend; these warnings do not skip assertions.
+
+Implementation waits asynchronously for the existing client ACK, holding the
+prepared job/lock and the original acceptance deadline. A ready() guard refuses
+new selection while an older frame may still acknowledge. Recovery delivery
+rechecks exact selection and policy before native commit; confirmed history no
+longer submits a duplicate. Added Cancel/password/older-ACK controls. Local
+core/recovery/Fcitx suites pass in 22.69 s; Fcitx JUnit: 22 cases, zero failures,
+errors or skips. Full serial build and broader verification remain pending.
