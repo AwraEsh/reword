@@ -64,3 +64,12 @@ the owner record until the worker returns. Persisted recovery/history are not
 modified. Hosted GREEN and independent review are pending. Fixture follow-up
 also resets GNU getopt between instances (logs showed only the first instance
 received --disable all) and retains one temporary Fcitx config path for all rows.
+
+Static review of d1e70c7..7ad9a99 found no important issue in the scoped reset.
+It explicitly leaves worker-cancellation timing and timer-only policy changes
+open. Add a real private D-Bus lock provider and require the safe baseline to
+be unlocked. With an outstanding promise-backed future and no pending Undo,
+change Pause, permission or lock state without input events, then run the actual
+Fcitx timer for 160 ms. Require cancellation and empty owner text before allowing
+the future to finish. This should expose the timer's current early return while
+the future is not ready. Observe hosted assertions before changing that policy.
