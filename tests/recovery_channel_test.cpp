@@ -113,6 +113,57 @@ finally:
         QVERIFY(!client.submit("late", "result"));
         QCOMPARE(received.count(), 1);
     }
+    void operationLifecycleIsAggregatedAndCancellableWithoutText() {
+        QTemporaryDir data;
+        RecoveryServer server;
+        QVERIFY(server.listen(data.path()));
+        RecoveryClient first, second;
+        QSignalSpy activity(&server, &RecoveryServer::operationActive);
+        QSignalSpy firstCancel(&first, &RecoveryClient::cancelRequested);
+        QSignalSpy secondCancel(&second, &RecoveryClient::cancelRequested);
+        QSignalSpy passages(&server, &RecoveryServer::passage);
+        first.start(data.path());
+        second.start(data.path());
+        QTRY_VERIFY(first.ready());
+        QTRY_VERIFY(second.ready());
+
+        QVERIFY(first.beginOperation());
+        QTRY_COMPARE(activity.count(), 1);
+        QCOMPARE(activity.at(0).at(0).toBool(), true);
+        QVERIFY(second.beginOperation());
+        QTest::qWait(20);
+        QCOMPARE(activity.count(), 1); // Aggregate state stays active.
+        server.cancelOperations();
+        QTRY_COMPARE(firstCancel.count(), 1);
+        QTRY_COMPARE(secondCancel.count(), 1);
+        QCOMPARE(passages.count(), 0);
+
+        QVERIFY(first.endOperation());
+        QTest::qWait(20);
+        QCOMPARE(activity.count(), 1); // The second peer still owns work.
+        second.stop();
+        QTRY_COMPARE(activity.count(), 2);
+        QCOMPARE(activity.at(1).at(0).toBool(), false);
+        QCOMPARE(passages.count(), 0);
+    }
+    void coalescedLifecycleFramesAreAtomicAndDisconnectClearsBusy() {
+        QTemporaryDir data;
+        RecoveryServer server;
+        QVERIFY(server.listen(data.path()));
+        QSignalSpy activity(&server, &RecoveryServer::operationActive);
+        QSignalSpy passages(&server, &RecoveryServer::passage);
+        QLocalSocket socket;
+        hello(socket, data.path());
+        socket.write("RWB1RWE1RWB1");
+        QTRY_COMPARE(activity.count(), 3);
+        QCOMPARE(activity.at(0).at(0).toBool(), true);
+        QCOMPARE(activity.at(1).at(0).toBool(), false);
+        QCOMPARE(activity.at(2).at(0).toBool(), true);
+        QCOMPARE(passages.count(), 0);
+        socket.abort();
+        QTRY_COMPARE(activity.count(), 4);
+        QCOMPARE(activity.at(3).at(0).toBool(), false);
+    }
     void localDiagnosticsReturnOnlyDeliveryCounter() {
         QTemporaryDir data;
         RecoveryServer server;

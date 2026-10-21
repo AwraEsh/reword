@@ -309,6 +309,48 @@ class FcitxAddonTest : public QObject {
             QCOMPARE(deliveries, 1); // Confirmation must not submit a duplicate.
         }
     }
+    void remoteCancelStopsSelectedOperationAndClearsBusyAfterReap() {
+        QTemporaryDir data;
+        QVERIFY(data.isValid());
+        qputenv("REWORD_DATA_DIR", data.path().toUtf8());
+        qputenv("XDG_SESSION_TYPE", "wayland");
+        reword::RecoveryServer recovery;
+        QVERIFY(recovery.listen(data.path()));
+        QSignalSpy activity(&recovery, &reword::RecoveryServer::operationActive);
+        char executable[] = "reword-owned-fcitx-test";
+        char disable[] = "--disable", all[] = "all";
+        char *arguments[] = {executable, disable, all, nullptr};
+        optind = 0;
+        fcitx::Instance instance(3, arguments);
+        instance.initialize();
+        RewordAddon addon(&instance);
+        QTRY_VERIFY(addon.recovery_->active());
+        OwnedContext context(instance.inputContextManager());
+        context.setCapabilityFlags(fcitx::CapabilityFlag::SurroundingText);
+        context.surroundingText().setText("teh", 3, 0);
+        context.focusIn();
+        const QString id = "fcitx:reword-synthetic-fixture";
+        addon.store_->discover(id, "Synthetic fixture");
+        addon.store_->decide(id, "allow");
+
+        fcitx::KeyEvent shortcut(&context, fcitx::Key("Control+Alt+r"));
+        addon.handle(shortcut);
+        QVERIFY(shortcut.filtered());
+        QTRY_COMPARE(activity.count(), 1);
+        QCOMPARE(activity.at(0).at(0).toBool(), true);
+        std::promise<reword::Change> result;
+        addon.future_ = result.get_future(); // Join the accepted fixture worker.
+        recovery.cancelOperations();
+        QTRY_VERIFY(addon.cancel_.load());
+        QVERIFY(addon.job_.original.isEmpty());
+        QCOMPARE(activity.count(), 1); // Worker still owns the operation.
+        result.set_value({"teh", "teh", false, "Correction cancelled or timed out."});
+        addon.completed();
+        QTRY_COMPARE(activity.count(), 2);
+        QCOMPARE(activity.at(1).at(0).toBool(), false);
+        QVERIFY(context.commits.isEmpty());
+        QVERIFY(addon.store_->histories().isEmpty());
+    }
     void resultDeliveryCountsTowardsOperationDeadline_data() {
         QTest::addColumn<bool>("late");
         QTest::newRow("in-time") << false;
