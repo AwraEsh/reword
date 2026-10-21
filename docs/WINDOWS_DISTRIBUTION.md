@@ -207,3 +207,11 @@ The SDK archive supplies no source, recipe or notice text. Its filename is not
 an Authenticode-signature verification. Matching SDK bytes narrows provenance;
 Mesa build/source/notice material, D3DCompiler and VC runtime requirements remain
 open. No graphics component was removed and releaseReady remains false.
+
+The separate [D3DCompiler receipt](evidence/windows-d3d-sdk-db871eb.json) verifies
+Qt's 1,380,117-byte d3dcompiler_47-x64.7z against the SHA256 in its official
+Metalink metadata, then streams its sole 4,173,928-byte DLL for hashing. That DLL
+matches the actual staged D3Dcompiler_47.dll bytes from run 39399260940. It was
+never loaded or executed. This archive also supplies no notice text. The match
+does not authenticate the Microsoft signature, establish redistribution terms,
+or replace the remaining runtime material review.
