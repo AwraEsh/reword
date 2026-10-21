@@ -1,5 +1,6 @@
 #include <QtTest>
 #include <QTemporaryDir>
+#include <getopt.h>
 #include "../src/platform/fcitx_addon.cpp"
 #include <fcitx/inputcontextmanager.h>
 
@@ -19,7 +20,12 @@ class OwnedContext final : public fcitx::InputContext {
 
 class FcitxAddonTest : public QObject {
     Q_OBJECT
+    QTemporaryDir config_;
   private Q_SLOTS:
+    void initTestCase() {
+        QVERIFY(config_.isValid());
+        qputenv("FCITX_CONFIG_HOME", config_.path().toUtf8());
+    }
     void unsafeObservationReleasesOwnedJobText_data() {
         QTest::addColumn<QString>("boundary");
         for (const auto &name : {"password", "sensitive", "no-surrounding", "denied", "paused", "focus"})
@@ -30,7 +36,6 @@ class FcitxAddonTest : public QObject {
         QTemporaryDir data;
         QVERIFY(data.isValid());
         qputenv("REWORD_DATA_DIR", data.path().toUtf8());
-        qputenv("FCITX_CONFIG_HOME", data.path().toUtf8());
         qputenv("XDG_SESSION_TYPE", "wayland");
         reword::RecoveryServer recovery;
         QVERIFY(recovery.listen(data.path()));
@@ -38,6 +43,8 @@ class FcitxAddonTest : public QObject {
         char disable[] = "--disable";
         char all[] = "all";
         char *arguments[] = {executable, disable, all, nullptr};
+        // GNU getopt keeps its parser position across owned instances.
+        optind = 0;
         fcitx::Instance instance(3, arguments);
         // Instance construction installs event handlers, but initialize()
         // registers the inputState factory those handlers require. Disable all

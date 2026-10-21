@@ -64,6 +64,19 @@ class RewordAddon final : public fcitx::AddonInstance {
         retryStart_ = -1;
         prefix_.clear();
     }
+    void resetObservation() {
+        cancel_.store(true);
+        resetRetry();
+        pending_ = {};
+        job_ = {};
+        context_.clear();
+        observedContext_.clear();
+        observedHash_.clear();
+        observedCursor_ = observedAnchor_ = 0;
+        deletionKey_ = false;
+        deletionDeadline_ = 0;
+        deletionContext_ = {};
+    }
     void resetIfContinued(const QString &before) {
         static const QRegularExpression continued(R"([\s.,!?،؛؟]+[^\s.,!?،؛؟])");
         if (retryStart_ >= 0 &&
@@ -77,30 +90,18 @@ class RewordAddon final : public fcitx::AddonInstance {
         QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
         const auto app = ic ? QString::fromStdString(ic->program()) : QString{};
         if (app.isEmpty() || !permitted(ic, "fcitx:" + app) || !unlocked()) {
-            resetRetry();
-            observedContext_.clear();
-            observedHash_.clear();
-            pending_ = {};
-            cancel_.store(true);
+            resetObservation();
             return;
         }
         const auto &st = ic->surroundingText();
         if (!st.isValid() || st.text().size() > 400000) {
-            resetRetry();
-            observedContext_.clear();
-            observedHash_.clear();
-            pending_ = {};
-            cancel_.store(true);
+            resetObservation();
             return;
         }
         const auto text = QString::fromStdString(st.text());
         const auto points = text.toUcs4();
         if (st.cursor() > unsigned(points.size()) || st.anchor() > unsigned(points.size())) {
-            resetRetry();
-            observedContext_.clear();
-            observedHash_.clear();
-            pending_ = {};
-            cancel_.store(true);
+            resetObservation();
             return;
         }
         const auto hash = QCryptographicHash::hash(QByteArray::fromStdString(st.text()),
@@ -157,9 +158,7 @@ class RewordAddon final : public fcitx::AddonInstance {
         if (!pending_.valid || pending_.context.get() != ic)
             return;
         if (!permitted(ic, pending_.app) || !unlocked()) {
-            pending_ = {};
-            resetRetry();
-            cancel_.store(true);
+            resetObservation();
             return;
         }
         const auto &st = ic->surroundingText();
@@ -229,20 +228,26 @@ class RewordAddon final : public fcitx::AddonInstance {
         if (qEnvironmentVariable("XDG_SESSION_TYPE") != "wayland")
             return;
         QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
-        if (!recovery_ || !recovery_->active())
+        if (!recovery_ || !recovery_->active()) {
+            resetObservation();
             return;
+        }
         auto &e = static_cast<fcitx::KeyEvent &>(event);
         auto *ic = e.inputContext();
         if (e.isRelease())
             return;
-        if (!ic || !ic->hasFocus())
+        if (!ic || !ic->hasFocus()) {
+            resetObservation();
             return;
+        }
         try {
             deletionKey_ = false;
             deletionContext_ = ic->watch();
             auto app = QString::fromStdString(ic->program());
-            if (app.isEmpty())
+            if (app.isEmpty()) {
+                resetObservation();
                 return;
+            }
             QString id = "fcitx:" + app;
             store_->discover(id, app, reword::restrictedApp(app));
             auto now = QDateTime::currentSecsSinceEpoch();
@@ -251,27 +256,29 @@ class RewordAddon final : public fcitx::AddonInstance {
                 heartbeat_ = now;
             }
             if (hotkey(e.key(), "pauseShortcut", "Ctrl+Alt+Shift+P")) {
-                cancel_.store(true);
+                resetObservation();
                 store_->pause(store_->paused() ? 0 : -1);
                 e.filterAndAccept();
                 return;
             }
             if (!permitted(ic, id)) {
-                resetRetry();
-                pending_ = {};
-                cancel_.store(true);
+                resetObservation();
                 return;
             }
             bool selection = hotkey(e.key(), "fixShortcut", "Ctrl+Alt+R"),
                  undo = hotkey(e.key(), "undoShortcut", "Ctrl+Alt+Z");
             auto code = fcitx::Key::keySymToUnicode(e.key().sym());
             const auto &st = ic->surroundingText();
-            if (!st.isValid() || st.text().size() > 400000)
+            if (!st.isValid() || st.text().size() > 400000) {
+                resetObservation();
                 return;
+            }
             auto text = QString::fromStdString(st.text());
             auto points = text.toUcs4();
-            if (st.cursor() > unsigned(points.size()) || st.anchor() > unsigned(points.size()))
+            if (st.cursor() > unsigned(points.size()) || st.anchor() > unsigned(points.size())) {
+                resetObservation();
                 return;
+            }
             const bool backspace = e.key().sym() == FcitxKey_BackSpace;
             const bool forwardDelete = e.key().sym() == FcitxKey_Delete;
             deletionKey_ = (backspace || forwardDelete) &&
@@ -406,8 +413,7 @@ class RewordAddon final : public fcitx::AddonInstance {
             // Validate again before issuing either part of the native edit.
             if (!unlocked() || !permitted(ic, id) || QString::fromStdString(ic->program()) != app ||
                 revision != store_->value("configRevision", 0).toLongLong()) {
-                resetRetry();
-                pending_ = {};
+                resetObservation();
                 return;
             }
             const auto &currentText = ic->surroundingText();
@@ -429,9 +435,7 @@ class RewordAddon final : public fcitx::AddonInstance {
             ic->deleteSurroundingText(-int(token.toUcs4().size()), token.toUcs4().size());
             ic->commitString(corrected.toStdString());
         } catch (...) {
-            resetRetry();
-            pending_ = {};
-            cancel_.store(true);
+            resetObservation();
         }
     }
 
@@ -449,15 +453,7 @@ class RewordAddon final : public fcitx::AddonInstance {
         QObject::connect(recovery_.get(), &reword::RecoveryClient::activeChanged, recovery_.get(),
                          [this](bool active) {
                              if (!active) {
-                                 cancel_.store(true);
-                                 resetRetry();
-                                 pending_ = {};
-                                 job_ = {};
-                                 context_.clear();
-                                 observedContext_.clear();
-                                 observedHash_.clear();
-                                 deletionKey_ = false;
-                                 deletionContext_ = {};
+                                 resetObservation();
                              }
                          });
         QObject::connect(recovery_.get(), &reword::RecoveryClient::deliveryFailed, recovery_.get(),
@@ -479,11 +475,7 @@ class RewordAddon final : public fcitx::AddonInstance {
             try {
                 observeRetry(static_cast<fcitx::InputContextEvent &>(e).inputContext());
             } catch (...) {
-                resetRetry();
-                observedContext_.clear();
-                observedHash_.clear();
-                pending_ = {};
-                cancel_.store(true);
+                resetObservation();
             }
         };
         surrounding_ = instance->watchEvent(fcitx::EventType::InputContextSurroundingTextUpdated,
@@ -511,15 +503,7 @@ class RewordAddon final : public fcitx::AddonInstance {
             });
         focus_ = instance->watchEvent(fcitx::EventType::InputContextFocusOut,
                                       fcitx::EventWatcherPhase::Default, [this](fcitx::Event &) {
-                                          deletionKey_ = false;
-                                          deletionContext_ = {};
-                                          resetRetry();
-                                          observedContext_.clear();
-                                          observedHash_.clear();
-                                          context_.clear();
-                                          prefix_.clear();
-                                          pending_ = {};
-                                          cancel_.store(true);
+                                          resetObservation();
                                       });
         timer_ = instance->eventLoop().addTimeEvent(
             CLOCK_MONOTONIC, fcitx::now(CLOCK_MONOTONIC) + 40000, 0,
@@ -532,11 +516,10 @@ class RewordAddon final : public fcitx::AddonInstance {
                         if (permitted(ic, pending_.app) && unlocked())
                             observe(ic);
                         else
-                            pending_ = {};
+                            resetObservation();
                     }
                 } catch (...) {
-                    cancel_.store(true);
-                    pending_ = {};
+                    resetObservation();
                 }
                 timer->setNextInterval(40000);
                 timer->setEnabled(true);

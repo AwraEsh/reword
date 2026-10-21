@@ -13,14 +13,14 @@ cooperative cancellation remains distinct from clearing the owner's job record.
 **Files:** src/platform/fcitx_addon.cpp; tests/fcitx_addon_test.cpp; CMakeLists.txt;
 this record and docs/CURRENT_HANDOFF.md. No new runtime dependency.
 
-- [ ] Add a real Fcitx-core/RecoveryServer/Store fixture using temporary data.
+- [x] Add a real Fcitx-core/RecoveryServer/Store fixture using temporary data.
   A friend peer may inspect owned text, matching the Service privacy tests; do
   not add production test-only cleanup methods. Exercise password, sensitive,
   absent surrounding-text capability, denied permission, Pause and focus loss.
   Seed only synthetic pending/job text. Require cancellation and immediate
   release of owner-held text on the actual unsafe event paths. Positive control:
   the same focused permitted context is authorized before each unsafe change.
-- [ ] Observe hosted RED before changing production behavior. A compile/setup
+- [x] Observe hosted RED before changing production behavior. A compile/setup
   error is not RED; repair the fixture separately until assertions run.
 - [ ] Centralize the demonstrated invalidation boundary and use it on unsafe
   observation, focus/session loss, invalid text and exceptions. Keep confirmed
@@ -50,3 +50,17 @@ The upstream 5.1.7 [implementation](https://github.com/fcitx/fcitx5/blob/5.1.7/s
 registers the property there. Initialize the owned instance with all addons
 disabled; keep its Fcitx config path temporary. This is fixture repair, not a
 behavioral RED or production fix. The other 11 Linux suites passed in that run.
+
+Hosted RED 39538586697 at d1e70c7 executes all six cases and fails their owner
+text retention assertion: password, sensitive, no surrounding-text capability,
+denied permission, paused and focus loss. Cancellation and pending reset already
+pass; job_.before/after/original/corrected remain populated. The other 11 Linux
+suites pass. Log retained under ignored .deps/fcitx-d1e70c7.log.
+
+Consolidate existing unsafe resets so they cancel and clear job/pending text,
+retry prefix, observation metadata and deletion correlation together. Preserve
+the future's lifetime; cancellation is cooperative and worker copies can outlive
+the owner record until the worker returns. Persisted recovery/history are not
+modified. Hosted GREEN and independent review are pending. Fixture follow-up
+also resets GNU getopt between instances (logs showed only the first instance
+received --disable all) and retains one temporary Fcitx config path for all rows.
