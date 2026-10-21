@@ -1,0 +1,25 @@
+# Native selection operation UI
+
+Execute inline; hosted C++/Qt verification only after two host freezes.
+
+Problem: Service accepts a native selection without telling Controller that an
+operation started. The real Cancel button is bound to Controller.busy, so users
+cannot cancel this operation from the GUI. Some completion paths emit only a
+message, so tracking only result is insufficient. Fcitx IPC is separate scope.
+
+- [ ] Add real Controller/QML/Service integration rows for successful correction,
+  Cancel and unchanged text. Hold only the test process worker pool to observe
+  the queued interval; release on every exit before Controller teardown. Trigger
+  the actual adapter action, require a visible Cancel, invoke its clicked signal,
+  and check resulting field/history plus cleared busy state. Observe hosted RED.
+- [ ] Publish accepted-operation lifecycle from Service on every terminal path.
+  Keep queued workspace state distinct from active service state so a rejected
+  competing request cannot hide Cancel. Preserve cooperative cancellation and
+  the existing single-operation lock. Add targeted overlap coverage if needed.
+- [ ] Full hosted Linux/Windows suites, independent review, source/run identities
+  and handoff. Ordinary native desktop and Fcitx Cancel remain separate.
+
+Mutation target: suppress native operation-start notification and the real
+Cancel stays hidden despite an accepted operation. Missing terminal delivery
+leaves busy stuck on unchanged/early-return paths; ignoring Cancel changes the
+field/history in the cancellation row. No production test-only methods.

@@ -16,12 +16,17 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QTimer>
+#include <QSemaphore>
+#include <QThreadPool>
+#include <QtConcurrent>
+#include <QFileInfo>
 #include <QTextLayout>
 #include <QGlyphRun>
 #include <QFontDatabase>
 #include <atomic>
 #include <cmath>
 #include <algorithm>
+#include <utility>
 #include "app/controller.h"
 #include "platform/recovery_channel.h"
 class BlockedReply : public QNetworkReply {
@@ -83,6 +88,85 @@ class UiMetadataAdapter final : public reword::Adapter {
         return "Controlled UI metadata fixture";
     }
 };
+// Own only synthetic field state; all Controller/Service/Store/Engine paths stay real.
+class UiSelectionAdapter final : public reword::Adapter {
+    QMutex mutex_;
+    reword::Field field_;
+    QString action_;
+  public:
+    std::atomic_int actions{0}, writes{0};
+    explicit UiSelectionAdapter(QString text) {
+        field_.app = "synthetic-ui-selection";
+        field_.id = "selection";
+        field_.known = field_.editable = field_.focused = field_.plain = true;
+        field_.locked = false;
+        field_.text = std::move(text);
+        field_.caret = field_.selectionEnd = field_.text.size();
+        field_.selectionStart = 0;
+    }
+    void requestCorrection() {
+        QMutexLocker lock(&mutex_);
+        action_ = "fix";
+    }
+    reword::Field inspect(bool text) override {
+        QMutexLocker lock(&mutex_);
+        auto field = field_;
+        if (!text)
+            field.text.clear();
+        return field;
+    }
+    reword::Field readExpected(const reword::Field &expected) override {
+        QMutexLocker lock(&mutex_);
+        return expected.app == field_.app && expected.id == field_.id ? field_ : reword::Field{};
+    }
+    bool changed() override { return false; }
+    QString takeAction() override {
+        QMutexLocker lock(&mutex_);
+        auto action = std::exchange(action_, {});
+        if (!action.isEmpty())
+            ++actions;
+        return action;
+    }
+    bool replace(const reword::Field &expected, const QString &text, int caret) override {
+        QMutexLocker lock(&mutex_);
+        if (!reword::sameTarget(expected, field_))
+            return false;
+        ++writes;
+        field_.text = text;
+        field_.caret = caret;
+        field_.selectionStart = field_.selectionEnd = -1;
+        ++field_.revision;
+        return true;
+    }
+    bool shortcuts(const QString &, const QString &, const QString &) override { return true; }
+    QString description() const override { return "Owned selection fixture"; }
+};
+// Release even after a failed assertion, before Controller joins its Service worker.
+struct UiBlockedWorkerPool {
+    QThreadPool *pool = QThreadPool::globalInstance();
+    int previousMaximum = pool->maxThreadCount();
+    QSemaphore started, release;
+    QFuture<void> blocker;
+    bool released = false;
+    UiBlockedWorkerPool() {
+        pool->waitForDone();
+        pool->setMaxThreadCount(1);
+        blocker = QtConcurrent::run([this] { started.release(); release.acquire(); });
+    }
+    bool ready() { return started.tryAcquire(1, 2000); }
+    void unblock() {
+        if (!released) {
+            released = true;
+            release.release();
+            blocker.waitForFinished();
+        }
+    }
+    ~UiBlockedWorkerPool() {
+        unblock();
+        pool->waitForDone();
+        pool->setMaxThreadCount(previousMaximum);
+    }
+};
 class SettingsReadController final : public reword::Controller {
     Q_OBJECT
     Q_PROPERTY(QVariantMap settings READ measuredSettings NOTIFY updated)
@@ -98,6 +182,53 @@ class SettingsReadController final : public reword::Controller {
 class UiTest : public QObject {
     Q_OBJECT
   private slots:
+    void nativeSelectionExposesBusyAndCancel_data() {
+        QTest::addColumn<QString>("mode");
+        for (const auto mode : {"apply", "cancel", "unchanged"})
+            QTest::newRow(mode) << QString(mode);
+    }
+    void nativeSelectionExposesBusyAndCancel() {
+        QFETCH(QString, mode);
+        QTemporaryDir data;
+        reword::Store store(data.path());
+        store.discover("synthetic-ui-selection", "Owned selection fixture");
+        store.decide("synthetic-ui-selection", "allow");
+        const QString original = mode == "unchanged" ? "hello" : "im here";
+        auto adapter = new UiSelectionAdapter(original);
+        reword::Controller controller(data.path(), nullptr,
+                                      std::unique_ptr<reword::Adapter>(adapter));
+        UiBlockedWorkerPool workers;
+        QVERIFY(workers.ready());
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        QQuickItem *cancel = nullptr;
+        for (auto item : engine.rootObjects().first()->findChildren<QQuickItem *>())
+            if (item->property("text").toString() == "Cancel") {
+                cancel = item;
+                break;
+            }
+        QVERIFY(cancel);
+        QVERIFY(!controller.busy());
+        adapter->requestCorrection();
+        QTRY_COMPARE(adapter->actions.load(), 1);
+        QTRY_VERIFY(QFileInfo::exists(data.path() + "/operation.lock"));
+        // Missing native lifecycle delivery leaves the real Cancel control hidden.
+        QTRY_VERIFY_WITH_TIMEOUT(controller.busy(), 2000);
+        QTRY_VERIFY(cancel->isVisible());
+        if (mode == "cancel") {
+            QVERIFY(QMetaObject::invokeMethod(cancel, "clicked", Qt::DirectConnection));
+            QTest::qWait(50);
+            QVERIFY(controller.busy()); // Worker has not acknowledged cancellation yet.
+        }
+        workers.unblock();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 12000);
+        QTRY_VERIFY(!cancel->isVisible());
+        QCOMPARE(adapter->inspect(true).text, mode == "apply" ? QString("I am here") : original);
+        QCOMPARE(adapter->writes.load(), mode == "apply" ? 1 : 0);
+        QCOMPARE(controller.history().size(), mode == "apply" ? 1 : 0);
+    }
     void oneUpdateSharesSettingsAcrossBindings() {
         QTemporaryDir data;
         SettingsReadController controller(data.path());

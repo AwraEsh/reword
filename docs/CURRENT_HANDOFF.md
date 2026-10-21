@@ -19,6 +19,11 @@ public. No production release or local installation has been accepted.
   and Windows; downloaded Fcitx JUnit has 13 cases and no failures/errors/skips.
   Independent static review found no important issue. Scoped deadline work is
   complete; UI Cancel and ordinary Wayland acceptance remain separate.
+- **PR27 preparation, native operation UI:** storage-access now holds
+  codex/native-operation-ui based on PR26 checkpoint 920d199. A real
+  Controller/QML/Service regression covers apply/Cancel/unchanged outcomes,
+  with the test process worker pool held only to inspect the accepted interval.
+  Test-only hosted RED is pending; production UI behavior is unchanged.
 - **Operation UI gap:** source inspection shows Controller's busy state is set
   for the internal editor, and its Cancel only invokes Service::cancel(). Native
   Service operations lack a start-state signal to the GUI; the Fcitx recovery
