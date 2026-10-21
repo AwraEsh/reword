@@ -3,6 +3,7 @@
 #include <QRegularExpression>
 #include <QtConcurrent>
 #include <QDeadlineTimer>
+#include <QScopeGuard>
 namespace reword {
 void Service::clearJobTarget() {
     nativeJob_ = false;
@@ -42,6 +43,7 @@ void Service::start() {
     }
 }
 void Service::stop() {
+    const bool wasRunning = jobRunning_;
     cancel();
     if (job_) {
         job_->disconnect(this);
@@ -63,6 +65,8 @@ void Service::stop() {
     workingShortcuts_.clear();
     shortcutsHealthy_ = false;
     shortcutRevision_ = -1;
+    if (wasRunning)
+        emit operationActive(false);
 }
 Field Service::permitted(const Field *expected) {
     auto f = adapter_->inspect(false);
@@ -299,6 +303,10 @@ void Service::runText(QString input, bool native, Field field) {
     connect(
         job_, &QFutureWatcher<Change>::finished, this,
         [this, input, native, field, revision, cancellation, deadline] {
+            // All result/message/exception exits publish completion, after the
+            // operation lock is released. A rejected competing request is not
+            // a completion of the accepted job.
+            auto activity = qScopeGuard([this] { emit operationActive(false); });
             auto operationLock = std::move(jobLock_);
             auto completed = job_;
             job_ = nullptr;
@@ -399,6 +407,7 @@ void Service::runText(QString input, bool native, Field field) {
             return Change{input, input, false, "Correction failed. The original is unchanged."};
         }
     }));
+    emit operationActive(true);
 }
 void Service::processText(QString input) {
     try {

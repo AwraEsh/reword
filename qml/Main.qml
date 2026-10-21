@@ -363,6 +363,7 @@ ApplicationWindow {
                             onClicked: Backend.fix(editor.text)
                         }
                         Button {
+                            objectName: "cancelCorrection"
                             text: "Cancel"
                             visible: Backend.busy
                             onClicked: Backend.cancel()

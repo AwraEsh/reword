@@ -19,11 +19,21 @@ public. No production release or local installation has been accepted.
   and Windows; downloaded Fcitx JUnit has 13 cases and no failures/errors/skips.
   Independent static review found no important issue. Scoped deadline work is
   complete; UI Cancel and ordinary Wayland acceptance remain separate.
-- **Operation UI gap:** source inspection shows Controller's busy state is set
-  for the internal editor, and its Cancel only invokes Service::cancel(). Native
-  Service operations lack a start-state signal to the GUI; the Fcitx recovery
-  channel carries passages but no job lifecycle/cancel coordination. Cover both
-  native paths with real busy/cancel regressions after the deadline task.
+- **Current work mode:** the user has about 6% of the five-hour Plus limit left
+  and requests short, minor work only. Do not start another long implementation
+  or test cycle in this mode. This checkpoint records finished evidence only.
+- **PR27, native operation UI:** storage-access holds codex/native-operation-ui.
+  Tested source a6c2471 passes full Linux/Windows push/PR runs
+  39544490522/39544493641. Downloaded UI JUnit on each OS: 26 cases, zero
+  failures/errors/skips. Real apply/Cancel/unchanged paths pass, including
+  visible workspace Cancel, no write/history after cancellation, and terminal
+  busy cleanup. Independent reviews found no important issues. Initial e905973
+  RED reproduced missing busy on both OS. The first fix then exposed an
+  ambiguous test lookup of dialog Cancel buttons; unique workspace selection
+  resolved it. No local C++/Qt workload ran.
+- **Remaining operation UI gap:** PR27 closes the X11/Windows Service path.
+  Fcitx's recovery channel still carries passages without job lifecycle/cancel
+  coordination; that separate path still needs implementation and real tests.
 - **Fcitx recovery follow-up:** selected originals are submitted to GUI recovery
   only after surrounding-text confirmation. Audit/reproduce loss of copyable
   original on an unconfirmed native write or delivery interruption. Preserve
@@ -50,6 +60,30 @@ public. No production release or local installation has been accepted.
   started a same-AppDir preflight before the instrumented two-hour workload.
   Inspect its existing handle rather than relaunching on an observation timeout.
   Keyboard-review holds codex/active-workload-diagnostics; it is stacked on PR20.
+  Final run 39539196812 FAILED after 4,206.262 seconds (about 70 minutes),
+  stage selected-history, failure test-infrastructure; 1,471 full cycles.
+  The last live first/second/third/Undo counters are all 1,473 and the last
+  third-attempt state is corrected. This does not reproduce the prior second
+  retry mismatch, nor establish its root cause or two-hour acceptance.
+  Helper cleanup required escalation; cleanupFailed is false. App CPU 4.26%,
+  helper 1.45%, zero swap, p95 upper bound 22.6 ms across 2,946 samples.
+  Binary SHA256 b7683b398b33ef6e26ff03be93679be907ce4293357d8683b6d64eedafe10e70.
+  Actual report: .deps/hosted-active-2aa59d3/active-workload/report.json.
+  The initial detailed log fetch timed out at TLS. A later bounded direct job-log
+  fetch succeeded: the workload prints no exception subtype/traceback, only
+  exit code 1. Therefore the infrastructure cause remains undetermined.
+  Artifact 12320759229, archive SHA256
+  8bc06d40d2bfa490446401af979ea7d9408d76f5e687695891764833053b7d2f.
+  Local ignored log: .deps/hosted-active-2aa59d3/linux-job.log. No blind rerun
+  or guessed production fix; investigate after the reduced-work mode.
+  Short source audit: active_stability.py catches WorkloadFailure separately
+  from generic Exception. selected-history waits through HistoryCheck, whose
+  read-only SQLite connection uses a 0.5-second timeout. A normal wait expiry
+  is classified operation-timeout by stability_evidence.wait_until, so the
+  generic report does not establish a selection wait timeout. SQLite/read,
+  sampling or report-writing exceptions remain possible; none is confirmed.
+  Next diagnostic should record only a fixed exception category, without
+  exception messages, commands, paths or passage text. No runtime code changed.
 - The earlier long-run mismatch is still unexplained. No production correction
   logic, typing delays, resource budgets or pass assertions changed in PR24.
   Prior 632-cycle partial evidence is not two-hour acceptance. PR20's GitHub
@@ -63,7 +97,7 @@ public. No production release or local installation has been accepted.
   application/test source remains identical to tested cc13055.
 
 The pause record and older checkpoint below are historical and superseded by
-this resumed status. Main develop remains 15e8ad5; PR20–26 remain unmerged.
+this resumed status. Main develop remains 15e8ad5; PR20–27 remain unmerged.
 
 ## Pause checkpoint — 2026-10-20
 
