@@ -18,7 +18,7 @@ add network access, clipboard fallback or a blocking wait on the input loop.
   futures owned until reaped. No duplicate submission at confirmation.
 - [x] Verify local focused and full tests within safe resource bounds and obtain
   independent static review. Record exact source and checks.
-- [ ] Run required Windows CI without repeated large artifact downloads.
+- [x] Run required Windows CI without repeated large artifact downloads.
   Ordinary Wayland and GUI IPC Cancel remain separate acceptance work.
 
 Design choice: waiting for the existing client ACK proves the GUI-side passage
@@ -48,3 +48,10 @@ errors or skips. The complete source build succeeds at 611be89 under a serial
 1200 MiB aggregate/no-swap/80% CPU scope. All 12 registered CTest targets pass
 with software rendering in 178.04 s. Independent static review found no important
 finding. This local run is not Windows CI or ordinary Wayland desktop acceptance.
+
+Draft PR28 is stacked on PR27. Hosted run 39575913891 at 6b76ae4 succeeds on
+Linux and Windows in 3m20s. Windows passes build/tests, dependency metadata,
+installer creation, install/launch/uninstall without developer dependencies and
+the native field/shortcut probe. Linux passes build/CTest, UI launch,
+foreign-account recovery rejection and controlled GTK probes. The packaged
+two-hour workload is intentionally skipped for an ordinary pull-request run.

@@ -38,8 +38,12 @@ production release or local installation has been accepted.
   suites pass in 22.69 s; Fcitx JUnit has 22 cases and zero failures/errors/skips,
   including added Cancel/password/older-ACK controls. The complete serial build
   and all 12 CTest targets pass at 611be89; the full test run took 178.04 s.
-  Independent static review found no important finding. Windows CI, ordinary
-  Wayland acceptance and GUI IPC Cancel remain pending and separate.
+  Independent static review found no important finding. Draft PR28 is stacked
+  on PR27. Push/PR run 39575913891 at 6b76ae4 passes Linux and Windows in
+  3m20s: Windows build/tests, dependency metadata, installer build,
+  install/launch/uninstall and native field/shortcut probe all pass; Linux
+  build/CTest, UI, foreign-server rejection and controlled GTK probes pass.
+  Ordinary Wayland acceptance and GUI IPC Cancel remain pending and separate.
 - **PR27, native operation UI:** storage-access holds codex/native-operation-ui.
   Tested source a6c2471 passes full Linux/Windows push/PR runs
   39544490522/39544493641. Downloaded UI JUnit on each OS: 26 cases, zero
