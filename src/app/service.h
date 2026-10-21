@@ -63,6 +63,7 @@ class Service : public QObject {
     void processText(QString input);
     void action(QString name);
   signals:
+    void operationActive(bool active);
     void application(QString id, QString name);
     void result(QString original, QString corrected, QString error, bool native);
     void message(QString message);

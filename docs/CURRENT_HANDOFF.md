@@ -23,7 +23,9 @@ public. No production release or local installation has been accepted.
   codex/native-operation-ui based on PR26 checkpoint 920d199. A real
   Controller/QML/Service regression covers apply/Cancel/unchanged outcomes,
   with the test process worker pool held only to inspect the accepted interval.
-  Test-only hosted RED is pending; production UI behavior is unchanged.
+  Hosted RED 39543497761 fails all three new rows exactly at the missing busy
+  state. Service lifecycle delivery and separate Controller service/queued state
+  are implemented; hosted GREEN and independent review remain pending.
 - **Operation UI gap:** source inspection shows Controller's busy state is set
   for the internal editor, and its Cancel only invokes Service::cancel(). Native
   Service operations lack a start-state signal to the GUI; the Fcitx recovery

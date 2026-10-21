@@ -217,6 +217,9 @@ class UiTest : public QObject {
         // Missing native lifecycle delivery leaves the real Cancel control hidden.
         QTRY_VERIFY_WITH_TIMEOUT(controller.busy(), 2000);
         QTRY_VERIFY(cancel->isVisible());
+        controller.fix("im elsewhere");
+        QVERIFY(controller.notice().contains("already running"));
+        QVERIFY(controller.busy());
         if (mode == "cancel") {
             QVERIFY(QMetaObject::invokeMethod(cancel, "clicked", Qt::DirectConnection));
             QTest::qWait(50);

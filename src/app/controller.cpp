@@ -42,6 +42,10 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
     service_->moveToThread(&worker_);
     connect(&worker_, &QThread::started, service_, &Service::start);
     connect(&worker_, &QThread::finished, service_, &QObject::deleteLater);
+    connect(service_, &Service::operationActive, this, [this](bool active) {
+        serviceBusy_ = active;
+        emit updated();
+    });
     connect(service_, &Service::state, this, [this](QString text, bool keys) {
         platform_ = text;
         shortcuts_ = keys;
@@ -75,7 +79,8 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
     connect(
         service_, &Service::result, this,
         [this](QString original, QString corrected, QString error, bool native) {
-            busy_ = false;
+            if (!native)
+                busy_ = false;
             if (!error.isEmpty())
                 notice_ = error;
             else if (native)
@@ -268,7 +273,7 @@ void Controller::fix(QString text) {
             emit updated();
             return;
         }
-        if (busy_) {
+        if (busy()) {
             notice_ = "A correction is already running.";
             emit updated();
             return;
