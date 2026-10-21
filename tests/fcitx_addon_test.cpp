@@ -30,12 +30,19 @@ class FcitxAddonTest : public QObject {
         QTemporaryDir data;
         QVERIFY(data.isValid());
         qputenv("REWORD_DATA_DIR", data.path().toUtf8());
+        qputenv("FCITX_CONFIG_HOME", data.path().toUtf8());
         qputenv("XDG_SESSION_TYPE", "wayland");
         reword::RecoveryServer recovery;
         QVERIFY(recovery.listen(data.path()));
         char executable[] = "reword-owned-fcitx-test";
-        char *arguments[] = {executable, nullptr};
-        fcitx::Instance instance(1, arguments);
+        char disable[] = "--disable";
+        char all[] = "all";
+        char *arguments[] = {executable, disable, all, nullptr};
+        fcitx::Instance instance(3, arguments);
+        // Instance construction installs event handlers, but initialize()
+        // registers the inputState factory those handlers require. Disable all
+        // addons so this fixture never connects a real desktop frontend.
+        instance.initialize();
         RewordAddon addon(&instance);
         QTRY_VERIFY(addon.recovery_->active());
         OwnedContext context(instance.inputContextManager());

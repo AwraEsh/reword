@@ -1,10 +1,19 @@
-# Current handoff — 2026-10-20
+# Current handoff — 2026-10-21
 
-The user requested a temporary pause on 2026-10-20. The project is paused: do not
-resume implementation, builds, tests, installation or release until explicitly
-asked to continue. Requirements
+The user explicitly resumed work on 2026-10-21. The full product goal is active.
+Local C++/Qt/heavy workloads remain suspended after the host freezes; use hosted
+CI. Requirements
 remain in [REQUIREMENTS.md](REQUIREMENTS.md); the repository is intentionally
 public. No production release or local installation has been accepted.
+
+## Current resumed work
+
+Fcitx fixture source f478026 compiled in run 39482540531, but aborted before
+behavioral assertions: Instance's inputState property factory was unregistered.
+Fcitx 5.1.7 registers it in Instance::initialize(), which the fixture omitted.
+Initialize with all addons disabled and an isolated Fcitx config directory;
+observe the actual guard assertions before any production behavior change.
+The long-workload failure and other open acceptance gates below remain open.
 
 ## Pause checkpoint — 2026-10-20
 

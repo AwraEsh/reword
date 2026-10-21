@@ -41,3 +41,12 @@ in run 39482104028 because CapabilityFlag enums require an explicit flags wrappe
 for operator|. Fixture follow-up f478026 is pushed. No behavioral RED has yet
 been verified, and no production guard change was made. Inspect that run before
 continuing; a compile error does not establish the suspected retention defect.
+
+## Resumed — 2026-10-21
+
+Run 39482540531 at f478026 compiles, then aborts before assertions because
+inputStateFactory is not registered. The fixture omitted Instance::initialize().
+The upstream 5.1.7 [implementation](https://github.com/fcitx/fcitx5/blob/5.1.7/src/lib/fcitx/instance.cpp)
+registers the property there. Initialize the owned instance with all addons
+disabled; keep its Fcitx config path temporary. This is fixture repair, not a
+behavioral RED or production fix. The other 11 Linux suites passed in that run.
