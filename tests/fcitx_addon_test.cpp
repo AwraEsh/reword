@@ -2,6 +2,7 @@
 #include <QTemporaryDir>
 #include <QScopeGuard>
 #include <getopt.h>
+#include <functional>
 #include "../src/platform/fcitx_addon.cpp"
 #include <fcitx/inputcontextmanager.h>
 
@@ -22,8 +23,11 @@ class OwnedContext final : public fcitx::InputContext {
     ~OwnedContext() override { destroy(); }
     const char *frontend() const override { return "reword-owned-test"; }
     QStringList commits;
+    std::function<void()> onCommit;
   protected:
     void commitStringImpl(const std::string &text) override {
+        if (onCommit)
+            onCommit();
         commits.append(QString::fromStdString(text));
     }
     void deleteSurroundingTextImpl(int, unsigned) override {}
@@ -200,6 +204,90 @@ class FcitxAddonTest : public QObject {
         QVERIFY(addon.job_.before.isEmpty());
         QVERIFY(addon.job_.corrected.isEmpty());
         QVERIFY(addon.job_.after.isEmpty());
+    }
+    void originalIsDeliveredBeforeNativeWrite_data() {
+        QTest::addColumn<QString>("boundary");
+        for (const auto name : {"unchanged-field", "disconnect", "deny", "pause", "selection", "expired"})
+            QTest::newRow(name) << QString(name);
+    }
+    void originalIsDeliveredBeforeNativeWrite() {
+        QFETCH(QString, boundary);
+        QTemporaryDir data;
+        QVERIFY(data.isValid());
+        qputenv("REWORD_DATA_DIR", data.path().toUtf8());
+        qputenv("XDG_SESSION_TYPE", "wayland");
+        reword::RecoveryServer recovery;
+        QVERIFY(recovery.listen(data.path()));
+        char executable[] = "reword-owned-fcitx-test";
+        char disable[] = "--disable", all[] = "all";
+        char *arguments[] = {executable, disable, all, nullptr};
+        optind = 0;
+        fcitx::Instance instance(3, arguments);
+        instance.initialize();
+        RewordAddon addon(&instance);
+        QTRY_VERIFY(addon.recovery_->active());
+        OwnedContext context(instance.inputContextManager());
+        context.setCapabilityFlags(fcitx::CapabilityFlag::SurroundingText);
+        context.surroundingText().setText("teh", 3, 0);
+        context.focusIn();
+        const QString id = "fcitx:reword-synthetic-fixture";
+        addon.store_->discover(id, "Synthetic fixture");
+        addon.store_->decide(id, "allow");
+        QVERIFY(addon.permitted(&context, id));
+        QVERIFY(addon.unlocked());
+        QString recoveredOriginal, recoveredResult;
+        int deliveries = 0;
+        bool copyableAtWrite = false;
+        context.onCommit = [&] {
+            copyableAtWrite = recoveredOriginal == "teh" && recoveredResult == "the";
+        };
+        QObject::connect(&recovery, &reword::RecoveryServer::passage, &recovery,
+                         [&](QString original, QString corrected) {
+            ++deliveries;
+            recoveredOriginal = original;
+            recoveredResult = corrected;
+            // Revoke the write after recovery receives the passage but before
+            // its acknowledgement reaches the addon.
+            if (boundary == "disconnect")
+                recovery.stop();
+            else if (boundary == "deny")
+                addon.store_->decide(id, "deny");
+            else if (boundary == "pause")
+                addon.store_->pause(-1);
+            else if (boundary == "selection")
+                context.surroundingText().setText("user edit", 9, 0);
+            else if (boundary == "expired")
+                addon.job_.operationDeadline = QDeadlineTimer(0, Qt::PreciseTimer);
+        });
+        fcitx::KeyEvent shortcut(&context, fcitx::Key("Control+Alt+r"));
+        addon.handle(shortcut);
+        QVERIFY(shortcut.filtered());
+        QVERIFY(addon.operationLock_);
+        std::promise<reword::Change> result;
+        addon.future_ = result.get_future(); // Join the actual accepted worker.
+        result.set_value({"teh", "the", true, {}});
+        addon.completed();
+        if (boundary == "unchanged-field") {
+            QTRY_COMPARE(context.commits, QStringList{"the"});
+            QVERIFY2(copyableAtWrite, "Native write occurred before original recovery delivery.");
+        } else {
+            QTest::qWait(100); // Pump only owned socket events, without native Fcitx frontends.
+            QVERIFY(context.commits.isEmpty());
+            QVERIFY(!addon.pending_.valid);
+        }
+        QCOMPARE(deliveries, 1);
+        QCOMPARE(recoveredOriginal, QString("teh"));
+        QCOMPARE(recoveredResult, QString("the"));
+        QVERIFY(addon.store_->histories().isEmpty());
+        if (boundary == "unchanged-field") {
+            // The frontend intentionally never confirmed the write above.
+            // Recovery must survive, but persistent history requires confirmation.
+            context.surroundingText().setText("the", 3, 3);
+            addon.observe(&context);
+            QCOMPARE(addon.store_->histories().size(), 1);
+            QTest::qWait(20);
+            QCOMPARE(deliveries, 1); // Confirmation must not submit a duplicate.
+        }
     }
     void resultDeliveryCountsTowardsOperationDeadline_data() {
         QTest::addColumn<bool>("late");

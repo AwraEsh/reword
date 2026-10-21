@@ -19,9 +19,16 @@ public. No production release or local installation has been accepted.
   and Windows; downloaded Fcitx JUnit has 13 cases and no failures/errors/skips.
   Independent static review found no important issue. Scoped deadline work is
   complete; UI Cancel and ordinary Wayland acceptance remain separate.
-- **Current work mode:** the user has about 6% of the five-hour Plus limit left
-  and requests short, minor work only. Do not start another long implementation
-  or test cycle in this mode. This checkpoint records finished evidence only.
+- **Current work mode:** the user explicitly resumed full implementation and
+  requested local tests where practical to reduce downloads. One-job bounded
+  local builds are being reintroduced using existing dependencies (1 GiB per
+  process, CPU/time limits, nice 19); no parallel build or desktop workload.
+  The core target build and its one-second test passed locally. Prior host
+  freezes remain unexplained; this is not general host-stability acceptance.
+- **Fcitx recovery work:** storage-access now holds codex/fcitx-original-recovery
+  based on ae6ecd7. Test-only real-acceptance regressions require original
+  delivery before native commit, no write after disconnect/revocation/selection
+  change/expiry, and history only after confirmation. Local RED is pending.
 - **PR27, native operation UI:** storage-access holds codex/native-operation-ui.
   Tested source a6c2471 passes full Linux/Windows push/PR runs
   39544490522/39544493641. Downloaded UI JUnit on each OS: 26 cases, zero
