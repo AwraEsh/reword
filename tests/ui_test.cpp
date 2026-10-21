@@ -253,6 +253,14 @@ class UiTest : public QObject {
         QVERIFY(addon.endOperation());
         QTRY_VERIFY(!controller.busy());
         QTRY_VERIFY(!cancel->isVisible());
+        controller.pause(0);
+        QVERIFY(addon.beginOperation());
+        QTRY_VERIFY(controller.busy());
+        controller.pause(-1);
+        QTRY_COMPARE(cancelled.count(), 2);
+        QVERIFY(controller.busy());
+        QVERIFY(addon.endOperation());
+        QTRY_VERIFY(!controller.busy());
         QVERIFY(controller.history().isEmpty());
     }
     void oneUpdateSharesSettingsAcrossBindings() {

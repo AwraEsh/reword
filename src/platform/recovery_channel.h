@@ -18,13 +18,16 @@ class RecoveryServer final : public QObject {
         QByteArray buffer;
         QTimer *deadline = nullptr;
         bool greeted = false;
+        bool operation = false;
     };
     QLocalServer server_;
     QHash<QLocalSocket *, Peer> peers_;
     quint64 generation_ = 0;
+    int operations_ = 0;
     void accept();
     void read(QLocalSocket *socket);
     void reject(QLocalSocket *socket);
+    void setOperation(QLocalSocket *socket, bool active);
 
   public:
     explicit RecoveryServer(QObject *parent = nullptr);
@@ -37,8 +40,10 @@ class RecoveryServer final : public QObject {
     QString fullServerName() const {
         return server_.fullServerName();
     }
+    void cancelOperations();
   signals:
     void passage(QString original, QString corrected);
+    void operationActive(bool active);
 };
 
 class RecoveryClient final : public QObject {
@@ -49,7 +54,7 @@ class RecoveryClient final : public QObject {
     QString endpoint_;
     QByteArray response_, current_, pending_;
     Stage stage_ = Stage::None;
-    bool running_ = false;
+    bool running_ = false, operation_ = false;
     void connectNow();
     void read();
     void reset();
@@ -64,9 +69,12 @@ class RecoveryClient final : public QObject {
     // No older frame can still acknowledge a different operation.
     bool ready() const;
     bool submit(const QString &original, const QString &corrected);
+    bool beginOperation();
+    bool endOperation();
   signals:
     void activeChanged(bool active);
     void delivered();
     void deliveryFailed();
+    void cancelRequested();
 };
 } // namespace reword

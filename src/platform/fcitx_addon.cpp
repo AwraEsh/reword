@@ -74,8 +74,11 @@ class RewordAddon final : public fcitx::AddonInstance {
         pending_ = {};
         job_ = {};
         awaitingRecovery_ = false;
-        if (!future_.valid())
+        if (!future_.valid()) {
             operationLock_.reset();
+            if (recovery_)
+                recovery_->endOperation();
+        }
         context_.clear();
         observedContext_.clear();
         observedHash_.clear();
@@ -213,11 +216,14 @@ class RewordAddon final : public fcitx::AddonInstance {
         auto operationLock = std::move(operationLock_);
         auto job = std::exchange(job_, {});
         awaitingRecovery_ = false;
-        if (!selectionCurrent(job) || job.operationDeadline.hasExpired())
+        if (!selectionCurrent(job) || job.operationDeadline.hasExpired()) {
+            recovery_->endOperation();
             return;
+        }
         job.expires = QDateTime::currentMSecsSinceEpoch() + 30000;
         pending_ = job;
         job.context.get()->commitString(job.corrected.toStdString());
+        recovery_->endOperation();
     }
     void completed() {
         if (!future_.valid() ||
@@ -228,8 +234,10 @@ class RewordAddon final : public fcitx::AddonInstance {
         auto job = job_;
         job_ = {};
         if (!change.changed || !change.error.isEmpty() || !selectionCurrent(job) ||
-            !recovery_->ready())
+            !recovery_->ready()) {
+            recovery_->endOperation();
             return;
+        }
         const auto &st = job.context.get()->surroundingText();
         auto points = job.before.toUcs4();
         unsigned start = std::min(st.anchor(), st.cursor()),
@@ -243,8 +251,10 @@ class RewordAddon final : public fcitx::AddonInstance {
         job.cursor = start + change.corrected.toUcs4().size();
         job.start = before.size();
         job.valid = true;
-        if (job.operationDeadline.hasExpired())
+        if (job.operationDeadline.hasExpired()) {
+            recovery_->endOperation();
             return;
+        }
         // Submission alone is not delivery. Retain the lock and deadline until
         // the GUI-side passage receiver has run and its ACK reaches this client.
         job_ = job;
@@ -254,6 +264,7 @@ class RewordAddon final : public fcitx::AddonInstance {
             job_ = {};
             awaitingRecovery_ = false;
             operationLock_.reset();
+            recovery_->endOperation();
         }
     }
     void handle(fcitx::Event &event) {
@@ -376,6 +387,11 @@ class RewordAddon final : public fcitx::AddonInstance {
                 job_.cursorBefore = st.cursor();
                 job_.passage = true;
                 job_.revision = revision;
+                if (!recovery_->beginOperation()) {
+                    job_ = {};
+                    operationLock_.reset();
+                    return;
+                }
                 auto words = store_->words();
                 auto replacements = store_->replacements();
                 future_ =
@@ -516,6 +532,8 @@ class RewordAddon final : public fcitx::AddonInstance {
                                                      "Undo or History may still be available.",
                                                      QStringList{}, QVariantMap{}, 5000);
                          });
+        QObject::connect(recovery_.get(), &reword::RecoveryClient::cancelRequested,
+                         recovery_.get(), [this] { resetObservation(); });
         recovery_->start(dir);
         key_ = instance->watchEvent(fcitx::EventType::InputContextKeyEvent,
                                     fcitx::EventWatcherPhase::PreInputMethod,

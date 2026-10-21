@@ -135,9 +135,30 @@ void RecoveryServer::stop() {
         reject(socket);
 }
 void RecoveryServer::reject(QLocalSocket *socket) {
-    peers_.remove(socket);
+    auto it = peers_.find(socket);
+    const bool operation = it != peers_.end() && it->operation;
+    if (it != peers_.end())
+        peers_.erase(it);
     socket->abort();
     socket->deleteLater();
+    if (operation && --operations_ == 0)
+        emit operationActive(false);
+}
+void RecoveryServer::setOperation(QLocalSocket *socket, bool active) {
+    auto it = peers_.find(socket);
+    if (it == peers_.end() || it->operation == active)
+        return;
+    it->operation = active;
+    if (active) {
+        if (operations_++ == 0)
+            emit operationActive(true);
+    } else if (--operations_ == 0)
+        emit operationActive(false);
+}
+void RecoveryServer::cancelOperations() {
+    for (auto it = peers_.cbegin(); it != peers_.cend(); ++it)
+        if (it->greeted && it->operation)
+            it.key()->write("CNCL");
 }
 void RecoveryServer::accept() {
     while (auto socket = server_.nextPendingConnection()) {
@@ -146,7 +167,7 @@ void RecoveryServer::accept() {
             socket->deleteLater();
             continue;
         }
-        socket->setReadBufferSize(MaxRecoveryFrame + 1);
+        socket->setReadBufferSize(MaxRecoveryFrame + 16);
         auto timer = new QTimer(socket);
         timer->setSingleShot(true);
         timer->setInterval(1000);
@@ -154,8 +175,8 @@ void RecoveryServer::accept() {
         connect(timer, &QTimer::timeout, this, [this, socket] { reject(socket); });
         connect(socket, &QLocalSocket::readyRead, this, [this, socket] { read(socket); });
         connect(socket, &QLocalSocket::disconnected, this, [this, socket] {
-            peers_.remove(socket);
-            socket->deleteLater();
+            if (peers_.contains(socket))
+                reject(socket);
         });
         timer->start();
         if (socket->bytesAvailable())
@@ -166,53 +187,87 @@ void RecoveryServer::read(QLocalSocket *socket) {
     auto it = peers_.find(socket);
     if (it == peers_.end())
         return;
-    auto &peer = it.value();
-    peer.buffer += socket->readAll();
-    if (!peer.greeted) {
-        if (peer.buffer.size() < 4)
-            return;
-        if (peer.buffer != "RWH1") {
+    it->buffer += socket->readAll();
+    while (peers_.contains(socket)) {
+        it = peers_.find(socket);
+        auto &peer = it.value();
+        if (peer.buffer.size() > MaxRecoveryFrame + 16) {
             reject(socket);
             return;
         }
-        peer.greeted = true;
-        peer.buffer.clear();
-        peer.deadline->stop();
-        socket->write("RWR1");
-        return;
+        if (peer.buffer.size() < 4) {
+            if (!peer.buffer.isEmpty() && !peer.deadline->isActive())
+                peer.deadline->start();
+            return;
+        }
+        const auto tag = peer.buffer.left(4);
+        if (!peer.greeted) {
+            if (tag != "RWH1") {
+                reject(socket);
+                return;
+            }
+            peer.greeted = true;
+            peer.buffer.remove(0, 4);
+            peer.deadline->stop();
+            socket->write("RWR1");
+            continue;
+        }
+        if (!peer.deadline->isActive())
+            peer.deadline->start();
+        if (tag == "RWB1" || tag == "RWE1") {
+            peer.buffer.remove(0, 4);
+            QPointer<RecoveryServer> self(this);
+            setOperation(socket, tag == "RWB1");
+            if (!self)
+                return;
+        } else if (tag == "RWS1") {
+            // Read-only delivery counter for local diagnostics; never return passage text.
+            peer.buffer.remove(0, 4);
+            QByteArray status(12, Qt::Uninitialized);
+            std::memcpy(status.data(), "STAT", 4);
+            qToLittleEndian<quint64>(generation_, status.data() + 4);
+            socket->write(status);
+        } else if (tag == "RWP1") {
+            auto length = frameLength(peer.buffer);
+            if (length < 0) {
+                reject(socket);
+                return;
+            }
+            if (!length || peer.buffer.size() < length)
+                return;
+            if (peer.buffer.size() > length && peer.buffer.size() < length + 4)
+                return; // Validate a trailing command before delivering this passage.
+            if (peer.buffer.size() >= length + 4) {
+                const auto next = peer.buffer.mid(length, 4);
+                if (next != "RWB1" && next != "RWE1" && next != "RWS1" && next != "RWP1") {
+                    reject(socket);
+                    return;
+                }
+            }
+            const auto frame = peer.buffer.left(length);
+            peer.buffer.remove(0, length);
+            QString a, b;
+            if (!decodeRecovery(frame, a, b)) {
+                reject(socket);
+                return;
+            }
+            ++generation_;
+            QPointer<RecoveryServer> self(this);
+            QPointer<QLocalSocket> guarded(socket);
+            emit passage(a, b);
+            if (!self || !guarded || !peers_.contains(socket))
+                return;
+            socket->write("OKAY");
+        } else {
+            reject(socket);
+            return;
+        }
+        if (peers_.contains(socket)) {
+            auto &current = peers_[socket];
+            if (current.buffer.isEmpty())
+                current.deadline->stop();
+        }
     }
-    if (!peer.deadline->isActive())
-        peer.deadline->start();
-    if (peer.buffer == "RWS1") {
-        // Read-only delivery counter for local diagnostics; never return passage text.
-        QByteArray status(12, Qt::Uninitialized);
-        std::memcpy(status.data(), "STAT", 4);
-        qToLittleEndian<quint64>(generation_, status.data() + 4);
-        peer.buffer.clear();
-        peer.deadline->stop();
-        socket->write(status);
-        return;
-    }
-    auto length = frameLength(peer.buffer);
-    if (peer.buffer.size() > MaxRecoveryFrame || length < 0) {
-        reject(socket);
-        return;
-    }
-    if (!length || peer.buffer.size() < length)
-        return;
-    QString a, b;
-    if (!decodeRecovery(peer.buffer, a, b)) {
-        reject(socket);
-        return;
-    }
-    peer.buffer.clear();
-    peer.deadline->stop();
-    ++generation_;
-    QPointer<RecoveryServer> self(this);
-    QPointer<QLocalSocket> guarded(socket);
-    emit passage(a, b);
-    if (self && guarded && peers_.contains(socket))
-        socket->write("OKAY");
 }
 RecoveryClient::RecoveryClient(QObject *parent) : QObject(parent) {
     socket_.setReadBufferSize(16);
@@ -277,6 +332,7 @@ void RecoveryClient::reset() {
     response_.clear();
     current_.clear();
     pending_.clear();
+    operation_ = false;
     socket_.abort();
     QPointer<RecoveryClient> self(this);
     if (wasActive)
@@ -308,31 +364,70 @@ bool RecoveryClient::submit(const QString &a, const QString &b) {
         .clear(); // A new request supersedes an older queued one, including reentrant callbacks.
     return write(std::move(frame));
 }
+bool RecoveryClient::beginOperation() {
+    if (!ready() || operation_)
+        return false;
+    operation_ = true;
+    if (socket_.write("RWB1") < 0) {
+        reset();
+        return false;
+    }
+    return true;
+}
+bool RecoveryClient::endOperation() {
+    if (!operation_)
+        return false;
+    operation_ = false;
+    if (!active() || socket_.write("RWE1") < 0) {
+        reset();
+        return false;
+    }
+    return true;
+}
 void RecoveryClient::read() {
     response_ += socket_.readAll();
-    if (response_.size() < 4)
-        return;
-    if (response_.size() != 4) {
+    if (response_.size() > 64) {
         reset();
         return;
     }
-    if (stage_ == Stage::Greeting && response_ == "RWR1") {
-        response_.clear();
-        deadline_.stop();
-        stage_ = Stage::Ready;
-        emit activeChanged(true);
-    } else if (stage_ == Stage::AwaitingAck && response_ == "OKAY") {
-        response_.clear();
-        current_.clear();
-        deadline_.stop();
-        stage_ = Stage::Ready;
-        QPointer<RecoveryClient> self(this);
-        emit delivered();
-        if (self && stage_ == Stage::Ready && active() && !pending_.isEmpty()) {
-            auto frame = std::exchange(pending_, {});
-            write(std::move(frame));
+    if (!response_.isEmpty() && !deadline_.isActive())
+        deadline_.start();
+    while (response_.size() >= 4) {
+        const auto token = response_.left(4);
+        response_.remove(0, 4);
+        if (token == "CNCL" &&
+            (stage_ == Stage::Ready || stage_ == Stage::AwaitingAck)) {
+            if (operation_) {
+                QPointer<RecoveryClient> self(this);
+                emit cancelRequested();
+                if (!self)
+                    return;
+            }
+        } else if (stage_ == Stage::Greeting && token == "RWR1") {
+            deadline_.stop();
+            stage_ = Stage::Ready;
+            QPointer<RecoveryClient> self(this);
+            emit activeChanged(true);
+            if (!self)
+                return;
+        } else if (stage_ == Stage::AwaitingAck && token == "OKAY") {
+            current_.clear();
+            deadline_.stop();
+            stage_ = Stage::Ready;
+            QPointer<RecoveryClient> self(this);
+            emit delivered();
+            if (!self)
+                return;
+            if (stage_ == Stage::Ready && active() && !pending_.isEmpty()) {
+                auto frame = std::exchange(pending_, {});
+                write(std::move(frame));
+            }
+        } else {
+            reset();
+            return;
         }
-    } else
-        reset();
+    }
+    if (response_.isEmpty() && stage_ == Stage::Ready)
+        deadline_.stop();
 }
 } // namespace reword
