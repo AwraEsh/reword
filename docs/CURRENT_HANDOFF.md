@@ -76,6 +76,14 @@ public. No production release or local installation has been accepted.
   8bc06d40d2bfa490446401af979ea7d9408d76f5e687695891764833053b7d2f.
   Local ignored log: .deps/hosted-active-2aa59d3/linux-job.log. No blind rerun
   or guessed production fix; investigate after the reduced-work mode.
+  Short source audit: active_stability.py catches WorkloadFailure separately
+  from generic Exception. selected-history waits through HistoryCheck, whose
+  read-only SQLite connection uses a 0.5-second timeout. A normal wait expiry
+  is classified operation-timeout by stability_evidence.wait_until, so the
+  generic report does not establish a selection wait timeout. SQLite/read,
+  sampling or report-writing exceptions remain possible; none is confirmed.
+  Next diagnostic should record only a fixed exception category, without
+  exception messages, commands, paths or passage text. No runtime code changed.
 - The earlier long-run mismatch is still unexplained. No production correction
   logic, typing delays, resource budgets or pass assertions changed in PR24.
   Prior 632-cycle partial evidence is not two-hour acceptance. PR20's GitHub
