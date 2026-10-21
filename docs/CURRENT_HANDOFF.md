@@ -1,8 +1,77 @@
-# Current handoff — 2026-10-20
+# Current handoff — 2026-10-21
 
-The user resumed autonomous work. The full product goal is active. Requirements
+The user explicitly resumed work on 2026-10-21. The full product goal is active.
+Local C++/Qt/heavy workloads remain suspended after the host freezes; use hosted
+CI. Requirements
 remain in [REQUIREMENTS.md](REQUIREMENTS.md); the repository is intentionally
 public. No production release or local installation has been accepted.
+
+## Current resumed work
+
+- **PR25, Fcitx:** real six-case RED at d1e70c7/run 39538586697 confirms retained
+  owner job text on unsafe observation. Scoped reset 7ad9a99 passes the complete
+  Linux/Windows run 39539160624 and independent static review. Worker/future and
+  operation-lock lifetime are preserved; cancellation remains cooperative.
+  Timer-only policy fix and corrected fixture at cc13055 pass full Linux/Windows
+  push/PR runs 39540890991/39540896152. Actual Fcitx JUnit: 11/11 passing cases.
+  Negative proof 93326bf/run 39541257155 removes only the timer guard and fails
+  exactly Pause/denial/lock cancellation with the same valid loop controls.
+  Do not merge codex/fcitx-timer-red-proof. The periodic witness proves timer
+  policy behavior, not a production 160 ms bound; native accuracy stays 250 ms.
+  Reviews found no important issue. Deadline/UI-cancel coordination and ordinary
+  Wayland acceptance remain open. See the Fcitx plan for exact evidence/limits.
+  Branch codex/fcitx-transient-guards remains in storage-access, stacked on PR23.
+- **PR24, workload diagnostics:** 2aa59d3 passes full push/PR Linux/Windows runs
+  39538716534/39538809182 and independent static review. Two small diagnostic
+  tests and 18 existing active-stability tests pass locally under 256 MiB/10 CPU
+  seconds; no local C++/Qt workload ran. Manual run 39539196812 at that source
+  started a same-AppDir preflight before the instrumented two-hour workload.
+  Inspect its existing handle rather than relaunching on an observation timeout.
+  Keyboard-review holds codex/active-workload-diagnostics; it is stacked on PR20.
+- The earlier long-run mismatch is still unexplained. No production correction
+  logic, typing delays, resource budgets or pass assertions changed in PR24.
+  Prior 632-cycle partial evidence is not two-hour acceptance. PR20's GitHub
+  description now records the failure. No release, installation or shutdown.
+- **PR23:** matching Mesa and D3DCompiler SDK archives are verified against
+  official Qt SHA256 metadata. Each sole DLL matches the actual staged bytes
+  from run 39399260940. Receipts through 1c423bf contain no host paths; neither
+  DLL was loaded/executed. The archives contain no notice text. Source/notice
+  closure and Microsoft signature/redistribution material are still open.
+  Documentation-only parent receipts are now merged into this guard branch;
+  application/test source remains identical to tested cc13055.
+
+The pause record and older checkpoint below are historical and superseded by
+this resumed status. Main develop remains 15e8ad5; PR20–25 remain unmerged.
+
+## Pause checkpoint — 2026-10-20
+
+- Main develop is unchanged at 15e8ad5. PRs #20–#23 remain unmerged drafts.
+- PR22 code cba5167 passed full Linux/Windows run 39400869152. Its actual
+  long-data captures were inspected; documentation fb1020d is pushed.
+- PR23 metadata code db871eb passed full runs 39399260940/39399290932;
+  documentation/source-correspondence receipts through 1605c0c are pushed.
+- The two-hour run 39394646024 at 0fd1f2e FAILED after 1,819.969 seconds,
+  during the live retry sequence: native-text-mismatch, 632 complete cycles.
+  Its first/second/third counters are 634/633/633. No duration-complete event.
+  Helper cleanup required escalation; app CPU 5.86%, helper 2.11%, no swap.
+  Word p95 upper bound 23.6 ms is partial-run evidence only. Binary SHA256
+  037a68b4e5f9173f39325d1d7ff1002d99b78f0b208215e765d52ff92621c131.
+  Actual reports are ignored under .deps/hosted-active-2h-0fd1f2e. Do not claim
+  two-hour acceptance or blindly rerun: first add content-free attempt/timing
+  diagnostics and determine why the expected second attempt did not match.
+- Storage-access holds codex/fcitx-transient-guards at f478026 before this
+  checkpoint. It is pushed, with a plan and a real Fcitx/Store/recovery fixture.
+  Production behavior is unchanged; only friend access was added for inspection.
+  First CI 39482104028 failed to compile the test's capability-flag expression;
+  f478026 fixes that fixture expression. No behavioral RED or fix is accepted.
+  Inspect its latest hosted outcome before editing the addon after resume.
+- Keyboard-review holds clean local codex/active-workload-diagnostics at ef5db74,
+  with no diagnostic implementation yet. PR22 remains on its pushed branch.
+- Local C++/Qt/heavy workloads remain suspended after the two hard freezes.
+  No installation, release, PR merge or shutdown was performed at this checkpoint.
+
+The next checkpoint section predates this pause; its pending two-hour statement
+is superseded by the failed result above.
 
 ## Read this checkpoint first
 
