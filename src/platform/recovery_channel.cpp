@@ -257,6 +257,9 @@ bool RecoveryClient::active() const {
     return socket_.state() == QLocalSocket::ConnectedState &&
            (stage_ == Stage::Ready || stage_ == Stage::AwaitingAck);
 }
+bool RecoveryClient::ready() const {
+    return active() && stage_ == Stage::Ready && current_.isEmpty() && pending_.isEmpty();
+}
 void RecoveryClient::connectNow() {
     if (!running_ || socket_.state() != QLocalSocket::UnconnectedState)
         return;

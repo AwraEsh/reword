@@ -13,6 +13,7 @@
 #include <QCryptographicHash>
 #include <QLockFile>
 #include <future>
+#include <utility>
 #undef emit
 #undef signals
 #undef slots
@@ -50,6 +51,7 @@ class RewordAddon final : public fcitx::AddonInstance {
     QString directory_;
     std::unique_ptr<QLockFile> operationLock_;
     std::future<reword::Change> future_;
+    bool awaitingRecovery_ = false;
     std::atomic_bool cancel_{false};
     struct Edit {
         fcitx::TrackableObjectReference<fcitx::InputContext> context;
@@ -71,6 +73,9 @@ class RewordAddon final : public fcitx::AddonInstance {
         resetRetry();
         pending_ = {};
         job_ = {};
+        awaitingRecovery_ = false;
+        if (!future_.valid())
+            operationLock_.reset();
         context_.clear();
         observedContext_.clear();
         observedHash_.clear();
@@ -173,7 +178,6 @@ class RewordAddon final : public fcitx::AddonInstance {
             if (!pending_.confirmed) {
                 auto o = store_->options();
                 if (pending_.passage) {
-                    recovery_->submit(pending_.original, pending_.corrected);
                     store_->history(pending_.original, pending_.corrected, o);
                 } else {
                     retry_ = pending_.retryAfter;
@@ -191,6 +195,30 @@ class RewordAddon final : public fcitx::AddonInstance {
             }
         }
     }
+    bool selectionCurrent(const Edit &job) {
+        auto ic = job.context.get();
+        if (cancel_.load() || job.operationDeadline.hasExpired() || !unlocked() ||
+            !permitted(ic, job.app) ||
+            job.revision != store_->value("configRevision", 0).toLongLong() ||
+            job.operationDeadline.hasExpired())
+            return false;
+        const auto &st = ic->surroundingText();
+        return st.isValid() && QString::fromStdString(st.text()) == job.before &&
+               QString::fromStdString(st.selectedText()) == job.original &&
+               st.anchor() == job.anchorBefore && st.cursor() == job.cursorBefore;
+    }
+    void commitRecovered() {
+        if (!awaitingRecovery_)
+            return; // An acknowledgement for an operation already invalidated.
+        auto operationLock = std::move(operationLock_);
+        auto job = std::exchange(job_, {});
+        awaitingRecovery_ = false;
+        if (!selectionCurrent(job) || job.operationDeadline.hasExpired())
+            return;
+        job.expires = QDateTime::currentMSecsSinceEpoch() + 30000;
+        pending_ = job;
+        job.context.get()->commitString(job.corrected.toStdString());
+    }
     void completed() {
         if (!future_.valid() ||
             future_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready)
@@ -199,18 +227,10 @@ class RewordAddon final : public fcitx::AddonInstance {
         auto change = future_.get();
         auto job = job_;
         job_ = {};
-        auto ic = job.context.get();
-        if (cancel_.load() || job.operationDeadline.hasExpired() || !change.changed ||
-            !change.error.isEmpty() || !unlocked() ||
-            !permitted(ic, job.app) ||
-            job.revision != store_->value("configRevision", 0).toLongLong() ||
-            job.operationDeadline.hasExpired())
+        if (!change.changed || !change.error.isEmpty() || !selectionCurrent(job) ||
+            !recovery_->ready())
             return;
-        const auto &st = ic->surroundingText();
-        if (!st.isValid() || QString::fromStdString(st.text()) != job.before ||
-            QString::fromStdString(st.selectedText()) != job.original ||
-            st.anchor() != job.anchorBefore || st.cursor() != job.cursorBefore)
-            return;
+        const auto &st = job.context.get()->surroundingText();
         auto points = job.before.toUcs4();
         unsigned start = std::min(st.anchor(), st.cursor()),
                  end = std::max(st.anchor(), st.cursor());
@@ -223,11 +243,18 @@ class RewordAddon final : public fcitx::AddonInstance {
         job.cursor = start + change.corrected.toUcs4().size();
         job.start = before.size();
         job.valid = true;
-        job.expires = QDateTime::currentMSecsSinceEpoch() + 30000;
         if (job.operationDeadline.hasExpired())
             return;
-        pending_ = job;
-        ic->commitString(change.corrected.toStdString());
+        // Submission alone is not delivery. Retain the lock and deadline until
+        // the GUI-side passage receiver has run and its ACK reaches this client.
+        job_ = job;
+        awaitingRecovery_ = true;
+        operationLock_ = std::move(operationLock);
+        if (!recovery_->submit(job.original, job.corrected)) {
+            job_ = {};
+            awaitingRecovery_ = false;
+            operationLock_.reset();
+        }
     }
     void handle(fcitx::Event &event) {
         // X11 is owned by the accessibility service. Never run two correction cycles.
@@ -323,7 +350,8 @@ class RewordAddon final : public fcitx::AddonInstance {
                 return;
             }
             if (selection) {
-                if (future_.valid() || st.cursor() == st.anchor() || !unlocked())
+                if (future_.valid() || awaitingRecovery_ || !recovery_->ready() ||
+                    st.cursor() == st.anchor() || !unlocked())
                     return;
                 const QDeadlineTimer operationDeadline(10000, Qt::PreciseTimer);
                 auto original = QString::fromStdString(st.selectedText());
@@ -463,6 +491,14 @@ class RewordAddon final : public fcitx::AddonInstance {
         store_ = std::make_unique<reword::Store>(dir);
         engine_ = std::make_unique<reword::Engine>();
         recovery_ = std::make_unique<reword::RecoveryClient>();
+        QObject::connect(recovery_.get(), &reword::RecoveryClient::delivered, recovery_.get(),
+                         [this] {
+                             try {
+                                 commitRecovered();
+                             } catch (...) {
+                                 resetObservation();
+                             }
+                         });
         QObject::connect(recovery_.get(), &reword::RecoveryClient::activeChanged, recovery_.get(),
                          [this](bool active) {
                              if (!active) {
@@ -526,7 +562,7 @@ class RewordAddon final : public fcitx::AddonInstance {
                     // Settings and session policy can change without another
                     // input event. Invalidate owner text while work is pending,
                     // rather than waiting for the future to become ready.
-                    if (future_.valid() && !cancel_.load() &&
+                    if ((future_.valid() || awaitingRecovery_) && !cancel_.load() &&
                         (job_.operationDeadline.hasExpired() ||
                          !permitted(job_.context.get(), job_.app) || !unlocked()))
                         resetObservation();

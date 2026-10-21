@@ -61,6 +61,8 @@ class RecoveryClient final : public QObject {
     void start(const QString &directory);
     void stop();
     bool active() const;
+    // No older frame can still acknowledge a different operation.
+    bool ready() const;
     bool submit(const QString &original, const QString &corrected);
   signals:
     void activeChanged(bool active);

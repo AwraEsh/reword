@@ -1,10 +1,11 @@
 # Current handoff — 2026-10-21
 
 The user explicitly resumed work on 2026-10-21. The full product goal is active.
-Local C++/Qt/heavy workloads remain suspended after the host freezes; use hosted
-CI. Requirements
-remain in [REQUIREMENTS.md](REQUIREMENTS.md); the repository is intentionally
-public. No production release or local installation has been accepted.
+After two unexplained host freezes, local C++/Qt work has resumed only as serial,
+resource-bounded jobs using existing dependencies. This is evidence for the tested
+source, not general host-stability acceptance. Requirements remain in
+[REQUIREMENTS.md](REQUIREMENTS.md); the repository is intentionally public. No
+production release or local installation has been accepted.
 
 ## Current resumed work
 
@@ -19,9 +20,30 @@ public. No production release or local installation has been accepted.
   and Windows; downloaded Fcitx JUnit has 13 cases and no failures/errors/skips.
   Independent static review found no important issue. Scoped deadline work is
   complete; UI Cancel and ordinary Wayland acceptance remain separate.
-- **Current work mode:** the user has about 6% of the five-hour Plus limit left
-  and requests short, minor work only. Do not start another long implementation
-  or test cycle in this mode. This checkpoint records finished evidence only.
+- **Current work mode:** the user explicitly resumed full implementation and
+  requested local tests where practical to reduce downloads. One-job bounded
+  local builds are being reintroduced using existing dependencies (1 GiB per
+  process, CPU/time limits, nice 19); no parallel build or desktop workload.
+  The complete source build and all 12 registered CTest targets passed locally
+  in a 1200 MiB aggregate cgroup with no permitted swap, CPUQuota 80%, software
+  rendering and serial execution. CTest took 178.04 seconds. Prior host freezes
+  remain unexplained; this is not general host-stability acceptance.
+- **Fcitx recovery work:** storage-access now holds codex/fcitx-original-recovery
+  based on ae6ecd7. Test-only real-acceptance regressions require original
+  delivery before native commit, no write after disconnect/revocation/selection
+  change/expiry, and history only after confirmation. Local RED 9c05958 fails
+  all six new cases (2.901 s). Implementation now waits for authenticated local
+  delivery ACK while retaining the operation lock/deadline, rejects older ACK
+  overlap, and rechecks selection/policy before write. Local core/recovery/Fcitx
+  suites pass in 22.69 s; Fcitx JUnit has 22 cases and zero failures/errors/skips,
+  including added Cancel/password/older-ACK controls. The complete serial build
+  and all 12 CTest targets pass at 611be89; the full test run took 178.04 s.
+  Independent static review found no important finding. Draft PR28 is stacked
+  on PR27. Push/PR run 39575913891 at 6b76ae4 passes Linux and Windows in
+  3m20s: Windows build/tests, dependency metadata, installer build,
+  install/launch/uninstall and native field/shortcut probe all pass; Linux
+  build/CTest, UI, foreign-server rejection and controlled GTK probes pass.
+  Ordinary Wayland acceptance and GUI IPC Cancel remain pending and separate.
 - **PR27, native operation UI:** storage-access holds codex/native-operation-ui.
   Tested source a6c2471 passes full Linux/Windows push/PR runs
   39544490522/39544493641. Downloaded UI JUnit on each OS: 26 cases, zero
