@@ -17,6 +17,8 @@ MAX_FILES = 100000
 MAX_FILE_BYTES = 256 * 1024 * 1024
 MAX_NOTICE_BYTES = 4 * 1024 * 1024
 MAX_NOTICES_BYTES = 32 * 1024 * 1024
+MAX_BUILD_METADATA_BYTES = 1024 * 1024
+MAX_BUILD_METADATA_TOTAL_BYTES = 8 * 1024 * 1024
 
 
 def linked(path):
@@ -89,8 +91,8 @@ def audit(stage, application, vendors, output, system=None):
         by_name.setdefault(Path(name).name.lower(), []).append(name)
     if 'reword.exe' in binaries and all(binaries['reword.exe'][k] == app[k] for k in app):
         binaries['reword.exe']['matches'].append('application')
-    notices, build_metadata, notice_inputs = {}, {}, {}
-    missing, notice_bytes = [], 0
+    notices, build_metadata, notice_inputs, metadata_inputs = {}, {}, {}, {}
+    missing, notice_bytes, metadata_bytes = [], 0, 0
     for vendor, location in sorted(vendors.items()):
         root = Path(location)
         has_notice = False
@@ -112,7 +114,12 @@ def audit(stage, application, vendors, output, system=None):
                 notice_inputs[label] = path
                 has_notice = True
             elif metadata(relative):
-                build_metadata[label] = inventory(path, MAX_NOTICE_BYTES)
+                item = inventory(path, MAX_BUILD_METADATA_BYTES)
+                metadata_bytes += item['bytes']
+                if metadata_bytes > MAX_BUILD_METADATA_TOTAL_BYTES:
+                    raise ValueError('Vendor build metadata collection exceeds its byte limit')
+                build_metadata[label] = item
+                metadata_inputs[label] = path
         if not has_notice:
             missing.append(vendor)
     for item in binaries.values():
@@ -148,18 +155,23 @@ def audit(stage, application, vendors, output, system=None):
     # Gather/validate before claiming an output directory. Never replace an older audit.
     output.mkdir(parents=False, exist_ok=False)
     try:
-        for name, source in notice_inputs.items():
-            target = output / 'notices' / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with source.open('rb') as incoming, target.open('xb') as outgoing:
-                copied = 0
-                while block := incoming.read(64 * 1024):
-                    copied += len(block)
-                    if copied > MAX_NOTICE_BYTES:
-                        raise ValueError('Vendor notice grew beyond its limit')
-                    outgoing.write(block)
-            if inventory(target, MAX_NOTICE_BYTES) != notices[name]:
-                raise ValueError('Vendor notice changed during collection')
+        collections = (
+            ('notices', notice_inputs, notices, MAX_NOTICE_BYTES),
+            ('build-metadata', metadata_inputs, build_metadata, MAX_BUILD_METADATA_BYTES),
+        )
+        for directory, inputs, recorded, limit in collections:
+            for name, source in inputs.items():
+                target = output / directory / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with source.open('rb') as incoming, target.open('xb') as outgoing:
+                    copied = 0
+                    while block := incoming.read(64 * 1024):
+                        copied += len(block)
+                        if copied > limit:
+                            raise ValueError('Vendor material grew beyond its limit')
+                        outgoing.write(block)
+                if inventory(target, limit) != recorded[name]:
+                    raise ValueError('Vendor material changed during collection')
         (output / 'audit.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
     except BaseException:
         shutil.rmtree(output)

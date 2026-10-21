@@ -24,15 +24,24 @@ public. No production release or local installation has been accepted.
   Combined-source push run 39397165863 and PR run 39397184524 both pass
   at merge 41939dc. Documentation-only updates follow that tested code.
   Final package/desktop acceptance remains separate.
-- **PR22 — populated UI:** branch `codex/populated-list-review`, code 8288a35,
-  reuses the keyboard-review worktree. Tests seed accepted long values and retain
-  light/dark captures. Hosted RED is pending; no production layout change yet.
-  The earlier Windows sample inspection is in [UI_REVIEW.md](UI_REVIEW.md).
-- **Worktrees:** storage-access holds PR21; keyboard-review holds PR22. The main
+- **PR22 — populated UI:** branch `codex/populated-list-review`, code cba5167,
+  reuses the keyboard-review worktree. Full Linux/Windows run 39400869152 passes
+  after observed overflow/contrast failures. Actual regenerated captures confirm
+  the sampled long list values and Practice question fit; see its UI_REVIEW.md.
+- **Build metadata:** branch `codex/windows-build-metadata` follows PR21. Four
+  observed Python RED cases now pass with eight existing controls. Exact vendor
+  metadata retention is limited to 1 MiB/file and 8 MiB total. Full hosted
+  runs 39399260940/39399290932 pass at db871eb; documentation revision 4e73a33
+  also passes 39400501572/39400507867. Actual retained metadata: 158 files,
+  186,979 bytes, all matching reported sizes/hashes. Hunspell and libiconv
+  source/recipe/ABI receipts are under docs/evidence. These match cache records;
+  no independent reproducible build or complete source/notice closure is claimed.
+- **Worktrees:** storage-access now holds the build-metadata branch based on PR21;
+  keyboard-review holds PR22. The main
   checkout remains `develop` at 15e8ad5. Check status before changing branches.
   Keep ignored `.deps` evidence and dependencies out of commits/uploads.
-- **Next:** inspect PR21 integration CI, diagnose populated UI cases from actual
-  captures, finish the pending two-hour report, and maintain the source/run/hash
+- **Next:** audit the separate Fcitx cancellation/buffer path, finish the pending
+  two-hour report, and maintain the source/run/hash
   distinctions. The workload will need repeating on the final integrated package.
 
 ## Remaining product acceptance
@@ -929,3 +938,25 @@ and Windows push run 39397165863 and PR run 39397184524 pass, including controll
 native probes and installer smoke checks. Independent reviews of each behavioral
 change found no important outstanding issue. These are hosted development checks,
 not ordinary desktop or final-package soak acceptance.
+
+## Windows metadata retention checkpoint
+
+The existing audit retained notice contents but only hashes of Qt/vcpkg build
+metadata. Four observed RED fixtures preceded bounded exact retention under
+build-metadata. All 12 targeted Python fixtures pass in 0.186 seconds under the
+local 256 MiB/10 CPU-second limit. No local C++/GUI work ran. Source/ABI binding
+still requires inspecting actual hosted contents; releaseReady stays false.
+PR21 documentation head 8a105c4 passes full push/PR runs 39398173948/39398182802.
+The populated-list layout passes at baf6773; its long-Practice/indicator follow-up
+at ef9d446 is currently under failure inspection and not accepted.
+
+## Actual Windows metadata evidence
+
+PR23 code db871eb passes full Linux/Windows push/PR runs 39399260940/39399290932.
+Downloaded materials under .deps/windows-metadata-db871eb contain 158 retained
+metadata files (186,979 bytes), all verified against the audit hashes. Hunspell
+staged DLL, frozen recipe/patch, source archive and ABI package ID match its
+retained SPDX/ABI records; see docs/evidence/windows-hunspell-cache-db871eb.json.
+This is recorded cache correspondence, not an independent reproducible build.
+Qt/graphics/VC runtime and declared libiconv dependency material remain open.
+Independent static review found no important implementation issue.

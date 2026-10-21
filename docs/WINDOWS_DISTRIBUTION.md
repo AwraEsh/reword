@@ -16,6 +16,8 @@ contains:
   DLLs/executables, unmatched binaries, missing vendor notices and metadata hashes.
 - `notices/`: available vendor license/copyright files with their original relative
   paths under stable vendor identifiers.
+- `build-metadata/`: exact whitelisted Qt/vcpkg metadata under stable vendor-relative
+  names, checked against the recorded bytes and SHA256.
 - `vendor-versions.json`: queried Qt version, installed vcpkg package listing and
   the checkout commit observed during the build.
 
@@ -30,7 +32,10 @@ Unreadable directories, links, unusual files and over-limit notices stop the
 audit. The caller must own and keep the build trees unchanged during collection.
 Notice files are limited to 4 MiB each and 32 MiB in total; copied notice bytes
 are rechecked against the inventory. An existing evidence directory is refused.
-Build metadata is hashed rather than copied verbatim into public evidence.
+Build metadata is retained separately with a 1 MiB per-file and 8 MiB total
+limit. Only the explicit metadata filename whitelist is copied; altered copies
+remove the owned partial audit. This evidence contains vendor build records,
+not application runtime data.
 
 The audit is separate from the installer payload. Its `releaseReady` field stays
 false: inventory is not source authentication or a completed redistribution
@@ -152,3 +157,61 @@ PR #19 merged as 15e8ad5. Audit artifact 12218965126 contains audit.json SHA256
 This closes the ordinary candidate-file gate for that runner/build only.
 Dynamic/API-set/OS compatibility, source/notice binding and product release
 acceptance remain open.
+
+## Retained cached-package evidence — 2026-10-20
+
+Full hosted push run 39399260940 and PR run 39399290932 pass at db871eb.
+The actual artifact retains 158 metadata files totaling 186,979 bytes; every
+copied file matches its reported size and SHA256. Twelve targeted audit fixtures
+passed after four observed RED cases for missing retention, per-file/aggregate
+limits and changed-input refusal. Independent review found no important issue.
+
+The [bounded Hunspell receipt](evidence/windows-hunspell-cache-db871eb.json)
+compares actual cached-package SPDX/ABI records with the acquired frozen recipe
+and source archive:
+
+- Patch, portfile.cmake and vcpkg.json SHA256 all match the recorded port inputs
+  from vcpkg commit e456309491fd875487bf02b8a0dca76c1b1b00cc.
+- Hunspell 1.7.5 source archive SHA512 matches the SPDX resource record.
+- The staged hunspell-1.7-0.dll SHA256 matches the SPDX binary-file record.
+- The ABI metadata SHA256 matches the cached binary package identifier.
+
+These are recorded recipe/source/payload matches, stronger than assuming the
+current checkout built the cache. They are not an independent reproducible
+build. Qt third-party/graphics materials, VC runtime notices and final
+installer/source pairing still need resolution.
+The retained Qt qconfig.pri reports Qt 6.8.3 and SDK compiler 19.39.33520; the
+application build toolchain is recorded separately. releaseReady remains false.
+
+The [libiconv receipt](evidence/windows-libiconv-cache-db871eb.json) follows the
+recorded Hunspell dependency: the acquired GNU libiconv 1.19 archive SHA512 and
+all seven frozen vcpkg recipe inputs match the retained SPDX records. Its ABI
+file hashes to the same package identifier named by Hunspell's ABI record.
+The archive and recipe files remain ignored local source candidates. This is
+record correspondence, not an independent rebuild, GNU signature verification,
+proof of inclusion in the staged Hunspell DLL or completed source delivery.
+
+## Mesa SDK archive correspondence — 2026-10-21
+
+The [Mesa SDK receipt](evidence/windows-mesa-sdk-db871eb.json) connects the
+actual staged opengl32sw.dll in run 39399260940 with Qt's separate
+opengl32sw-64-mesa_11_2_2-signed_sha256.7z archive. Its 5,474,526-byte archive
+matches SHA256 b3e65312ca58e3ea3853eb5af7893a9fb26887b05bc6a1ccc706f88f9f971aeb
+published by [Qt's download metadata](https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_683/qt6_683/qt.qt6.683.win64_msvc2022_64/6.8.3-0-202503201308opengl32sw-64-mesa_11_2_2-signed_sha256.7z.mirrorlist).
+Its sole member is the 20,639,888-byte DLL, whose SHA256 exactly matches the
+stage. The DLL was streamed for hashing under a memory/CPU/output cap; it was
+never loaded or executed. The direct mirror initially timed out; the verified
+copy came from a mirror listed by Qt, with the same pinned archive SHA256.
+
+The SDK archive supplies no source, recipe or notice text. Its filename is not
+an Authenticode-signature verification. Matching SDK bytes narrows provenance;
+Mesa build/source/notice material, D3DCompiler and VC runtime requirements remain
+open. No graphics component was removed and releaseReady remains false.
+
+The separate [D3DCompiler receipt](evidence/windows-d3d-sdk-db871eb.json) verifies
+Qt's 1,380,117-byte d3dcompiler_47-x64.7z against the SHA256 in its official
+Metalink metadata, then streams its sole 4,173,928-byte DLL for hashing. That DLL
+matches the actual staged D3Dcompiler_47.dll bytes from run 39399260940. It was
+never loaded or executed. This archive also supplies no notice text. The match
+does not authenticate the Microsoft signature, establish redistribution terms,
+or replace the remaining runtime material review.
