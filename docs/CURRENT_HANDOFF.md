@@ -8,12 +8,28 @@ public. No production release or local installation has been accepted.
 
 ## Current resumed work
 
-Fcitx fixture source f478026 compiled in run 39482540531, but aborted before
-behavioral assertions: Instance's inputState property factory was unregistered.
-Fcitx 5.1.7 registers it in Instance::initialize(), which the fixture omitted.
-Initialize with all addons disabled and an isolated Fcitx config directory;
-observe the actual guard assertions before any production behavior change.
-The long-workload failure and other open acceptance gates below remain open.
+- **PR25, Fcitx:** real six-case RED at d1e70c7/run 39538586697 confirms retained
+  owner job text on unsafe observation. Scoped reset 7ad9a99 passes the complete
+  Linux/Windows run 39539160624 and independent static review. Worker/future and
+  operation-lock lifetime are preserved; cancellation remains cooperative.
+  Follow-up test source 575b4d6 adds a private D-Bus lock provider and actual
+  timer checks for Pause/denial/lock while a future remains pending, without an
+  input event or pending Undo. Run 39539553700 is pending. No timer fix yet.
+  Branch codex/fcitx-transient-guards remains in storage-access, stacked on PR23.
+- **PR24, workload diagnostics:** 2aa59d3 passes full push/PR Linux/Windows runs
+  39538716534/39538809182 and independent static review. Two small diagnostic
+  tests and 18 existing active-stability tests pass locally under 256 MiB/10 CPU
+  seconds; no local C++/Qt workload ran. Manual run 39539196812 at that source
+  started a same-AppDir preflight before the instrumented two-hour workload.
+  Inspect its existing handle rather than relaunching on an observation timeout.
+  Keyboard-review holds codex/active-workload-diagnostics; it is stacked on PR20.
+- The earlier long-run mismatch is still unexplained. No production correction
+  logic, typing delays, resource budgets or pass assertions changed in PR24.
+  Prior 632-cycle partial evidence is not two-hour acceptance. PR20's GitHub
+  description now records the failure. No release, installation or shutdown.
+
+The pause record and older checkpoint below are historical and superseded by
+this resumed status. Main develop remains 15e8ad5; PR20–25 remain unmerged.
 
 ## Pause checkpoint — 2026-10-20
 

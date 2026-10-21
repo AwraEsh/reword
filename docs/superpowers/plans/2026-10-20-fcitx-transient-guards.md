@@ -22,9 +22,11 @@ this record and docs/CURRENT_HANDOFF.md. No new runtime dependency.
   the same focused permitted context is authorized before each unsafe change.
 - [x] Observe hosted RED before changing production behavior. A compile/setup
   error is not RED; repair the fixture separately until assertions run.
-- [ ] Centralize the demonstrated invalidation boundary and use it on unsafe
+- [x] Centralize the demonstrated invalidation boundary and use it on unsafe
   observation, focus/session loss, invalid text and exceptions. Keep confirmed
   recovery/history separate and do not erase user-authorized saved originals.
+- [ ] Cover timer-only Pause/denial/lock changes while a future is outstanding;
+  observe RED, then cancel and release owner state without waiting for completion.
 - [ ] Run the complete hosted Linux/Windows workflow; inspect exact results,
   request independent static review and record evidence. No local GUI/compiler.
 
@@ -73,3 +75,8 @@ change Pause, permission or lock state without input events, then run the actual
 Fcitx timer for 160 ms. Require cancellation and empty owner text before allowing
 the future to finish. This should expose the timer's current early return while
 the future is not ready. Observe hosted assertions before changing that policy.
+
+The scoped reset at 7ad9a99 passes full Linux/Windows run 39539160624. It does
+not close timer-only policy or deadline coverage. Follow-up fixture 575b4d6 uses
+dbus-run-session (test-only host tooling already present in CI) and a local Qt
+lock object; run 39539553700 is pending. PR25 is a draft stacked on PR23.
