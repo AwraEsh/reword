@@ -86,6 +86,7 @@ class FcitxAddonTest : public QObject {
         addon.job_.before = addon.job_.original = "synthetic original";
         addon.job_.after = addon.job_.corrected = "synthetic result";
         addon.job_.valid = true;
+        addon.job_.operationDeadline = QDeadlineTimer(10000, Qt::PreciseTimer);
         addon.pending_ = addon.job_;
         addon.prefix_ = "synthetic prefix";
         addon.observedHash_ = "synthetic hash";
@@ -151,6 +152,7 @@ class FcitxAddonTest : public QObject {
         addon.job_.before = addon.job_.original = "synthetic original";
         addon.job_.after = addon.job_.corrected = "synthetic result";
         addon.job_.valid = true;
+        addon.job_.operationDeadline = QDeadlineTimer(10000, Qt::PreciseTimer);
         addon.cancel_.store(false);
         std::promise<reword::Change> result;
         addon.future_ = result.get_future();

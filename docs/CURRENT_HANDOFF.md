@@ -8,6 +8,22 @@ public. No production release or local installation has been accepted.
 
 ## Current resumed work
 
+- **PR26, operation deadline:** storage-access now holds
+  codex/fcitx-operation-deadline based on verified PR25 checkpoint 55aed4f.
+  Test-only c4cc5cb accepts the real shortcut/field/operation lock, then delays
+  controlled worker-result delivery. An immediate result must commit once; a
+  result delivered after 10.1 seconds must leave the original intact. Hosted
+  RED run 39542141953 is being inspected before any implementation change.
+- **Operation UI gap:** source inspection shows Controller's busy state is set
+  for the internal editor, and its Cancel only invokes Service::cancel(). Native
+  Service operations lack a start-state signal to the GUI; the Fcitx recovery
+  channel carries passages but no job lifecycle/cancel coordination. Cover both
+  native paths with real busy/cancel regressions after the deadline task.
+- **Fcitx recovery follow-up:** selected originals are submitted to GUI recovery
+  only after surrounding-text confirmation. Audit/reproduce loss of copyable
+  original on an unconfirmed native write or delivery interruption. Preserve
+  history's confirmed-write rule; do not mark this safety requirement accepted
+  solely from Service's earlier recovery-before-write tests.
 - **PR25, Fcitx:** real six-case RED at d1e70c7/run 39538586697 confirms retained
   owner job text on unsafe observation. Scoped reset 7ad9a99 passes the complete
   Linux/Windows run 39539160624 and independent static review. Worker/future and
@@ -20,7 +36,8 @@ public. No production release or local installation has been accepted.
   policy behavior, not a production 160 ms bound; native accuracy stays 250 ms.
   Reviews found no important issue. Deadline/UI-cancel coordination and ordinary
   Wayland acceptance remain open. See the Fcitx plan for exact evidence/limits.
-  Branch codex/fcitx-transient-guards remains in storage-access, stacked on PR23.
+  Branch codex/fcitx-transient-guards is pushed and stacked on PR23; its managed
+  worktree has been reused for PR26.
 - **PR24, workload diagnostics:** 2aa59d3 passes full push/PR Linux/Windows runs
   39538716534/39538809182 and independent static review. Two small diagnostic
   tests and 18 existing active-stability tests pass locally under 256 MiB/10 CPU
