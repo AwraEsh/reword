@@ -69,8 +69,13 @@ public. No production release or local installation has been accepted.
   helper 1.45%, zero swap, p95 upper bound 22.6 ms across 2,946 samples.
   Binary SHA256 b7683b398b33ef6e26ff03be93679be907ce4293357d8683b6d64eedafe10e70.
   Actual report: .deps/hosted-active-2aa59d3/active-workload/report.json.
-  The detailed log fetch timed out at TLS; no blind rerun or guessed fix.
-  Investigate that specific infrastructure failure after the reduced-work mode.
+  The initial detailed log fetch timed out at TLS. A later bounded direct job-log
+  fetch succeeded: the workload prints no exception subtype/traceback, only
+  exit code 1. Therefore the infrastructure cause remains undetermined.
+  Artifact 12320759229, archive SHA256
+  8bc06d40d2bfa490446401af979ea7d9408d76f5e687695891764833053b7d2f.
+  Local ignored log: .deps/hosted-active-2aa59d3/linux-job.log. No blind rerun
+  or guessed production fix; investigate after the reduced-work mode.
 - The earlier long-run mismatch is still unexplained. No production correction
   logic, typing delays, resource budgets or pass assertions changed in PR24.
   Prior 632-cycle partial evidence is not two-hour acceptance. PR20's GitHub
