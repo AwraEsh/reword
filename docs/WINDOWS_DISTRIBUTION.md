@@ -190,3 +190,28 @@ file hashes to the same package identifier named by Hunspell's ABI record.
 The archive and recipe files remain ignored local source candidates. This is
 record correspondence, not an independent rebuild, GNU signature verification,
 proof of inclusion in the staged Hunspell DLL or completed source delivery.
+
+## Mesa SDK archive correspondence — 2026-10-21
+
+The [Mesa SDK receipt](evidence/windows-mesa-sdk-db871eb.json) connects the
+actual staged opengl32sw.dll in run 39399260940 with Qt's separate
+opengl32sw-64-mesa_11_2_2-signed_sha256.7z archive. Its 5,474,526-byte archive
+matches SHA256 b3e65312ca58e3ea3853eb5af7893a9fb26887b05bc6a1ccc706f88f9f971aeb
+published by [Qt's download metadata](https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_683/qt6_683/qt.qt6.683.win64_msvc2022_64/6.8.3-0-202503201308opengl32sw-64-mesa_11_2_2-signed_sha256.7z.mirrorlist).
+Its sole member is the 20,639,888-byte DLL, whose SHA256 exactly matches the
+stage. The DLL was streamed for hashing under a memory/CPU/output cap; it was
+never loaded or executed. The direct mirror initially timed out; the verified
+copy came from a mirror listed by Qt, with the same pinned archive SHA256.
+
+The SDK archive supplies no source, recipe or notice text. Its filename is not
+an Authenticode-signature verification. Matching SDK bytes narrows provenance;
+Mesa build/source/notice material, D3DCompiler and VC runtime requirements remain
+open. No graphics component was removed and releaseReady remains false.
+
+The separate [D3DCompiler receipt](evidence/windows-d3d-sdk-db871eb.json) verifies
+Qt's 1,380,117-byte d3dcompiler_47-x64.7z against the SHA256 in its official
+Metalink metadata, then streams its sole 4,173,928-byte DLL for hashing. That DLL
+matches the actual staged D3Dcompiler_47.dll bytes from run 39399260940. It was
+never loaded or executed. This archive also supplies no notice text. The match
+does not authenticate the Microsoft signature, establish redistribution terms,
+or replace the remaining runtime material review.
