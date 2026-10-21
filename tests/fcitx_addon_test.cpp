@@ -21,8 +21,11 @@ class OwnedContext final : public fcitx::InputContext {
         : fcitx::InputContext(manager, "reword-synthetic-fixture") { created(); }
     ~OwnedContext() override { destroy(); }
     const char *frontend() const override { return "reword-owned-test"; }
+    QStringList commits;
   protected:
-    void commitStringImpl(const std::string &) override {}
+    void commitStringImpl(const std::string &text) override {
+        commits.append(QString::fromStdString(text));
+    }
     void deleteSurroundingTextImpl(int, unsigned) override {}
     void forwardKeyImpl(const fcitx::ForwardKeyEvent &) override {}
     void updatePreeditImpl() override {}
@@ -195,6 +198,61 @@ class FcitxAddonTest : public QObject {
         QVERIFY(addon.job_.before.isEmpty());
         QVERIFY(addon.job_.corrected.isEmpty());
         QVERIFY(addon.job_.after.isEmpty());
+    }
+    void resultDeliveryCountsTowardsOperationDeadline_data() {
+        QTest::addColumn<bool>("late");
+        QTest::newRow("in-time") << false;
+        QTest::newRow("expired") << true;
+    }
+    void resultDeliveryCountsTowardsOperationDeadline() {
+        QFETCH(bool, late);
+        QTemporaryDir data;
+        QVERIFY(data.isValid());
+        qputenv("REWORD_DATA_DIR", data.path().toUtf8());
+        qputenv("XDG_SESSION_TYPE", "wayland");
+        reword::RecoveryServer recovery;
+        QVERIFY(recovery.listen(data.path()));
+        char executable[] = "reword-owned-fcitx-test";
+        char disable[] = "--disable", all[] = "all";
+        char *arguments[] = {executable, disable, all, nullptr};
+        optind = 0;
+        fcitx::Instance instance(3, arguments);
+        instance.initialize();
+        RewordAddon addon(&instance);
+        QTRY_VERIFY(addon.recovery_->active());
+        OwnedContext context(instance.inputContextManager());
+        context.setCapabilityFlags(fcitx::CapabilityFlag::SurroundingText);
+        context.surroundingText().setText("teh", 3, 0);
+        context.focusIn();
+        const QString id = "fcitx:reword-synthetic-fixture";
+        addon.store_->discover(id, "Synthetic fixture");
+        addon.store_->decide(id, "allow");
+        QVERIFY(addon.permitted(&context, id));
+        QVERIFY(addon.unlocked());
+        fcitx::KeyEvent shortcut(&context, fcitx::Key("Control+Alt+r"));
+        addon.handle(shortcut);
+        QVERIFY(shortcut.filtered());
+        QVERIFY(addon.future_.valid());
+        QVERIFY(addon.operationLock_);
+        QCOMPARE(addon.job_.original, QString("teh"));
+        std::promise<reword::Change> result;
+        // Replacing the real worker future joins that worker before accepting
+        // this controlled delivery. Keep the actual accepted field/lock state.
+        addon.future_ = result.get_future();
+        if (late)
+            QTest::qWait(10100);
+        result.set_value({"teh", "the", true, {}});
+        addon.completed();
+        QVERIFY(!addon.future_.valid());
+        if (late) {
+            QVERIFY(context.commits.isEmpty());
+            QVERIFY(!addon.pending_.valid);
+        } else {
+            QCOMPARE(context.commits, QStringList{"the"});
+            QVERIFY(addon.pending_.valid);
+        }
+        QCOMPARE(QString::fromStdString(context.surroundingText().text()), QString("teh"));
+        QVERIFY(addon.store_->histories().isEmpty());
     }
 };
 } // namespace
