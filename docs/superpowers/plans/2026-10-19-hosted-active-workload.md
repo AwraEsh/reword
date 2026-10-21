@@ -1,5 +1,27 @@
 # Hosted packaged workload execution plan
 
+## Long-run failure investigation — 2026-10-21
+
+Actual run 39394646024 at 0fd1f2e failed after 1,819.969 seconds, with
+native-text-mismatch during live typing. It completed 632 sustained cycles;
+live-first/second/third counts were 634/633/633, identifying the second-attempt
+assertion as the failing boundary. Target 7,200 seconds was not completed.
+Helper shutdown required escalation. Its first two-minute preflight passed.
+The retained artifact is ignored under .deps/hosted-active-2h-0fd1f2e.
+
+The content-free report did not distinguish a corrected second attempt from
+missing/extra edits. Do not guess a core fix or relax any assertion/budget.
+The isolated codex/active-workload-diagnostics branch adds per-attempt stage,
+monotonic observation times, a fixed synthetic state classification, change
+count and at most 12 numeric event records. Unknown text becomes only `other`
+and character count; content never enters the report. Normal production code,
+timing delays, pass criteria and cleanup escalation are unchanged.
+
+Two small classification/privacy tests pass under 256 MiB/10 CPU seconds,
+alongside all 18 existing active-stability fixtures. Hosted full-suite and
+same-package preflight must pass before a new instrumented long run. These
+diagnostics gather missing evidence; they do not fix or accept the failed run.
+
 > Use executing-plans inline. This extends the existing active-stability plan's
 > execution location while local builds and GUI workloads remain suspended.
 
