@@ -13,7 +13,12 @@ public. No production release or local installation has been accepted.
   Test-only c4cc5cb accepts the real shortcut/field/operation lock, then delays
   controlled worker-result delivery. An immediate result must commit once; a
   result delivered after 10.1 seconds must leave the original intact. Hosted
-  RED run 39542141953 is being inspected before any implementation change.
+  RED 39542141953 fails only the late-commit assertion. Fix 635932e carries
+  one precise monotonic deadline from acceptance through setup, worker and
+  guarded native commit. Full push/PR runs 39542671464/39542677136 pass Linux
+  and Windows; downloaded Fcitx JUnit has 13 cases and no failures/errors/skips.
+  Independent static review found no important issue. Scoped deadline work is
+  complete; UI Cancel and ordinary Wayland acceptance remain separate.
 - **Operation UI gap:** source inspection shows Controller's busy state is set
   for the internal editor, and its Cancel only invokes Service::cancel(). Native
   Service operations lack a start-state signal to the GUI; the Fcitx recovery
@@ -58,7 +63,7 @@ public. No production release or local installation has been accepted.
   application/test source remains identical to tested cc13055.
 
 The pause record and older checkpoint below are historical and superseded by
-this resumed status. Main develop remains 15e8ad5; PR20–25 remain unmerged.
+this resumed status. Main develop remains 15e8ad5; PR20–26 remain unmerged.
 
 ## Pause checkpoint — 2026-10-20
 
