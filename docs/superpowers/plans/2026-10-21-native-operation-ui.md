@@ -12,11 +12,11 @@ message, so tracking only result is insufficient. Fcitx IPC is separate scope.
   the queued interval; release on every exit before Controller teardown. Trigger
   the actual adapter action, require a visible Cancel, invoke its clicked signal,
   and check resulting field/history plus cleared busy state. Observe hosted RED.
-- [ ] Publish accepted-operation lifecycle from Service on every terminal path.
+- [x] Publish accepted-operation lifecycle from Service on every terminal path.
   Keep queued workspace state distinct from active service state so a rejected
   competing request cannot hide Cancel. Preserve cooperative cancellation and
   the existing single-operation lock. Add targeted overlap coverage if needed.
-- [ ] Full hosted Linux/Windows suites, independent review, source/run identities
+- [x] Full hosted Linux/Windows suites, independent review, source/run identities
   and handoff. Ordinary native desktop and Fcitx Cancel remain separate.
 
 Mutation target: suppress native operation-start notification and the real
@@ -38,3 +38,12 @@ the first object whose text was Cancel, which is ambiguous with hidden dialog
 standard buttons. Give the workspace action an explicit object name and use it
 in the integration test; do not weaken the actual visibility assertion. Fresh
 hosted verification will distinguish the selector issue from a UI defect.
+
+Verified source a6c24710f39775a937d41017908b5458102166fc passes full push/PR
+Linux/Windows runs 39544490522 and 39544493641. Actual downloaded UI JUnit
+on each OS contains 26 cases, zero failures/errors/skips, with all three new
+rows passing. Selecting the explicit workspace action resolves the ambiguous
+Cancel lookup without weakening assertions. Independent static reviews of the
+lifecycle and selector changes found no important issues. Original RED JUnit
+on both OS at e905973 fails exactly the three busy assertions. No local C++/Qt
+workload ran. Fcitx IPC Cancel and ordinary desktop acceptance remain open.
