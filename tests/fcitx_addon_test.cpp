@@ -161,10 +161,33 @@ class FcitxAddonTest : public QObject {
             addon.store_->decide(id, "deny");
         else
             lock_.active = true;
+        int witnessTicks = 0;
+        bool deadlineFired = false;
+        auto witness = instance.eventLoop().addTimeEvent(
+            CLOCK_MONOTONIC, fcitx::now(CLOCK_MONOTONIC) + 1000, 0,
+            [&](fcitx::EventSourceTime *source, uint64_t) {
+                ++witnessTicks;
+                source->setNextInterval(10000);
+                source->setEnabled(true);
+                return true;
+            });
         auto deadline = instance.eventLoop().addTimeEvent(
             CLOCK_MONOTONIC, fcitx::now(CLOCK_MONOTONIC) + 160000, 0,
-            [&](fcitx::EventSourceTime *, uint64_t) { instance.eventLoop().exit(); return false; });
-        instance.eventLoop().exec();
+            [&](fcitx::EventSourceTime *, uint64_t) {
+                deadlineFired = true;
+                instance.eventLoop().exit();
+                return false;
+            });
+        QElapsedTimer elapsed;
+        elapsed.start();
+        const auto loopResult = instance.eventLoop().exec();
+        qInfo() << "Owned timer diagnostic:" << boundary << "elapsedMs" << elapsed.elapsed()
+                << "ticks" << witnessTicks << "deadline" << deadlineFired << "loop" << loopResult
+                << "addonTimerEnabled" << addon.timer_->isEnabled()
+                << "permitted" << addon.permitted(&context, id) << "unlocked" << addon.unlocked();
+        QVERIFY(deadlineFired);
+        QVERIFY(witnessTicks >= 2);
+        QVERIFY(elapsed.elapsed() >= 120);
         QVERIFY(addon.future_.valid());
         QVERIFY(addon.cancel_.load());
         QVERIFY(addon.job_.original.isEmpty());
