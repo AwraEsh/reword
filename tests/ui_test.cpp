@@ -203,12 +203,7 @@ class UiTest : public QObject {
         engine.rootContext()->setContextProperty("Backend", &controller);
         engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
         QVERIFY(!engine.rootObjects().isEmpty());
-        QQuickItem *cancel = nullptr;
-        for (auto item : engine.rootObjects().first()->findChildren<QQuickItem *>())
-            if (item->property("text").toString() == "Cancel") {
-                cancel = item;
-                break;
-            }
+        auto cancel = engine.rootObjects().first()->findChild<QQuickItem *>("cancelCorrection");
         QVERIFY(cancel);
         QVERIFY(!controller.busy());
         adapter->requestCorrection();
