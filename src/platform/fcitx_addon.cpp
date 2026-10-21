@@ -510,6 +510,12 @@ class RewordAddon final : public fcitx::AddonInstance {
             [this](fcitx::EventSourceTime *timer, uint64_t) {
                 try {
                     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
+                    // Settings and session policy can change without another
+                    // input event. Invalidate owner text while work is pending,
+                    // rather than waiting for the future to become ready.
+                    if (future_.valid() && !cancel_.load() &&
+                        (!permitted(job_.context.get(), job_.app) || !unlocked()))
+                        resetObservation();
                     completed();
                     if (pending_.valid) {
                         auto ic = pending_.context.get();

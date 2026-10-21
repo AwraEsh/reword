@@ -80,3 +80,16 @@ The scoped reset at 7ad9a99 passes full Linux/Windows run 39539160624. It does
 not close timer-only policy or deadline coverage. Follow-up fixture 575b4d6 uses
 dbus-run-session (test-only host tooling already present in CI) and a local Qt
 lock object; run 39539553700 is pending. PR25 is a draft stacked on PR23.
+
+Actual timer RED in run 39539553700 at 575b4d6: all six unsafe-observation
+cases pass with a verified unlocked baseline; Pause, denial and lock timer cases
+each fail cancellation after the 160 ms real event-loop interval. No pending
+Undo or input event is involved. This confirms the timer calls completed(),
+which returns early for a non-ready future, then checks only pending Undo.
+Log retained in ignored .deps/fcitx-timer-575b4d6.log.
+
+Before consuming a future, each timer tick now checks the outstanding job's
+metadata-only focus/capability/application/pause/session policy and invalidates
+owner state when unsafe. Preserve the future/lock and cancellation lifetime.
+Full hosted GREEN and follow-up review are required; no deadline change is
+included in this step.
