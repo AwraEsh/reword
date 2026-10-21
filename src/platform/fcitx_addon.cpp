@@ -8,6 +8,7 @@
 #include <QDBusReply>
 #include <QRegularExpression>
 #include <QElapsedTimer>
+#include <QDeadlineTimer>
 #include <QEventLoop>
 #include <QCryptographicHash>
 #include <QLockFile>
@@ -57,6 +58,7 @@ class RewordAddon final : public fcitx::AddonInstance {
         unsigned cursor = 0, anchorBefore = 0, cursorBefore = 0;
         int start = 0;
         qint64 revision = 0, expires = 0;
+        QDeadlineTimer operationDeadline;
         bool passage = false, valid = false, confirmed = false;
     } pending_, job_;
     void resetRetry() {
@@ -198,9 +200,11 @@ class RewordAddon final : public fcitx::AddonInstance {
         auto job = job_;
         job_ = {};
         auto ic = job.context.get();
-        if (cancel_.load() || !change.changed || !change.error.isEmpty() || !unlocked() ||
+        if (cancel_.load() || job.operationDeadline.hasExpired() || !change.changed ||
+            !change.error.isEmpty() || !unlocked() ||
             !permitted(ic, job.app) ||
-            job.revision != store_->value("configRevision", 0).toLongLong())
+            job.revision != store_->value("configRevision", 0).toLongLong() ||
+            job.operationDeadline.hasExpired())
             return;
         const auto &st = ic->surroundingText();
         if (!st.isValid() || QString::fromStdString(st.text()) != job.before ||
@@ -220,6 +224,8 @@ class RewordAddon final : public fcitx::AddonInstance {
         job.start = before.size();
         job.valid = true;
         job.expires = QDateTime::currentMSecsSinceEpoch() + 30000;
+        if (job.operationDeadline.hasExpired())
+            return;
         pending_ = job;
         ic->commitString(change.corrected.toStdString());
     }
@@ -319,6 +325,7 @@ class RewordAddon final : public fcitx::AddonInstance {
             if (selection) {
                 if (future_.valid() || st.cursor() == st.anchor() || !unlocked())
                     return;
+                const QDeadlineTimer operationDeadline(10000, Qt::PreciseTimer);
                 auto original = QString::fromStdString(st.selectedText());
                 const auto revision = store_->value("configRevision", 0).toLongLong();
                 auto options = store_->options();
@@ -332,6 +339,7 @@ class RewordAddon final : public fcitx::AddonInstance {
                 operationLock_ = std::move(lock);
                 cancel_.store(false);
                 job_ = {};
+                job_.operationDeadline = operationDeadline;
                 job_.context = ic->watch();
                 job_.app = id;
                 job_.before = text;
@@ -343,14 +351,19 @@ class RewordAddon final : public fcitx::AddonInstance {
                 auto words = store_->words();
                 auto replacements = store_->replacements();
                 future_ =
-                    std::async(std::launch::async, [this, original, options, words, replacements] {
+                    std::async(std::launch::async, [this, original, options, words, replacements,
+                                                   operationDeadline] {
                         try {
-                            QElapsedTimer elapsed;
-                            elapsed.start();
+                            if (cancel_.load() || operationDeadline.hasExpired())
+                                return reword::Change{original, original, false,
+                                                      "Correction cancelled or timed out."};
                             reword::Engine engine;
                             engine.setPersonal(words, replacements);
+                            if (cancel_.load() || operationDeadline.hasExpired())
+                                return reword::Change{original, original, false,
+                                                      "Correction cancelled or timed out."};
                             return engine.text(original, options, &cancel_,
-                                               std::max(qint64(0), 10000 - elapsed.elapsed()));
+                                               operationDeadline.remainingTime());
                         } catch (...) {
                             return reword::Change{original, original, false, "Correction failed."};
                         }
@@ -514,7 +527,8 @@ class RewordAddon final : public fcitx::AddonInstance {
                     // input event. Invalidate owner text while work is pending,
                     // rather than waiting for the future to become ready.
                     if (future_.valid() && !cancel_.load() &&
-                        (!permitted(job_.context.get(), job_.app) || !unlocked()))
+                        (job_.operationDeadline.hasExpired() ||
+                         !permitted(job_.context.get(), job_.app) || !unlocked()))
                         resetObservation();
                     completed();
                     if (pending_.valid) {
