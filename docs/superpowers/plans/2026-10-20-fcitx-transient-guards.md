@@ -93,3 +93,16 @@ metadata-only focus/capability/application/pause/session policy and invalidates
 owner state when unsafe. Preserve the future/lock and cancellation lifetime.
 Full hosted GREEN and follow-up review are required; no deadline change is
 included in this step.
+
+Run 39540021916 at db4ce64 passes Pause but fails denial/lock; do not claim a
+full GREEN. Diagnostic fixture 36fa33f/run 39540582782 shows why the later cases
+are not yet valid timer evidence: deadline fires but the independent 10 ms
+witness receives zero callbacks (192 ms elapsed), while Pause gets two in 285 ms.
+Fcitx 5.1.7's sd-event backend forwards accuracy unchanged. Per the
+[systemd timer API](https://www.freedesktop.org/software/systemd/man/257/sd_event_add_time.html),
+zero requests the default 250 ms coalescing window, not precise timing.
+Give only the fixture witness/deadline explicit 1 microsecond accuracy and log
+the addon's actual accuracy. Preserve the 160 ms cancellation check and all
+policy assertions; production timer precision is unchanged until this correctly
+controlled test runs. The isolated loops do dispatch and exit successfully;
+the hypothesis of a reused stopped loop is not supported by the diagnostics.
