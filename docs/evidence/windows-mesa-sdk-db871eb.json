@@ -1,0 +1,21 @@
+{
+  "archive": "6.8.3-0-202503201308opengl32sw-64-mesa_11_2_2-signed_sha256.7z",
+  "downloadUrl": "https://ftp.fau.de/qtproject/online/qtsdkrepository/windows_x86/desktop/qt6_683/qt6_683/qt.qt6.683.win64_msvc2022_64/6.8.3-0-202503201308opengl32sw-64-mesa_11_2_2-signed_sha256.7z",
+  "bytes": 5474526,
+  "sha256": "b3e65312ca58e3ea3853eb5af7893a9fb26887b05bc6a1ccc706f88f9f971aeb",
+  "checksumSource": "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_683/qt6_683/qt.qt6.683.win64_msvc2022_64/6.8.3-0-202503201308opengl32sw-64-mesa_11_2_2-signed_sha256.7z.mirrorlist",
+  "status": "checksum verified; no runtime executed",
+  "member": {
+    "name": "opengl32sw.dll",
+    "bytes": 20639888,
+    "sha256": "b04de4541863bc7d8879040a78889c4849c1b1da2784c4630f734c146c2998ce",
+    "matchesStagedBinary": true,
+    "auditRun": 39399260940
+  },
+  "limitations": [
+    "This archive contains only the DLL, with no source, build recipe or notice text.",
+    "Checksum and byte correspondence do not verify its Authenticode signature or complete runtime-source-notice requirements."
+  ],
+  "scope": "official-qt-sdk-graphics-archive-to-staged-binary",
+  "releaseReady": false
+}
