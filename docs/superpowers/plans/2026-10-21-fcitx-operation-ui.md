@@ -77,5 +77,6 @@ not cover this later barrier change.
 At f72ee2f the relinked focused run passes recovery (6.65 s), fcitx_state
 (17.11 s) and ui (12.75 s), total 36.52 s. Follow-up independent static review
 reports no remaining Important or Critical findings in b603bed..f72ee2f.
-The final full build/CTest run is in progress; Windows CI and ordinary desktop
-acceptance remain separate and unproven for this branch.
+The final full build succeeds and all 12 CTest targets pass in 88.47 seconds
+at the same production source (documentation-only cd6b0bd). Windows CI and
+ordinary desktop acceptance remain separate and unproven for this branch.
