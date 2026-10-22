@@ -56,5 +56,8 @@ while ending is ignored. Client delivery callbacks run only after parsing all
 available response tokens, including waiting for a fragmented trailing token.
 The recovery suite passes in 6.48 seconds, including coalesced and fragmented
 Cancel and the consecutive-operation barrier regression. Addon/UI relink and
-focused verification are running; full verification and renewed review remain
-pending. This revision has not been pushed.
+focused verification subsequently pass at b603bed: recovery 6.52 s,
+fcitx_state 17.22 s, ui 12.64 s; total 36.39 s, zero failed targets.
+Full verification and renewed independent review remain pending. The existing
+reviewer has been asked to inspect fd31520..b603bed without builds or edits.
+This revision has not been pushed.
