@@ -43,6 +43,15 @@ production release or local installation has been accepted.
   options. Next inspect its synthetic stdin/timer dispatch before changing any
   watchdog duration. Ignored receipts: usable-fixture-no-address-cap.log and
   usable-fixture-startup.trace under .deps.
+  Stack-unwound trace then locates the fixture at Pango font-map initialization
+  during GTK control construction (main+0x188), before watchdog installation;
+  the earlier poll-only inference of normal main-loop entry was too broad.
+  A test-only FONTCONFIG_FILE restricting fonts to system DejaVu makes the same
+  timing probe pass, including watchdog, two records and quiet mode. Host font
+  configuration is unchanged. The exact reason the default font scan exceeds
+  the bound is not yet established. A bounded 120-second packaged workload now
+  runs with this controlled font configuration; report directory:
+  .deps/usable-local-active-120-font-control. No production source change.
   PR29 CI 39752523899 at 6a6e11c is confirmed successful on both OS: Windows
   installer creation, install/launch/uninstall and native probe all pass; Linux
   CTest, UI and controlled GTK probes pass. No binary release/install is claimed.
