@@ -14,9 +14,17 @@ production release or local installation has been accepted.
   Current branch codex/usable-build-integration contains PR29 plus the separately
   verified populated-list UI branch (PR22) and workload diagnostics (PR24), merged
   without conflicts. Complete serial bounded build succeeds; all 13 CTest
-  targets pass in 119.78 seconds at 672650b. Local .deb/AppImage staging is
-  running using the existing toolchain and appimagetool, with runtime provenance
-  and host-addon dependency auditing enabled. No fresh tool download is needed.
+  targets pass in 119.78 seconds at 672650b. Local .deb/AppImage staging succeeds
+  with runtime provenance and host-addon dependency auditing. The initial
+  dpkg-deb compression exceeded the job memory cap; DPKG_DEB_THREADS_MAX=1
+  succeeds within the same bounds. Artifacts are about 40/50 MiB. AppDir,
+  extracted .deb and AppImage extract-and-run each exit 0 for --smoke-test with
+  empty inherited environment, temporary data and private D-Bus/software rendering.
+  This is not dpkg installation, physical Tray or ordinary field acceptance.
+  SHA256 .deb: 5d27530277db758ca03d8f58816a24b8b584a78a541bd09aa1418e1890e8182e;
+  AppImage: e2e364a545fe00bf9b234441c6e1c99a622a543bb98bd304dd711a043a43d434.
+  Draft PR30 contains this integration; integrated CI 39757127469 was last
+  observed in progress. No fresh build-tool download was needed.
   PR29 CI 39752523899 at 6a6e11c is confirmed successful on both OS: Windows
   installer creation, install/launch/uninstall and native probe all pass; Linux
   CTest, UI and controlled GTK probes pass. No binary release/install is claimed.
