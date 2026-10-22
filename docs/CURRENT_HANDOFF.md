@@ -9,6 +9,22 @@ production release or local installation has been accepted.
 
 ## Current resumed work
 
+- **Preview delivery accepted, 2026-10-22:** user asked to accept the current
+  result and reach a usable outcome quickly. Installed the tested AppImage for
+  this account at /home/debian/.local/opt/reword/reword-0.1.0-preview.AppImage,
+  SHA256 e2e364a545fe00bf9b234441c6e1c99a622a543bb98bd304dd711a043a43d434.
+  Reword Preview desktop launcher validates and uses extract-and-run. No
+  autostart or system-wide package changes. Installed binary launches on the
+  host display with temporary data/private D-Bus and exits 0 for --smoke-test.
+  Windows installer artifact 12415994422 from integrated CI 39757127469 is linked
+  in docs/TRY_REWORD.md; no stable release is claimed.
+  Local packaged active test reached 73.685 s, then failed resource-budget:
+  app CPU 14.18%, helper 4.11%, zero swap; eight live first/second/third/Undo
+  sequences, 117 selected corrections/history inserts, six full cycles.
+  Word p95 upper bound 33.2 ms, 16 samples. No forced process cleanup in the
+  workload, but outer temporary-directory cleanup hit a stale portal FUSE mount
+  (ENOTCONN). Both CPU and outer cleanup remain follow-up work; no thresholds
+  were relaxed. Report: .deps/usable-local-active-120-font-control/report.json.
 - **Usable-build integration, 2026-10-22:** the user resumed after pausing and
   asked to prioritize a usable, stable build for Windows and this Debian host.
   Current branch codex/usable-build-integration contains PR29 plus the separately

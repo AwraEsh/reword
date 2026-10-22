@@ -10,8 +10,9 @@ selected text, undo the change, or copy the original from local history.
 
 ## Development status
 
-Reword is under active development and is not ready for everyday use. Desktop
-integration, packaging and compatibility testing are still being worked on.
+Reword is available as a development preview. See
+[Try Reword Preview](docs/TRY_REWORD.md) for the Windows download, local Linux
+installation and current limits. The final stable release is still being tested.
 
 The target platforms are Windows 10/11 and Debian-based Linux. X11 uses AT-SPI;
 Wayland integration requires Fcitx5. Coverage varies by application, and fields
