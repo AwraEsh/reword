@@ -45,3 +45,16 @@ the delivery callback runs (expected cancellation before delivery). No skips.
 Keep this RED until the protocol gives each operation an epoch and validates
 cancellation before authorizing a write. Also test delayed cancellation across
 consecutive operations and the actual addon no-write/history invariant.
+
+Both findings now have observed local REDs: coalesced delivery loses Cancel;
+endingOperationMustDrainDelayedCancellationBeforeRestart fails because ready()
+returns true before the server confirms the operation has ended. The working
+fix uses ordered end acknowledgement (DONE) as a quiescence barrier rather than
+operation epochs: ready()/beginOperation refuse until DONE, which follows every
+server-side cancellation for the ended operation on the same stream. Late Cancel
+while ending is ignored. Client delivery callbacks run only after parsing all
+available response tokens, including waiting for a fragmented trailing token.
+The recovery suite passes in 6.48 seconds, including coalesced and fragmented
+Cancel and the consecutive-operation barrier regression. Addon/UI relink and
+focused verification are running; full verification and renewed review remain
+pending. This revision has not been pushed.

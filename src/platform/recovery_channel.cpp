@@ -220,6 +220,8 @@ void RecoveryServer::read(QLocalSocket *socket) {
             setOperation(socket, tag == "RWB1");
             if (!self)
                 return;
+            if (tag == "RWE1" && peers_.contains(socket))
+                socket->write("DONE"); // Ordered after every cancellation for this operation.
         } else if (tag == "RWS1") {
             // Read-only delivery counter for local diagnostics; never return passage text.
             peer.buffer.remove(0, 4);
@@ -313,7 +315,7 @@ bool RecoveryClient::active() const {
            (stage_ == Stage::Ready || stage_ == Stage::AwaitingAck);
 }
 bool RecoveryClient::ready() const {
-    return active() && stage_ == Stage::Ready && current_.isEmpty() && pending_.isEmpty();
+    return active() && !ending_ && stage_ == Stage::Ready && current_.isEmpty() && pending_.isEmpty();
 }
 void RecoveryClient::connectNow() {
     if (!running_ || socket_.state() != QLocalSocket::UnconnectedState)
@@ -333,6 +335,7 @@ void RecoveryClient::reset() {
     current_.clear();
     pending_.clear();
     operation_ = false;
+    ending_ = acknowledged_ = false;
     socket_.abort();
     QPointer<RecoveryClient> self(this);
     if (wasActive)
@@ -351,7 +354,7 @@ bool RecoveryClient::write(QByteArray frame) {
     return true;
 }
 bool RecoveryClient::submit(const QString &a, const QString &b) {
-    if (!active())
+    if (!active() || ending_)
         return false;
     auto frame = encodeRecovery(a, b);
     if (frame.isEmpty())
@@ -378,6 +381,8 @@ bool RecoveryClient::endOperation() {
     if (!operation_)
         return false;
     operation_ = false;
+    ending_ = true;
+    deadline_.start();
     if (!active() || socket_.write("RWE1") < 0) {
         reset();
         return false;
@@ -403,6 +408,8 @@ void RecoveryClient::read() {
                 if (!self)
                     return;
             }
+        } else if (token == "DONE" && ending_ && active()) {
+            ending_ = false;
         } else if (stage_ == Stage::Greeting && token == "RWR1") {
             deadline_.stop();
             stage_ = Stage::Ready;
@@ -410,24 +417,29 @@ void RecoveryClient::read() {
             emit activeChanged(true);
             if (!self)
                 return;
-        } else if (stage_ == Stage::AwaitingAck && token == "OKAY") {
-            current_.clear();
-            deadline_.stop();
-            stage_ = Stage::Ready;
-            QPointer<RecoveryClient> self(this);
-            emit delivered();
-            if (!self)
-                return;
-            if (stage_ == Stage::Ready && active() && !pending_.isEmpty()) {
-                auto frame = std::exchange(pending_, {});
-                write(std::move(frame));
-            }
+        } else if (stage_ == Stage::AwaitingAck && token == "OKAY" && !acknowledged_) {
+            acknowledged_ = true;
         } else {
             reset();
             return;
         }
     }
-    if (response_.isEmpty() && stage_ == Stage::Ready)
+    // Process all available cancellation tokens before a delivery callback can
+    // authorize a native write. A partial token keeps the delivery pending.
+    if (response_.isEmpty() && acknowledged_) {
+        acknowledged_ = false;
+        current_.clear();
+        stage_ = Stage::Ready;
+        QPointer<RecoveryClient> self(this);
+        emit delivered();
+        if (!self)
+            return;
+        if (stage_ == Stage::Ready && active() && !ending_ && !pending_.isEmpty()) {
+            auto frame = std::exchange(pending_, {});
+            write(std::move(frame));
+        }
+    }
+    if (response_.isEmpty() && stage_ == Stage::Ready && !ending_)
         deadline_.stop();
 }
 } // namespace reword

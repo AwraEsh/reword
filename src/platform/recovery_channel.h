@@ -54,7 +54,7 @@ class RecoveryClient final : public QObject {
     QString endpoint_;
     QByteArray response_, current_, pending_;
     Stage stage_ = Stage::None;
-    bool running_ = false, operation_ = false;
+    bool running_ = false, operation_ = false, ending_ = false, acknowledged_ = false;
     void connectNow();
     void read();
     void reset();

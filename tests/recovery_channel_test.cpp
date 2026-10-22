@@ -23,7 +23,37 @@ class RecoveryChannelTest : public QObject {
         QCOMPARE(socket.readAll(), QByteArray("RWR1"));
     }
   private slots:
+    void endingOperationMustDrainDelayedCancellationBeforeRestart() {
+        QTemporaryDir data;
+        QLocalServer server;
+        QVERIFY(server.listen(recoveryEndpoint(data.path())));
+        RecoveryClient client;
+        client.start(data.path());
+        QTRY_VERIFY(server.hasPendingConnections());
+        auto peer = server.nextPendingConnection();
+        QTRY_COMPARE(peer->bytesAvailable(), qint64(4));
+        QCOMPARE(peer->readAll(), QByteArray("RWH1"));
+        peer->write("RWR1");
+        QTRY_VERIFY(client.ready());
+        QSignalSpy cancelled(&client, &RecoveryClient::cancelRequested);
+        QVERIFY(client.beginOperation());
+        QVERIFY(client.endOperation());
+        QVERIFY(!client.ready());
+        QVERIFY(!client.beginOperation());
+        peer->write("CNCLDONE");
+        QTRY_VERIFY(client.ready());
+        QCOMPARE(cancelled.count(), 0);
+        QVERIFY(client.beginOperation());
+        peer->write("CNCL");
+        QTRY_COMPARE(cancelled.count(), 1);
+    }
+    void cancellationPrecedesCoalescedDelivery_data() {
+        QTest::addColumn<bool>("fragmented");
+        QTest::newRow("coalesced") << false;
+        QTest::newRow("fragmented-cancel") << true;
+    }
     void cancellationPrecedesCoalescedDelivery() {
+        QFETCH(bool, fragmented);
         QTemporaryDir data;
         QLocalServer server;
         QVERIFY(server.listen(recoveryEndpoint(data.path())));
@@ -43,7 +73,13 @@ class RecoveryChannelTest : public QObject {
             order << "delivered";
             client.endOperation();
         });
-        peer->write("OKAYCNCL");
+        if (fragmented) {
+            peer->write("OKAYCN");
+            QTest::qWait(30);
+            QVERIFY(order.isEmpty());
+            peer->write("CL");
+        } else
+            peer->write("OKAYCNCL");
         QTRY_COMPARE(order.size(), 2);
         QCOMPARE(order, QStringList({"cancel", "delivered"}));
     }
