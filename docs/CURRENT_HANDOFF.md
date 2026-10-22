@@ -232,6 +232,22 @@ Physical desktop/scaling/tray and full product acceptance remain open. Local
 compilation and Qt workloads remain suspended after the two host freezes.
 The older narrative below is historical evidence, not current release approval.
 
+## Workload investigation checkpoint — 2026-10-21
+
+The user resumed work. PR20's two-hour run 39394646024 FAILED after 1,819.969
+seconds at the second live retry attempt (634/633/633 first/second/third counts),
+after 632 sustained cycles. Helper shutdown needed escalation. The preflight
+passed; long duration acceptance remains open. Reports are preserved in ignored
+.deps/hosted-active-2h-0fd1f2e. Do not transfer partial latency/resource results
+into a two-hour success claim.
+
+Keyboard-review now holds codex/active-workload-diagnostics based on ef5db74,
+with bounded content-free attempt diagnostics and two tiny tests. All 18 existing
+active-stability fixtures and both new cases pass under resource limits. Hosted
+verification and an instrumented rerun are pending. Production correction logic,
+delays, assertions and budgets are unchanged. Main develop remains 15e8ad5;
+PR20–23 remain drafts. Local C++/Qt/heavy workloads remain suspended.
+
 The approved scope is in [REQUIREMENTS.md](REQUIREMENTS.md). The repository is
 intentionally public at the user's later request. Do not change visibility back
 to private. Keep runtime data, local captures, dependencies and build outputs out

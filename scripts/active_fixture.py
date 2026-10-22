@@ -6,6 +6,14 @@ import time
 from stability_evidence import FixtureProtocol, WorkloadFailure, wait_until
 
 
+def live_observation(actual, changes, before):
+    """Describe only fixed synthetic states and numeric events, never content."""
+    states = {'teh ': 'original', 'the ': 'corrected', '': 'empty', 'reset ': 'reset'}
+    current = [value for value in changes if value[0] > before]
+    return {'characters': len(actual), 'fixtureState': states.get(actual, 'other'),
+            'changeCount': len(current), 'recentChanges': [list(value) for value in current[-12:]]}
+
+
 class FixtureClient:
     def __init__(self, process, tick=None, cancelled=None):
         self.process = process

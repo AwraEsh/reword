@@ -16,7 +16,7 @@ import time
 from contextlib import closing
 
 from active_desktop import OwnedDesktop
-from active_fixture import FixtureClient
+from active_fixture import FixtureClient, live_observation
 from active_cleanup import cleanup_owned
 from active_history import HistoryCheck
 from process_metrics import read_child_pids
@@ -170,13 +170,23 @@ def run_owned(args):
         settle()
         for attempt in (1, 2, 3):
             before = client.protocol.changes[-1][0] if client.protocol.changes else 0
+            metadata['stage'] = 'live-' + str(attempt)
+            metadata['liveAttempt'] = {'number': attempt, 'beforeSequence': before,
+                                       'startedSeconds': round(time.monotonic() - started, 6)}
             desktop.type_mistake()
             if attempt == 2:
                 settle(.3)
-                evidence.expect_text('teh ', client.snapshot())
+                actual = client.snapshot()
+                metadata['liveAttempt']['observation'] = live_observation(
+                    actual, client.protocol.changes, before)
+                metadata['liveAttempt']['observedSeconds'] = round(time.monotonic() - started, 6)
+                evidence.expect_text('teh ', actual)
                 evidence.counter('live-second')
             else:
                 client.wait_text('the ')
+                metadata['liveAttempt']['observation'] = live_observation(
+                    'the ', client.protocol.changes, before)
+                metadata['liveAttempt']['observedSeconds'] = round(time.monotonic() - started, 6)
                 changes = [value for value in client.protocol.changes if value[0] > before]
                 # Four real GTK key edits end at the word boundary; subsequent
                 # changes belong to the verified native correction.
@@ -187,6 +197,7 @@ def run_owned(args):
             if attempt != 3:
                 client.command('text:')
                 settle()
+        metadata['stage'] = 'live-undo'
         desktop.shortcut('undo')
         client.wait_text('teh ')
         evidence.counter('live-undo')
