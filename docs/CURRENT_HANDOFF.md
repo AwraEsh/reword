@@ -25,9 +25,15 @@ production release or local installation has been accepted.
   AppImage: e2e364a545fe00bf9b234441c6e1c99a622a543bb98bd304dd711a043a43d434.
   Draft PR30 contains this integration; integrated CI 39757127469 at de6ac2e
   is confirmed successful on Linux and Windows. No fresh build-tool download
-  was needed. A bounded local 120-second owned-X11 packaged workload is running
-  with the existing .deps/native-x11/root tools; the initial attempt stopped
-  before starting because those tools were absent from PATH.
+  was needed. The bounded local 120-second owned-X11 attempt did not reach the
+  workload. Initial startup lacked rootless tool PATH; adding it exposed missing
+  Openbox resource lookup. Adding native-x11/root/usr/share to XDG_DATA_DIRS
+  starts the desktop, but fixture_timing_probe fails its existing 10-second
+  synthetic watchdog (child alive, one stream). Logs also show private-session
+  GNOME screensaver activation/JIT failures under the address-space cap.
+  Root cause of fixture startup remains unproven; do not count this as packaged
+  typing acceptance or relax the fixture assertion. Receipt:
+  .deps/usable-local-active-120-datadir.log. No user application was targeted.
   PR29 CI 39752523899 at 6a6e11c is confirmed successful on both OS: Windows
   installer creation, install/launch/uninstall and native probe all pass; Linux
   CTest, UI and controlled GTK probes pass. No binary release/install is claimed.
