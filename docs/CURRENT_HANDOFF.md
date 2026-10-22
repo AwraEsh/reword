@@ -34,6 +34,15 @@ production release or local installation has been accepted.
   Root cause of fixture startup remains unproven; do not count this as packaged
   typing acceptance or relax the fixture assertion. Receipt:
   .deps/usable-local-active-120-datadir.log. No user application was targeted.
+  Follow-up: removing only RLIMIT_AS (retaining aggregate 1200 MiB/no-swap/CPU
+  caps) removes the private-session JIT error but fixture watchdog still fails.
+  Therefore virtual-address exhaustion does not explain the fixture timeout.
+  A connect/poll/futex-only strace reproduces it and shows the owned GTK fixture
+  in repeated 25 ms main-loop polls until the probe terminates it, not simply
+  blocked in process startup. Build fixture strings include lifetime/timing
+  options. Next inspect its synthetic stdin/timer dispatch before changing any
+  watchdog duration. Ignored receipts: usable-fixture-no-address-cap.log and
+  usable-fixture-startup.trace under .deps.
   PR29 CI 39752523899 at 6a6e11c is confirmed successful on both OS: Windows
   installer creation, install/launch/uninstall and native probe all pass; Linux
   CTest, UI and controlled GTK probes pass. No binary release/install is claimed.
