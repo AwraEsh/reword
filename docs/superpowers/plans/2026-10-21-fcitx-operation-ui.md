@@ -61,3 +61,15 @@ fcitx_state 17.22 s, ui 12.64 s; total 36.39 s, zero failed targets.
 Full verification and renewed independent review remain pending. The existing
 reviewer has been asked to inspect fd31520..b603bed without builds or edits.
 This revision has not been pushed.
+
+Follow-up review found that the first barrier guarded restart only: an exact
+four-byte OKAY read still authorized writing before Cancel in a later read.
+deliveryWaitsForServerBarrierAcrossSeparateReads reproduces that RED (delivery
+count 1, expected 0). The revised client requests operation closure after OKAY,
+continues accepting cancellation while delivery is pending, and emits delivered
+only after ordered DONE. Recovery passes in 6.71 seconds with this revision.
+The UI fixture also waits for client.ready() before a consecutive operation,
+since server Busy clearing precedes DONE reception. Addon/UI relink and focused
+tests are running; this revision still needs full verification and review.
+The preceding source did pass all 12 tests in 86.96 seconds; that result does
+not cover this later barrier change.

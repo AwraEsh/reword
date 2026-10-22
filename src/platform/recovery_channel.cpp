@@ -402,7 +402,7 @@ void RecoveryClient::read() {
         response_.remove(0, 4);
         if (token == "CNCL" &&
             (stage_ == Stage::Ready || stage_ == Stage::AwaitingAck)) {
-            if (operation_) {
+            if (operation_ || acknowledged_) {
                 QPointer<RecoveryClient> self(this);
                 emit cancelRequested();
                 if (!self)
@@ -419,6 +419,10 @@ void RecoveryClient::read() {
                 return;
         } else if (stage_ == Stage::AwaitingAck && token == "OKAY" && !acknowledged_) {
             acknowledged_ = true;
+            // Close the server's cancellable operation before authorizing a
+            // native write. DONE follows every Cancel queued before closure.
+            if (operation_ && !endOperation())
+                return;
         } else {
             reset();
             return;
@@ -426,7 +430,7 @@ void RecoveryClient::read() {
     }
     // Process all available cancellation tokens before a delivery callback can
     // authorize a native write. A partial token keeps the delivery pending.
-    if (response_.isEmpty() && acknowledged_) {
+    if (response_.isEmpty() && acknowledged_ && !ending_) {
         acknowledged_ = false;
         current_.clear();
         stage_ = Stage::Ready;

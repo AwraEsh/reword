@@ -254,6 +254,7 @@ class UiTest : public QObject {
         QTRY_VERIFY(!controller.busy());
         QTRY_VERIFY(!cancel->isVisible());
         controller.pause(0);
+        QTRY_VERIFY(addon.ready());
         QVERIFY(addon.beginOperation());
         QTRY_VERIFY(controller.busy());
         controller.pause(-1);

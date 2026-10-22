@@ -23,6 +23,31 @@ class RecoveryChannelTest : public QObject {
         QCOMPARE(socket.readAll(), QByteArray("RWR1"));
     }
   private slots:
+    void deliveryWaitsForServerBarrierAcrossSeparateReads() {
+        QTemporaryDir data;
+        QLocalServer server;
+        QVERIFY(server.listen(recoveryEndpoint(data.path())));
+        RecoveryClient client;
+        client.start(data.path());
+        QTRY_VERIFY(server.hasPendingConnections());
+        auto peer = server.nextPendingConnection();
+        QTRY_COMPARE(peer->bytesAvailable(), qint64(4));
+        QCOMPARE(peer->readAll(), QByteArray("RWH1"));
+        peer->write("RWR1");
+        QTRY_VERIFY(client.ready());
+        QVERIFY(client.beginOperation());
+        QVERIFY(client.submit("original", "result"));
+        QSignalSpy delivered(&client, &RecoveryClient::delivered);
+        QSignalSpy cancelled(&client, &RecoveryClient::cancelRequested);
+        peer->write("OKAY");
+        QTest::qWait(30);
+        QCOMPARE(delivered.count(), 0);
+        peer->write("CNCL");
+        QTRY_COMPARE(cancelled.count(), 1);
+        QCOMPARE(delivered.count(), 0);
+        peer->write("DONE");
+        QTRY_COMPARE(delivered.count(), 1);
+    }
     void endingOperationMustDrainDelayedCancellationBeforeRestart() {
         QTemporaryDir data;
         QLocalServer server;
@@ -77,9 +102,9 @@ class RecoveryChannelTest : public QObject {
             peer->write("OKAYCN");
             QTest::qWait(30);
             QVERIFY(order.isEmpty());
-            peer->write("CL");
+            peer->write("CLDONE");
         } else
-            peer->write("OKAYCNCL");
+            peer->write("OKAYCNCLDONE");
         QTRY_COMPARE(order.size(), 2);
         QCOMPARE(order, QStringList({"cancel", "delivered"}));
     }
