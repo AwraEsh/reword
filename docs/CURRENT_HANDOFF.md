@@ -13,7 +13,10 @@ production release or local installation has been accepted.
   asked to prioritize a usable, stable build for Windows and this Debian host.
   Current branch codex/usable-build-integration contains PR29 plus the separately
   verified populated-list UI branch (PR22) and workload diagnostics (PR24), merged
-  without conflicts. A serial resource-bounded complete build/CTest is running.
+  without conflicts. Complete serial bounded build succeeds; all 13 CTest
+  targets pass in 119.78 seconds at 672650b. Local .deb/AppImage staging is
+  running using the existing toolchain and appimagetool, with runtime provenance
+  and host-addon dependency auditing enabled. No fresh tool download is needed.
   PR29 CI 39752523899 at 6a6e11c is confirmed successful on both OS: Windows
   installer creation, install/launch/uninstall and native probe all pass; Linux
   CTest, UI and controlled GTK probes pass. No binary release/install is claimed.
