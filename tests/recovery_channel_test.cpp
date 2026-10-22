@@ -23,6 +23,30 @@ class RecoveryChannelTest : public QObject {
         QCOMPARE(socket.readAll(), QByteArray("RWR1"));
     }
   private slots:
+    void cancellationPrecedesCoalescedDelivery() {
+        QTemporaryDir data;
+        QLocalServer server;
+        QVERIFY(server.listen(recoveryEndpoint(data.path())));
+        RecoveryClient client;
+        client.start(data.path());
+        QTRY_VERIFY(server.hasPendingConnections());
+        auto peer = server.nextPendingConnection();
+        QTRY_COMPARE(peer->bytesAvailable(), qint64(4));
+        QCOMPARE(peer->readAll(), QByteArray("RWH1"));
+        peer->write("RWR1");
+        QTRY_VERIFY(client.ready());
+        QVERIFY(client.beginOperation());
+        QVERIFY(client.submit("original", "result"));
+        QStringList order;
+        connect(&client, &RecoveryClient::cancelRequested, this, [&] { order << "cancel"; });
+        connect(&client, &RecoveryClient::delivered, this, [&] {
+            order << "delivered";
+            client.endOperation();
+        });
+        peer->write("OKAYCNCL");
+        QTRY_COMPARE(order.size(), 2);
+        QCOMPARE(order, QStringList({"cancel", "delivered"}));
+    }
     void crossAccountServerNeverReceivesGreeting() {
 #ifdef _WIN32
         QSKIP("The isolated foreign-UID server probe is Linux-only.");

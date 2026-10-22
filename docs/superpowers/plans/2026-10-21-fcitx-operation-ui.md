@@ -30,3 +30,18 @@ The protocol must not accept an unauthenticated peer, add network access, expose
 passage text in status messages, or claim ordinary GNOME Wayland acceptance from
 owned fixtures. Cancellation is cooperative; the UI remains Busy until the
 worker reaches a terminal result.
+
+## Review checkpoint, 2026-10-22
+
+Implementation fd31520 builds locally and passes all 12 registered CTest targets
+in 182.13 seconds with bounded serial software rendering. This is not acceptance:
+independent review found two important cancellation races. Coalesced OKAY/CNCL
+can deliver and commit before processing cancellation; an unscoped delayed CNCL
+can cancel the next operation. The branch has not been pushed.
+
+The real local socket regression cancellationPrecedesCoalescedDelivery reproduces
+the first finding: two setup/cleanup cases pass, the regression fails because only
+the delivery callback runs (expected cancellation before delivery). No skips.
+Keep this RED until the protocol gives each operation an epoch and validates
+cancellation before authorizing a write. Also test delayed cancellation across
+consecutive operations and the actual addon no-write/history invariant.
