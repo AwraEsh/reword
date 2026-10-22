@@ -23,8 +23,11 @@ production release or local installation has been accepted.
   This is not dpkg installation, physical Tray or ordinary field acceptance.
   SHA256 .deb: 5d27530277db758ca03d8f58816a24b8b584a78a541bd09aa1418e1890e8182e;
   AppImage: e2e364a545fe00bf9b234441c6e1c99a622a543bb98bd304dd711a043a43d434.
-  Draft PR30 contains this integration; integrated CI 39757127469 was last
-  observed in progress. No fresh build-tool download was needed.
+  Draft PR30 contains this integration; integrated CI 39757127469 at de6ac2e
+  is confirmed successful on Linux and Windows. No fresh build-tool download
+  was needed. A bounded local 120-second owned-X11 packaged workload is running
+  with the existing .deps/native-x11/root tools; the initial attempt stopped
+  before starting because those tools were absent from PATH.
   PR29 CI 39752523899 at 6a6e11c is confirmed successful on both OS: Windows
   installer creation, install/launch/uninstall and native probe all pass; Linux
   CTest, UI and controlled GTK probes pass. No binary release/install is claimed.
