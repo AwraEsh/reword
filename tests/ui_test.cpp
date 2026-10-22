@@ -227,6 +227,43 @@ class UiTest : public QObject {
         QCOMPARE(adapter->writes.load(), mode == "apply" ? 1 : 0);
         QCOMPARE(controller.history().size(), mode == "apply" ? 1 : 0);
     }
+    void fcitxSelectionExposesBusyAndCancel() {
+        QTemporaryDir data;
+        reword::Controller controller(data.path(), nullptr,
+                                      std::make_unique<UiMetadataAdapter>());
+        reword::RecoveryClient addon;
+        QSignalSpy cancelled(&addon, &reword::RecoveryClient::cancelRequested);
+        addon.start(data.path());
+        QTRY_VERIFY(addon.ready());
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto cancel = engine.rootObjects().first()->findChild<QQuickItem *>("cancelCorrection");
+        QVERIFY(cancel);
+        QVERIFY(!controller.busy());
+
+        QVERIFY(addon.beginOperation());
+        QTRY_VERIFY(controller.busy());
+        QTRY_VERIFY(cancel->isVisible());
+        QVERIFY(QMetaObject::invokeMethod(cancel, "clicked", Qt::DirectConnection));
+        QTRY_COMPARE(cancelled.count(), 1);
+        QVERIFY(controller.busy()); // Cancellation remains cooperative.
+        QVERIFY(cancel->isVisible());
+        QVERIFY(addon.endOperation());
+        QTRY_VERIFY(!controller.busy());
+        QTRY_VERIFY(!cancel->isVisible());
+        controller.pause(0);
+        QTRY_VERIFY(addon.ready());
+        QVERIFY(addon.beginOperation());
+        QTRY_VERIFY(controller.busy());
+        controller.pause(-1);
+        QTRY_COMPARE(cancelled.count(), 2);
+        QVERIFY(controller.busy());
+        QVERIFY(addon.endOperation());
+        QTRY_VERIFY(!controller.busy());
+        QVERIFY(controller.history().isEmpty());
+    }
     void oneUpdateSharesSettingsAcrossBindings() {
         QTemporaryDir data;
         SettingsReadController controller(data.path());

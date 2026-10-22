@@ -1,4 +1,4 @@
-# Current handoff — 2026-10-21
+# Current handoff — 2026-10-22
 
 The user explicitly resumed work on 2026-10-21. The full product goal is active.
 After two unexplained host freezes, local C++/Qt work has resumed only as serial,
@@ -9,6 +9,18 @@ production release or local installation has been accepted.
 
 ## Current resumed work
 
+- **Fcitx operation UI:** current storage-access branch is
+  codex/fcitx-operation-ui, stacked on PR28 at 512c0d4. Initial lifecycle/Cancel
+  implementation fd31520 passed 12 CTest targets but independent review found
+  two cancellation races. Real socket REDs reproduce coalesced cancellation
+  loss, premature restart, and later-read cancellation after a complete ACK.
+  Revised f72ee2f requests server closure after ACK and waits for ordered DONE
+  before authorizing native writes; pending cancellation is processed first.
+  Restart also waits for closure, so an old Cancel cannot target the next job.
+  Recovery/Fcitx/UI pass in 36.52 s; follow-up review reports no remaining
+  Important or Critical findings. Final full build succeeds and all 12 CTest
+  targets pass in 88.47 s at the same production source. Windows CI remains
+  pending. See the operation UI plan for exact regression evidence.
 - **PR26, operation deadline:** storage-access now holds
   codex/fcitx-operation-deadline based on verified PR25 checkpoint 55aed4f.
   Test-only c4cc5cb accepts the real shortcut/field/operation lock, then delays
@@ -53,14 +65,10 @@ production release or local installation has been accepted.
   RED reproduced missing busy on both OS. The first fix then exposed an
   ambiguous test lookup of dialog Cancel buttons; unique workspace selection
   resolved it. No local C++/Qt workload ran.
-- **Remaining operation UI gap:** PR27 closes the X11/Windows Service path.
-  Fcitx's recovery channel still carries passages without job lifecycle/cancel
-  coordination; that separate path still needs implementation and real tests.
-- **Fcitx recovery follow-up:** selected originals are submitted to GUI recovery
-  only after surrounding-text confirmation. Audit/reproduce loss of copyable
-  original on an unconfirmed native write or delivery interruption. Preserve
-  history's confirmed-write rule; do not mark this safety requirement accepted
-  solely from Service's earlier recovery-before-write tests.
+- **Operation UI acceptance:** PR27 closes the X11/Windows Service path.
+  Fcitx lifecycle/Cancel implementation is now under final verification above;
+  ordinary Wayland desktop acceptance remains separate. PR28 addresses original
+  delivery before native writes while preserving confirmed-write-only history.
 - **PR25, Fcitx:** real six-case RED at d1e70c7/run 39538586697 confirms retained
   owner job text on unsafe observation. Scoped reset 7ad9a99 passes the complete
   Linux/Windows run 39539160624 and independent static review. Worker/future and

@@ -34,6 +34,12 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
     recoveryServer_ = new RecoveryServer(this);
     connect(recoveryServer_, &RecoveryServer::passage, this,
             [this](QString original, QString corrected) { rememberPassage(original, corrected); });
+    connect(recoveryServer_, &RecoveryServer::operationActive, this, [this](bool active) {
+        fcitxBusy_ = active;
+        if (!active && notice_ == "Cancelling…")
+            notice_.clear();
+        emit updated();
+    });
     if (!recoveryServer_->listen(directory) &&
         qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland")
         notice_ =
@@ -259,8 +265,10 @@ void Controller::consent(QString decision) {
 }
 void Controller::pause(int minutes) {
     guard([&] {
-        if (minutes != 0)
+        if (minutes != 0) {
             service_->cancel();
+            recoveryServer_->cancelOperations();
+        }
         store_.pause(minutes);
         refreshTray();
         emit updated();
@@ -320,6 +328,7 @@ void Controller::recordApplied(QString original, QString corrected) {
 }
 void Controller::cancel() {
     service_->cancel();
+    recoveryServer_->cancelOperations();
     notice_ = "Cancelling…";
     emit updated();
 }
