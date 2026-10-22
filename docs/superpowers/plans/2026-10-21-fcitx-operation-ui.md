@@ -73,3 +73,9 @@ since server Busy clearing precedes DONE reception. Addon/UI relink and focused
 tests are running; this revision still needs full verification and review.
 The preceding source did pass all 12 tests in 86.96 seconds; that result does
 not cover this later barrier change.
+
+At f72ee2f the relinked focused run passes recovery (6.65 s), fcitx_state
+(17.11 s) and ui (12.75 s), total 36.52 s. Follow-up independent static review
+reports no remaining Important or Critical findings in b603bed..f72ee2f.
+The final full build/CTest run is in progress; Windows CI and ordinary desktop
+acceptance remain separate and unproven for this branch.
