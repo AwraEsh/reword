@@ -9,6 +9,20 @@ production release or local installation has been accepted.
 
 ## Current resumed work
 
+- **Important live retry reproduction:** hidden-history workload terminates at
+  50.803 s with native-text-mismatch in live-2, not CPU budget. Second-attempt
+  observation is corrected (five change records) instead of original. Five full
+  cycles; live-first 7, second/third/Undo 6; 115 selected corrections. This
+  reproduces the earlier long-run second-attempt failure with bounded synthetic
+  diagnostics. App CPU 12.75% across only 16.08 s baseline (not comparable to a
+  completed 30 s CPU gate); zero swap, private growth -76 KiB, word p95 upper
+  bound 39.7 ms/13 samples. No forced cleanup or FUSE exception.
+  Report .deps/usable-local-active-120-hidden-history/report.json.
+  Do not replace the installed Preview or claim stability acceptance from this
+  run. Prioritize tracing Service retry reset boundaries (same-text caret
+  changes, invalid fields and post-write verification) using fixed reason codes
+  and metadata only; no text capture or assertion weakening. UI optimization
+  changes no native typing logic, so causality is not established.
 - **Hidden History regression in progress:** the real QML test observes four
   history getter calls per update while Overview is shown (expected zero).
   A plain var binding still retains Qt's reference-backed sequence and causes
