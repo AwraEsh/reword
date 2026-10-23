@@ -17,8 +17,15 @@ production release or local installation has been accepted.
   complete core suite passes in 0.91 s. --settings-read-profile is available on
   reword_performance_probe for repeatable comparisons. This is a roughly 90%
   reduction for that isolated path, not a measured 90% whole-app reduction.
-  Full relink/tests, package refresh and the identical active workload remain
-  pending. Installed Preview remains the previously tested binary.
+  Full relink succeeds; all 14 CTest targets pass in 101.55 s at 3e5193c.
+  Independent static review finds no actionable defect and confirms behavior
+  preservation and fresh cross-connection reads. An identical 120-second active
+  workload is running against a private clone of the audited AppDir with only
+  the rebuilt app/helper installed; runtime dependencies are unchanged. New app
+  SHA256 2057c227d11f5eef5d4135a1ef7d953d353f18697bb7ebfbabdc6b629bb3c5a0;
+  helper remains fb267a24a439c1782328b8c33232b55c9a9c61101740e6322d36efe55f908b97.
+  Receipt directory .deps/usable-local-active-120-settings-snapshot. Final
+  package refresh remains pending. Installed Preview is the previous binary.
 - **Test cleanup fix, 2026-10-23:** test-only owned_mounts.py reads bounded
   /proc/self/mountinfo rather than stat/ismount, so a disconnected private FUSE
   endpoint is still recognized. Only runtime/doc and runtime/gvfs beneath the
