@@ -22,6 +22,7 @@ import sys
 import sysconfig
 import tempfile
 import time
+from owned_mounts import detach_test_mounts
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE = "org.gnome.Mutter.RemoteDesktop"
@@ -54,14 +55,7 @@ def main():
             ])
             # Portals may leave private FUSE mounts after their D-Bus session ends.
             # Detach only mountpoints inside the directory created by this caller.
-            for relative in ("runtime/doc", "runtime/gvfs"):
-                mount = Path(temporary) / relative
-                if os.path.ismount(mount):
-                    tool = shutil.which("fusermount3") or shutil.which("fusermount")
-                    if not tool:
-                        raise RuntimeError("Cannot detach the private test FUSE mount.")
-                    subprocess.run([tool, "-uz", str(mount)], check=True,
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            detach_test_mounts(temporary)
             return result.returncode
     if not args.directory:
         raise RuntimeError("The private session needs its caller-owned temporary directory.")

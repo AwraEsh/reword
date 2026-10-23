@@ -34,6 +34,12 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
     recoveryServer_ = new RecoveryServer(this);
     connect(recoveryServer_, &RecoveryServer::passage, this,
             [this](QString original, QString corrected) { rememberPassage(original, corrected); });
+    connect(recoveryServer_, &RecoveryServer::operationActive, this, [this](bool active) {
+        fcitxBusy_ = active;
+        if (!active && notice_ == "Cancelling…")
+            notice_.clear();
+        emit updated();
+    });
     if (!recoveryServer_->listen(directory) &&
         qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland")
         notice_ =
@@ -42,6 +48,10 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
     service_->moveToThread(&worker_);
     connect(&worker_, &QThread::started, service_, &Service::start);
     connect(&worker_, &QThread::finished, service_, &QObject::deleteLater);
+    connect(service_, &Service::operationActive, this, [this](bool active) {
+        serviceBusy_ = active;
+        emit updated();
+    });
     connect(service_, &Service::state, this, [this](QString text, bool keys) {
         platform_ = text;
         shortcuts_ = keys;
@@ -70,12 +80,13 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
                                3000);
         emit updated();
     });
-    connect(service_, &Service::passageApplied, this,
+    connect(service_, &Service::passageRecoveryAvailable, this,
             [this](QString original, QString corrected) { rememberPassage(original, corrected); });
     connect(
         service_, &Service::result, this,
         [this](QString original, QString corrected, QString error, bool native) {
-            busy_ = false;
+            if (!native)
+                busy_ = false;
             if (!error.isEmpty())
                 notice_ = error;
             else if (native)
@@ -254,8 +265,10 @@ void Controller::consent(QString decision) {
 }
 void Controller::pause(int minutes) {
     guard([&] {
-        if (minutes != 0)
+        if (minutes != 0) {
             service_->cancel();
+            recoveryServer_->cancelOperations();
+        }
         store_.pause(minutes);
         refreshTray();
         emit updated();
@@ -268,7 +281,7 @@ void Controller::fix(QString text) {
             emit updated();
             return;
         }
-        if (busy_) {
+        if (busy()) {
             notice_ = "A correction is already running.";
             emit updated();
             return;
@@ -315,6 +328,7 @@ void Controller::recordApplied(QString original, QString corrected) {
 }
 void Controller::cancel() {
     service_->cancel();
+    recoveryServer_->cancelOperations();
     notice_ = "Cancelling…";
     emit updated();
 }

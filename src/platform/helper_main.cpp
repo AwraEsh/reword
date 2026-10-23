@@ -47,8 +47,13 @@ int main(int argc, char **argv) {
             QJsonObject result;
             try {
                 if (operation == "inspect")
-                    result = {{"field", reword::encodeField(adapter->inspect(o["read"].toBool()))}};
-                else if (operation == "changed")
+                    result = {{"field", reword::encodeField(adapter->inspect(false))}};
+                else if (operation == "read") {
+                    reword::Field expected;
+                    expected.app = o["app"].toString();
+                    expected.id = o["id"].toString();
+                    result = {{"field", reword::encodeField(adapter->readExpected(expected))}};
+                } else if (operation == "changed")
                     result = {{"changed", adapter->changed()}};
                 else if (operation == "replace") {
                     auto text = o["text"].toString();

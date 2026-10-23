@@ -440,3 +440,26 @@ remains a Draft release; matching final installers, Windows runtime/source/notic
 material and desktop/active stability acceptance remain open. The user explicitly
 requires ordinary-user documentation, a quality-gated product release and then
 installation of the accepted build on this machine.
+
+## 2026-10-20: guarded native operations and measured UI work
+
+- Hosted diagnostics attributed most of the rejected workload's CPU to the main
+  thread. A QML regression measured 37 settings reads per notification. One
+  reactive snapshot now supplies all setting rows without losing language-toggle
+  updates. Packaged run 39393887050 at 0fd1f2e passes for 120 seconds: app CPU
+  3.44% of one core; word p95 upper bound 22.4 ms. A two-hour hosted run remains
+  pending and is tied to its own exact source/package, not later changes.
+- Observed RED regressions preceded reset of transient retry/Undo state,
+  authorization of native follow-up reads, identity-bound text access, preservation
+  of selected originals before uncertain writes, and cancellation after policy
+  changes. Linux pins its AT-SPI object; Windows checks its pinned UI Automation
+  identity before requesting text.
+- Unsafe external focus cancels only the active native job. Explicit workspace
+  jobs remain independent. One monotonic ten-second deadline includes queue time
+  and is checked before computation, delivery and native write authorization.
+  Cancellation is cooperative; no secure erasure or preemptive provider guarantee.
+- Full hosted Linux/Windows runs 39397165863 and 39397184524 pass combined code
+  41939dc. Native desktop, final bundle/source/notices and release gates remain
+  open. Local heavy work remains suspended after the user's two hard freezes.
+- Populated-list UI regressions and synthetic capture review are isolated in
+  PR22. Its failures and repairs do not change stored personal/application data.

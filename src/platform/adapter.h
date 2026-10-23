@@ -6,6 +6,11 @@ class Adapter {
   public:
     virtual ~Adapter() = default;
     virtual Field inspect(bool includeText) = 0;
+    // Read only the metadata-authorized target. Implementations must compare
+    // app/field identity before requesting text; unsupported adapters refuse.
+    virtual Field readExpected(const Field &) {
+        return {};
+    }
     virtual bool changed() {
         return true;
     }

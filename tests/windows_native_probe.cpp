@@ -52,7 +52,15 @@ int main(int argc, char **argv) {
         return finish("FAIL: native fixture did not receive focus on this desktop.", 1);
     if (!field.text.isEmpty())
         return finish("FAIL: metadata inspection contained text.", 1);
-    field = adapter->inspect(true);
+    auto otherTarget = field;
+    otherTarget.id += "-different-target";
+    if (!adapter->readExpected(otherTarget).text.isEmpty())
+        return finish("FAIL: expected-target read accepted a different field.", 1);
+    otherTarget = field;
+    otherTarget.app += "-different-application";
+    if (!adapter->readExpected(otherTarget).text.isEmpty())
+        return finish("FAIL: expected-target read accepted a different application.", 1);
+    field = adapter->readExpected(field);
     if (!field.known || field.locked || !field.editable || field.text != "teh ") {
         std::cerr << "known=" << field.known << " locked=" << field.locked
                   << " editable=" << field.editable << " plain=" << field.plain

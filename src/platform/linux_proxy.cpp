@@ -66,7 +66,15 @@ class LinuxProxy final : public Adapter {
         }
     }
     Field inspect(bool text) override {
-        return decodeField(request({{"operation", "inspect"}, {"read", text}})["field"].toObject());
+        auto metadata = decodeField(request({{"operation", "inspect"}})["field"].toObject());
+        return text ? readExpected(metadata) : metadata;
+    }
+    Field readExpected(const Field &expected) override {
+        if (expected.app.isEmpty() || expected.id.isEmpty())
+            return {};
+        return decodeField(request({{"operation", "read"},
+                                    {"app", expected.app},
+                                    {"id", expected.id}})["field"].toObject());
     }
     bool changed() override {
         return request({{"operation", "changed"}})["changed"].toBool();

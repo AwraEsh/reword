@@ -15,19 +15,9 @@ import subprocess
 import sys
 import tempfile
 import time
+from owned_mounts import detach_test_mounts
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def detach_test_mounts(directory):
-    for relative in ("runtime/doc", "runtime/gvfs"):
-        mount = Path(directory) / relative
-        if os.path.ismount(mount):
-            tool = shutil.which("fusermount3") or shutil.which("fusermount")
-            if not tool:
-                raise RuntimeError("Cannot detach the private test FUSE mount.")
-            subprocess.run([tool, "-uz", str(mount)], check=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def main():

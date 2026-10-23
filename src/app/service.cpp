@@ -2,8 +2,45 @@
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QtConcurrent>
+#include <QDeadlineTimer>
+#include <QScopeGuard>
 #include <QElapsedTimer>
+#include <cstdio>
 namespace reword {
+void Service::clearJobTarget() {
+    nativeJob_ = false;
+    nativeJobApp_.clear();
+    nativeJobField_.clear();
+}
+void Service::cancelNativeJob() {
+    if (jobRunning_ && nativeJob_ && !cancel_.load())
+        cancel();
+}
+void Service::traceRetry(int reason) const {
+    if (!qEnvironmentVariableIsSet("REWORD_RETRY_DIAGNOSTICS"))
+        return;
+    QElapsedTimer clock;
+    clock.start();
+    std::fprintf(stderr, "RTRY %lld %d %d\n",
+                 static_cast<long long>(clock.msecsSinceReference()), reason, retryStart_);
+    std::fflush(stderr);
+}
+void Service::resetRetry(int reason) {
+    if (retryStart_ >= 0)
+        traceRetry(reason);
+    retry_.reset();
+    retryStart_ = -1;
+    retryPrefix_.clear();
+    retryWord_.clear();
+}
+void Service::resetObservation(int reason) {
+    previous_ = {};
+    undoAfter_ = {};
+    undoBefore_.clear();
+    undoCaret_ = 0;
+    undoPassage_ = false;
+    resetRetry(reason);
+}
 void Service::start() {
     try {
         store_ = std::make_unique<Store>(directory_);
@@ -19,6 +56,7 @@ void Service::start() {
     }
 }
 void Service::stop() {
+    const bool wasRunning = jobRunning_;
     cancel();
     if (job_) {
         job_->disconnect(this);
@@ -27,22 +65,27 @@ void Service::stop() {
         job_ = nullptr;
     }
     jobLock_.reset();
+    jobRunning_ = false;
+    clearJobTarget();
     if (timer_)
         timer_->stop();
-    previous_ = {};
-    undoAfter_ = {};
-    undoBefore_.clear();
+    resetObservation();
     adapter_.reset();
+    passageEngine_.reset();
     engine_.reset();
     store_.reset();
     shortcutSettings_.clear();
     workingShortcuts_.clear();
     shortcutsHealthy_ = false;
     shortcutRevision_ = -1;
+    if (wasRunning)
+        emit operationActive(false);
 }
-Field Service::permitted() {
+Field Service::permitted(const Field *expected) {
     auto f = adapter_->inspect(false);
     if (f.app.isEmpty())
+        return {};
+    if (expected && (f.id != expected->id || f.app != expected->app))
         return {};
     store_->discover(f.app, QFileInfo(f.app).fileName(), restrictedApp(f.app));
     if (store_->shouldAsk(f.app) && (lastAsk_ != f.app || askDate_ != QDate::currentDate())) {
@@ -53,7 +96,7 @@ Field Service::permitted() {
     Access access{store_->allowed(f.app), browserApp(f.app), store_->paused()};
     if (!safe(f, access, store_->options()))
         return {};
-    auto read = adapter_->inspect(true);
+    auto read = adapter_->readExpected(f);
     access = {store_->allowed(f.app), browserApp(f.app), store_->paused()};
     if (read.id != f.id || read.app != f.app || !safe(read, access, store_->options()))
         return {};
@@ -126,13 +169,13 @@ void Service::tick() {
             // All other policy/identity boundaries still erase observation.
             field.focused = true;
             const Access access{store_->allowed(field.app), browserApp(field.app), store_->paused()};
+            if (jobRunning_ && nativeJob_ &&
+                (!safe(field, access, store_->options()) || field.app != nativeJobApp_ ||
+                 field.id != nativeJobField_))
+                cancelNativeJob();
             if (!safe(field, access, store_->options()) || field.id != previous_.id ||
                 field.app != previous_.app) {
-                previous_ = {};
-                undoAfter_ = {};
-                undoBefore_.clear();
-                retry_.reset();
-                retryStart_ = -1;
+                resetObservation(4);
             }
             return;
         }
@@ -142,26 +185,34 @@ void Service::tick() {
         }
         if (!adapter_->changed())
             return;
-        auto f = permitted();
+        Field jobTarget;
+        jobTarget.app = nativeJobApp_;
+        jobTarget.id = nativeJobField_;
+        auto f = permitted(jobRunning_ && nativeJob_ ? &jobTarget : nullptr);
         if (f.id.isEmpty()) {
-            previous_ = {};
-            undoAfter_ = {};
-            undoBefore_.clear();
-            retry_.reset();
-            retryStart_ = -1;
+            cancelNativeJob();
+            resetObservation(5);
             return;
         }
         if (f.id != previous_.id) {
-            undoAfter_ = {};
-            undoBefore_.clear();
-            retry_.reset();
-            retryStart_ = -1;
+            resetObservation(6);
             previous_ = f;
             return;
         }
+        if (f.text == previous_.text && f.caret != previous_.caret) {
+            // Native APIs read text and caret separately. Confirm a caret-only
+            // change before erasing retry state: deletion may have completed
+            // between those reads. Reapply field and privacy guards as usual.
+            f = permitted(&f);
+            if (f.id.isEmpty()) {
+                cancelNativeJob();
+                resetObservation(5);
+                return;
+            }
+        }
         if (f.text == previous_.text) {
             if (f.caret != previous_.caret)
-                retry_.reset();
+                resetRetry(7);
             previous_ = f;
             return;
         }
@@ -171,8 +222,7 @@ void Service::tick() {
             static const QRegularExpression continued(R"([\s.,!?،؛؟]+[^\s.,!?،؛؟])");
             if (f.caret < retryStart_ || f.text.left(retryStart_) != retryPrefix_ ||
                 continued.match(f.text.mid(retryStart_, f.caret - retryStart_)).hasMatch()) {
-                retry_.reset();
-                retryStart_ = -1;
+                resetRetry(8);
             }
         }
         if (jobRunning_)
@@ -198,8 +248,7 @@ void Service::tick() {
             auto correct = engine_->word(token, o, f.text.left(start).right(128));
             if (correct == token) {
                 if (retryStart_ == start && token != retryWord_) {
-                    retry_.reset();
-                    retryStart_ = -1;
+                    resetRetry(9);
                 }
                 continue;
             }
@@ -207,7 +256,10 @@ void Service::tick() {
             retryStart_ = start;
             retryPrefix_ = f.text.left(start);
             retryWord_ = token;
-            if (!retry_.shouldCorrect(f.id, start, token, QDateTime::currentMSecsSinceEpoch()))
+            const bool correctNow = retry_.shouldCorrect(f.id, start, token,
+                                                        QDateTime::currentMSecsSinceEpoch());
+            traceRetry(correctNow ? 1 : 2);
+            if (!correctNow)
                 continue;
             QString updated = f.text;
             updated.replace(start, token.size(), correct);
@@ -217,23 +269,27 @@ void Service::tick() {
                 retry_ = savedRetry;
                 break;
             }
+            auto after = permitted(&f);
+            if (after.id != f.id || after.app != f.app || after.text != updated ||
+                after.caret != caret) {
+                resetObservation(after.id != f.id || after.app != f.app ? 10
+                                 : after.text != updated ? 11 : 12);
+                break;
+            }
             undoPassage_ = false;
             undoBefore_ = f.text;
             undoCaret_ = f.caret;
-            undoAfter_ = adapter_->inspect(true);
+            undoAfter_ = after;
             previous_ = undoAfter_;
             store_->count(token, correct, o);
             emit corrected(token, correct);
-            if (undoAfter_.id != f.id || undoAfter_.app != f.app || undoAfter_.text != updated ||
-                undoAfter_.caret != caret)
-                break;
             f = undoAfter_;
             offset += correct.size() - token.size();
         }
 
     } catch (...) {
-        previous_ = {};
-        retry_.reset();
+        cancelNativeJob();
+        resetObservation();
         emit state(lastDescription_, shortcutsHealthy_);
         emit message("An integration operation failed safely. No further edit was attempted.");
     }
@@ -254,6 +310,7 @@ void Service::runText(QString input, bool native, Field field) {
         emit result(input, input, "Reword is paused.", native);
         return;
     }
+    const QDeadlineTimer deadline(10000);
     auto operationLock = std::make_unique<QLockFile>(directory_ + "/operation.lock");
     operationLock->setStaleLockTime(15000);
     if (!operationLock->tryLock(0)) {
@@ -262,6 +319,9 @@ void Service::runText(QString input, bool native, Field field) {
     }
     jobLock_ = std::move(operationLock);
     jobRunning_ = true;
+    nativeJob_ = native;
+    nativeJobApp_ = native ? field.app : QString{};
+    nativeJobField_ = native ? field.id : QString{};
     const auto cancellation = cancellationRevision_.load();
     const auto revision = store_->value("configRevision", 0).toLongLong();
     auto options = store_->options();
@@ -270,17 +330,24 @@ void Service::runText(QString input, bool native, Field field) {
     job_ = new QFutureWatcher<Change>(this);
     connect(
         job_, &QFutureWatcher<Change>::finished, this,
-        [this, input, native, field, revision, cancellation] {
+        [this, input, native, field, revision, cancellation, deadline] {
+            // All result/message/exception exits publish completion, after the
+            // operation lock is released. A rejected competing request is not
+            // a completion of the accepted job.
+            auto activity = qScopeGuard([this] { emit operationActive(false); });
             auto operationLock = std::move(jobLock_);
             auto completed = job_;
             job_ = nullptr;
             jobRunning_ = false;
+            clearJobTarget();
             completed->deleteLater();
             try {
                 auto change = completed->result();
                 if (cancel_.load() || cancellation != cancellationRevision_.load() ||
                     store_->paused() || revision != store_->value("configRevision", 0).toLongLong())
                     change.error = "Cancelled or settings changed. Nothing was replaced.";
+                if (deadline.hasExpired())
+                    change.error = "Operation timed out. Nothing was replaced.";
                 if (!change.error.isEmpty()) {
                     emit result(input, input, change.error, native);
                     return;
@@ -294,7 +361,7 @@ void Service::runText(QString input, bool native, Field field) {
                     return;
                 }
                 try {
-                    auto current = permitted();
+                    auto current = permitted(&field);
                     if (!sameTarget(field, current)) {
                         emit message("The selection changed. Nothing was replaced.");
                         return;
@@ -302,51 +369,80 @@ void Service::runText(QString input, bool native, Field field) {
                     QString updated = field.text;
                     updated.replace(field.selectionStart, field.selectionEnd - field.selectionStart,
                                     change.corrected);
-                    if (!policyCurrent(current, revision, cancellation)) {
-                        emit message("Cancelled or settings changed. Nothing was replaced.");
+                    if (deadline.hasExpired() || !policyCurrent(current, revision, cancellation)) {
+                        emit message(deadline.hasExpired()
+                                         ? "Operation timed out. Nothing was replaced."
+                                         : "Cancelled or settings changed. Nothing was replaced.");
+                        return;
+                    }
+                    // Retain the requested original before attempting a write:
+                    // a provider can reject confirmation after changing text.
+                    emit passageRecoveryAvailable(input, change.corrected);
+                    // Signal delivery may synchronously revoke this operation.
+                    if (deadline.hasExpired() || !policyCurrent(current, revision, cancellation)) {
+                        resetObservation();
+                        emit message(deadline.hasExpired()
+                                         ? "Operation timed out. Nothing was replaced."
+                                         : "Cancelled or settings changed. Nothing was replaced.");
                         return;
                     }
                     if (!adapter_->replace(field, updated,
                                            field.selectionStart + change.corrected.size())) {
+                        resetObservation();
                         emit message(
-                            "The application did not confirm the replacement. Check its text "
-                            "before continuing.");
+                            "Replacement was not confirmed. Check the text; its original is "
+                            "available in session recovery.");
+                        return;
+                    }
+                    auto after = permitted(&field);
+                    if (after.id != field.id || after.app != field.app || after.text != updated ||
+                        after.caret != field.selectionStart + change.corrected.size() ||
+                        !policyCurrent(after, revision, cancellation)) {
+                        resetObservation();
+                        emit message("The field changed after correction. Copy the original from "
+                                     "session recovery; Undo is unavailable.");
                         return;
                     }
                     undoPassage_ = true;
                     undoBefore_ = field.text;
                     undoCaret_ = field.caret;
-                    undoAfter_ = adapter_->inspect(true);
+                    undoAfter_ = after;
                     previous_ = undoAfter_;
-                    emit passageApplied(input, change.corrected);
                     store_->history(input, change.corrected, store_->options());
                     emit result(input, change.corrected, {}, true);
                 } catch (...) {
-                    emit message("The operation stopped safely.");
+                    resetObservation();
+                    emit message("The operation stopped. Check the application's text before continuing.");
                 }
             } catch (...) {
                 emit result(input, input, "Local storage is unavailable. The operation stopped.",
                             native);
             }
         });
-    job_->setFuture(QtConcurrent::run([this, input, options, words, replacements] {
+    job_->setFuture(QtConcurrent::run([this, input, options, words, replacements, cancellation,
+                                      deadline] {
         try {
-            QElapsedTimer elapsed;
-            elapsed.start();
-            Engine engine;
-            engine.setPersonal(words, replacements);
-            return engine.text(input, options, &cancel_,
-                               std::max(qint64(0), 10000 - elapsed.elapsed()));
+            if (cancel_.load() || cancellation != cancellationRevision_.load())
+                return Change{input, input, false, "Operation cancelled. Nothing was replaced."};
+            if (deadline.hasExpired())
+                return Change{input, input, false, "Operation timed out. Nothing was replaced."};
+            if (!passageEngine_)
+                passageEngine_ = std::make_unique<Engine>();
+            passageEngine_->setPersonal(words, replacements);
+            return passageEngine_->text(input, options, &cancel_, deadline.remainingTime());
         } catch (...) {
+            passageEngine_.reset();
             return Change{input, input, false, "Correction failed. The original is unchanged."};
         }
     }));
+    emit operationActive(true);
 }
 void Service::processText(QString input) {
     try {
         runText(input, false);
     } catch (...) {
         jobRunning_ = false;
+        clearJobTarget();
         jobLock_.reset();
         emit result(input, input, "Correction could not start. Check local storage access.", false);
     }
@@ -369,7 +465,7 @@ void Service::fixSelection() {
 void Service::undo() {
     const auto cancellation = cancellationRevision_.load();
     const auto revision = store_->value("configRevision", 0).toLongLong();
-    auto f = permitted();
+    auto f = permitted(&undoAfter_);
     if (undoBefore_.isEmpty() || !sameTarget(undoAfter_, f)) {
         emit message(undoPassage_ ? "Undo is no longer safe. Copy the latest passage original from "
                                     "session recovery in Reword."
@@ -381,7 +477,14 @@ void Service::undo() {
         return;
     }
     if (adapter_->replace(f, undoBefore_, undoCaret_)) {
-        previous_ = adapter_->inspect(true);
+        auto after = permitted(&f);
+        if (after.id != f.id || after.app != f.app || after.text != undoBefore_ ||
+            after.caret != undoCaret_) {
+            resetObservation();
+            emit message("The field changed after Undo. Check the application's text.");
+            return;
+        }
+        previous_ = after;
         undoBefore_.clear();
         undoAfter_ = {};
         emit message("Correction restored.");
@@ -399,13 +502,15 @@ void Service::action(QString name) {
             store_->pause(store_->paused() ? 0 : -1);
             if (store_->paused())
                 cancel();
-            previous_ = {};
-            retry_.reset();
+            resetObservation();
             emit message(store_->paused() ? "Reword paused." : "Reword resumed.");
         }
     } catch (...) {
+        cancelNativeJob();
+        resetObservation();
         if (!job_) {
             jobRunning_ = false;
+            clearJobTarget();
             jobLock_.reset();
         }
         emit message("The operation stopped safely.");

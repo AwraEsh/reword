@@ -32,7 +32,7 @@ class Controller : public QObject {
     QString platform_ = "Checking desktop integration…", notice_, pendingId_, pendingName_;
     QVariantList queue_;
     QString recoveryOriginal_, recoveryCorrected_;
-    bool busy_ = false, shortcuts_ = false;
+    bool busy_ = false, serviceBusy_ = false, fcitxBusy_ = false, shortcuts_ = false;
     mutable bool storageFailed_ = false;
     template <class F> auto read(F getter) const {
         try {
@@ -68,8 +68,11 @@ class Controller : public QObject {
     QVariantList apps() const {
         return read([&] { return store_.applications(); });
     }
-    QVariantList history() const {
+    virtual QVariantList history() const {
         return read([&] { return store_.histories(false); });
+    }
+    Q_INVOKABLE QVariantList loadHistory() const {
+        return history();
     }
     QVariantList insights() const {
         return read([&] { return store_.statistics(); });
@@ -104,7 +107,7 @@ class Controller : public QObject {
         return pendingName_;
     }
     bool busy() const {
-        return busy_;
+        return busy_ || serviceBusy_ || fcitxBusy_;
     }
     bool dark() const {
         return read([&] { return store_.value("dark", true).toBool(); });
