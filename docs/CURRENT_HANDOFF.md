@@ -18,8 +18,13 @@ production release or local installation has been accepted.
   the four bindings. Test checks hidden reads, fresh insert visibility and
   per-update counts. Focused regression passes (3 cases incl setup/cleanup,
   zero failures/skips, 812 ms) and the complete UI CTest target passes.
-  Full application relink and workload comparison remain pending. Installed
-  Preview remains unchanged.
+  Full application relink succeeds and all 14 CTest targets pass in 92.25 s at
+  2f8a780. Follow-up independent review is running. Identical bounded 120-second
+  workload is active against .deps/hidden-history-AppDir with rebuilt binaries
+  and unchanged audited runtime. App SHA256
+  f1abc493441b41dbd1721c791b1077c11763e5ebfa729e1c7d5010839dc4fcc0;
+  receipt .deps/usable-local-active-120-hidden-history. Installed Preview is
+  unchanged until the new workload result is known.
 - **Settings workload result:** the 120-second comparison stops at 65.933 s on
   the same unchanged resource budget. App CPU 14.007%, helper 6.336%, zero swap;
   nine full cycles, 11 live first/second/third/Undo sequences, 120 selected
