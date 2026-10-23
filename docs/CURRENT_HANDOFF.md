@@ -9,6 +9,16 @@ production release or local installation has been accepted.
 
 ## Current resumed work
 
+- **Test cleanup fix, 2026-10-23:** test-only owned_mounts.py reads bounded
+  /proc/self/mountinfo rather than stat/ismount, so a disconnected private FUSE
+  endpoint is still recognized. Only runtime/doc and runtime/gvfs beneath the
+  caller-owned test directory may be detached. Shared by X11/Wayland harnesses.
+  Six unit tests pass (mount escaping, exact scope, unavailable tool, malformed
+  or oversized inventory); all 18 existing active-stability unit tests pass.
+  Actual controlled-font private-X11 fixture preflight exits 0 with the fix.
+  The old disconnected mount was no longer present for direct reproduction;
+  the ENOTCONN path is covered with a simulated kernel inventory. This changes
+  no installed application code and does not resolve the app CPU budget failure.
 - **Preview delivery accepted, 2026-10-22:** user asked to accept the current
   result and reach a usable outcome quickly. Installed the tested AppImage for
   this account at /home/debian/.local/opt/reword/reword-0.1.0-preview.AppImage,
