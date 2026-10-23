@@ -9,6 +9,16 @@ production release or local installation has been accepted.
 
 ## Current resumed work
 
+- **Settings workload result:** the 120-second comparison stops at 65.933 s on
+  the same unchanged resource budget. App CPU 14.007%, helper 6.336%, zero swap;
+  nine full cycles, 11 live first/second/third/Undo sequences, 120 selected
+  corrections/history inserts. Word p95 upper bound 34.2 ms across 22 samples.
+  Work completed faster than the preceding six-cycle partial run, but whole-app
+  CPU did not meet the 10% target. No broad CPU reduction or full stability pass
+  is claimed. Outer cleanup now completes without the previous FUSE exception.
+  Next investigate repeated hidden-page list bindings (four History reads per
+  generic updated signal) before another package/workload run. Host session is
+  confirmed X11; Fcitx is installed, but ordinary Wayland acceptance is separate.
 - **Settings-read CPU optimization, 2026-10-23:** profiling 1000 Store::options
   calls with synthetic settings took 775.477 ms CPU before and 77.196 ms after
   replacing 25 separate queries with one fixed-key SELECT per call. No cache
