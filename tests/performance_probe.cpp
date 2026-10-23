@@ -1,4 +1,6 @@
 #include "core/core.h"
+#include "core/store.h"
+#include <QTemporaryDir>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QJsonDocument>
@@ -40,6 +42,27 @@ static int passageStartupProfile() {
 }
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
+    if (app.arguments().contains("--settings-read-profile")) {
+        QTemporaryDir data;
+        if (!data.isValid())
+            return 2;
+        reword::Store store(data.path());
+        store.setValue("english", false);
+        store.setValue("maxCharacters", 999999);
+        constexpr int samples = 1000;
+        const auto started = std::clock();
+        bool correct = true;
+        for (int i = 0; i < samples; ++i) {
+            const auto options = store.options();
+            correct = correct && !options.english && options.persian &&
+                      options.maxCharacters == reword::MaxPassageCharacters;
+        }
+        const double cpu = 1000.0 * (std::clock() - started) / CLOCKS_PER_SEC;
+        std::cout << QJsonDocument(QJsonObject{{"samples", samples}, {"correct", correct},
+                                             {"optionsReadCpuMs", cpu}})
+                         .toJson(QJsonDocument::Indented).constData();
+        return correct ? 0 : 1;
+    }
     if (app.arguments().contains("--passage-startup-profile"))
         return passageStartupProfile();
     reword::Engine engine;

@@ -5,6 +5,24 @@ using namespace reword;
 class CoreTest : public QObject {
     Q_OBJECT
   private slots:
+    void optionsObserveOtherConnectionChangesWithoutCaching() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        QVERIFY(reader.options().english);
+        writer.setValue("english", false);
+        writer.setValue("persian", false);
+        writer.setValue("historyCount", 999999);
+        writer.setValue("maxCharacters", 999999);
+        auto options = reader.options();
+        QVERIFY(!options.english);
+        QVERIFY(!options.persian);
+        QCOMPARE(options.historyCount, 500);
+        QCOMPARE(options.maxCharacters, MaxPassageCharacters);
+        writer.setValue("english", true);
+        writer.setValue("historyCount", 0);
+        QVERIFY(reader.options().english);
+        QCOMPARE(reader.options().historyCount, 1);
+    }
     void oversizedOptionsDoNotBypassOperationCeiling() {
         Engine engine;
         Options options;

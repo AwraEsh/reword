@@ -9,6 +9,16 @@ production release or local installation has been accepted.
 
 ## Current resumed work
 
+- **Settings-read CPU optimization, 2026-10-23:** profiling 1000 Store::options
+  calls with synthetic settings took 775.477 ms CPU before and 77.196 ms after
+  replacing 25 separate queries with one fixed-key SELECT per call. No cache
+  survives a call; other-connection policy edits are immediately visible.
+  Added a cross-connection regression for language changes and numeric ceilings;
+  complete core suite passes in 0.91 s. --settings-read-profile is available on
+  reword_performance_probe for repeatable comparisons. This is a roughly 90%
+  reduction for that isolated path, not a measured 90% whole-app reduction.
+  Full relink/tests, package refresh and the identical active workload remain
+  pending. Installed Preview remains the previously tested binary.
 - **Test cleanup fix, 2026-10-23:** test-only owned_mounts.py reads bounded
   /proc/self/mountinfo rather than stat/ismount, so a disconnected private FUSE
   endpoint is still recognized. Only runtime/doc and runtime/gvfs beneath the

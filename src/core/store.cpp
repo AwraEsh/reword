@@ -120,6 +120,24 @@ bool Store::restoreShortcuts(const QStringList &expected, qint64 revision,
     }
 }
 Options Store::options() const {
+    QHash<QString, QVariant> settings;
+    QSqlQuery q(db_);
+    q.prepare("SELECT key,value FROM settings WHERE key IN ("
+              "'english','persian','spelling','abbreviations','capitalization',"
+              "'normalizePersian','halfSpace','periods','commas','spacing',"
+              "'paragraphPeriods','introductoryCommas','questionMarks','exclamationMarks',"
+              "'semicolons','colons','history','statistics','notifications','browsers',"
+              "'sensitivity','historyCount','historyMiB','historyDays','maxCharacters')");
+    checked(q);
+    while (q.next()) {
+        const auto array = QJsonDocument::fromJson(q.value(1).toByteArray()).array();
+        if (!array.isEmpty())
+            settings.insert(q.value(0).toString(), array.first().toVariant());
+    }
+    // Fresh on every call: policy changes from other connections remain visible.
+    const auto value = [&settings](const QString &key, const QVariant &fallback) {
+        return settings.value(key, fallback);
+    };
     Options o;
 #define BOOL(k) o.k = value(#k, o.k).toBool()
     BOOL(english);
