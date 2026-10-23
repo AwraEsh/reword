@@ -13,6 +13,11 @@ ApplicationWindow {
     title: "Reword"
     property int page: 0
     property var settingsSnapshot: Backend.settings
+    property var historySnapshot: []
+    onPageChanged: refreshHistory()
+    function refreshHistory() {
+        historySnapshot = page === 4 ? Backend.loadHistory() : [];
+    }
     property color ink: Backend.dark ? "#eef0f3" : "#202733"
     property color muted: Backend.dark ? "#929ba8" : "#647080"
     property color surface: Backend.dark ? "#191e26" : "#ffffff"
@@ -108,6 +113,7 @@ ApplicationWindow {
             }
         }
         function onUpdated() {
+            root.refreshHistory();
             root.presentPendingConsent();
         }
     }
@@ -881,13 +887,13 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Label {
                             textFormat: Text.PlainText
-                            text: Backend.history.length + " saved corrections"
+                            text: root.historySnapshot.length + " saved corrections"
                             color: root.muted
                             Layout.fillWidth: true
                         }
                         Button {
                             text: "Clear history"
-                            enabled: Backend.history.length > 0
+                            enabled: root.historySnapshot.length > 0
                             onClicked: clearDialog.open()
                         }
                     }
@@ -896,7 +902,7 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         spacing: 8
                         clip: true
-                        model: Backend.history
+                        model: root.historySnapshot
                         delegate: ItemDelegate {
                             required property var modelData
                             width: ListView.view.width
@@ -934,7 +940,7 @@ ApplicationWindow {
                         Label {
                             textFormat: Text.PlainText
                             anchors.centerIn: parent
-                            visible: Backend.history.length === 0
+                            visible: root.historySnapshot.length === 0
                             text: "No saved corrections yet."
                             color: root.muted
                         }

@@ -68,8 +68,11 @@ class Controller : public QObject {
     QVariantList apps() const {
         return read([&] { return store_.applications(); });
     }
-    QVariantList history() const {
+    virtual QVariantList history() const {
         return read([&] { return store_.histories(false); });
+    }
+    Q_INVOKABLE QVariantList loadHistory() const {
+        return history();
     }
     QVariantList insights() const {
         return read([&] { return store_.statistics(); });

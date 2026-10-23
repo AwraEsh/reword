@@ -180,9 +180,52 @@ class SettingsReadController final : public reword::Controller {
         return reword::Controller::settings();
     }
 };
+class HistoryReadController final : public reword::Controller {
+    Q_OBJECT
+  public:
+    mutable int historyReads = 0;
+    explicit HistoryReadController(const QString &directory)
+        : reword::Controller(directory, nullptr, std::make_unique<UiMetadataAdapter>()) {}
+    QVariantList history() const override {
+        ++historyReads;
+        return reword::Controller::history();
+    }
+};
 class UiTest : public QObject {
     Q_OBJECT
   private slots:
+    void hiddenHistoryDoesNotReloadOnEveryCorrection() {
+        QTemporaryDir data;
+        HistoryReadController controller(data.path());
+        controller.recordApplied("teh", "the");
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto root = engine.rootObjects().first();
+        QTest::qWait(200);
+        controller.historyReads = 0;
+        emit controller.updated();
+        QTest::qWait(50);
+        QCOMPARE(controller.historyReads, 0);
+        root->setProperty("page", 4);
+        QTRY_VERIFY(controller.historyReads > 0);
+        QTRY_COMPARE(root->property("historySnapshot").toList().size(), 1);
+        controller.recordApplied("recieve", "receive");
+        QTRY_COMPARE(root->property("historySnapshot").toList().size(), 2);
+        QSignalSpy updates(&controller, &reword::Controller::updated);
+        controller.historyReads = 0;
+        emit controller.updated();
+        QTest::qWait(50);
+        QVERIFY2(controller.historyReads <= 2 * updates.count(),
+                 qPrintable(QString("%1 history reads for %2 updates")
+                                .arg(controller.historyReads).arg(updates.count())));
+        root->setProperty("page", 0);
+        controller.historyReads = 0;
+        emit controller.updated();
+        QTest::qWait(50);
+        QCOMPARE(controller.historyReads, 0);
+    }
     void nativeSelectionExposesBusyAndCancel_data() {
         QTest::addColumn<QString>("mode");
         for (const auto mode : {"apply", "cancel", "unchanged"})

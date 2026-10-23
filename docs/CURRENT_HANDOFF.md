@@ -9,6 +9,17 @@ production release or local installation has been accepted.
 
 ## Current resumed work
 
+- **Hidden History regression in progress:** the real QML test observes four
+  history getter calls per update while Overview is shown (expected zero).
+  A plain var binding still retains Qt's reference-backed sequence and causes
+  five reads per one update on the open History page; do not accept that fix.
+  Working revision uses explicit loadHistory() returning a value list, refreshes
+  it on page changes/updates only while History is selected, and shares it among
+  the four bindings. Test checks hidden reads, fresh insert visibility and
+  per-update counts. Focused regression passes (3 cases incl setup/cleanup,
+  zero failures/skips, 812 ms) and the complete UI CTest target passes.
+  Full application relink and workload comparison remain pending. Installed
+  Preview remains unchanged.
 - **Settings workload result:** the 120-second comparison stops at 65.933 s on
   the same unchanged resource budget. App CPU 14.007%, helper 6.336%, zero swap;
   nine full cycles, 11 live first/second/third/Undo sequences, 120 selected
