@@ -12,6 +12,9 @@ using namespace reword;
 
 namespace reword {
 struct ServiceTestAccess {
+    static void tick(Service &service) {
+        service.tick();
+    }
     static bool cancellationRequested(const Service &service) {
         return service.cancel_.load();
     }
@@ -816,6 +819,39 @@ class ServiceTest : public QObject {
         QTRY_VERIFY(h.adapter->reads > before + 2);
         QCOMPARE(h.adapter->field.text, QString("teh "));
         QCOMPARE(h.adapter->writes, 1);
+        h.adapter->type("");
+        before = h.adapter->reads;
+        QTRY_VERIFY(h.adapter->reads > before + 2);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        QCOMPARE(h.adapter->writes, 2);
+    }
+    void caretConfirmationRejectsUnsafeMetadata_data() {
+        QTest::addColumn<QString>("boundary");
+        for (const auto name : {"password", "unknown", "target"})
+            QTest::newRow(name) << QString(name);
+    }
+    void caretConfirmationRejectsUnsafeMetadata() {
+        QFETCH(QString, boundary);
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        h.adapter->field.caret = 0;
+        h.adapter->onRead = [&] {
+            if (boundary == "password")
+                h.adapter->field.password = true;
+            else if (boundary == "unknown")
+                h.adapter->field.known = false;
+            else
+                h.adapter->field.id = "other-entry";
+        };
+        const auto before = h.adapter->reads;
+        ServiceTestAccess::tick(h.service);
+        QCOMPARE(h.adapter->reads, before + 1);
+        QCOMPARE(h.adapter->writes, 1);
+        QVERIFY(!ServiceTestAccess::retainsTransientText(h.service));
+        QVERIFY(h.store.histories().isEmpty());
     }
     void confirmedCaretMoveResetsRewriteCycle() {
         Harness h;

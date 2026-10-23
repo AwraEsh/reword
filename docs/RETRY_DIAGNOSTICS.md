@@ -58,4 +58,9 @@ includes both new regressions. `fcitx_state` fails the paused timer witness
 (`witnessTicks` 0 after 211 ms); a focused private-D-Bus rerun passes all five
 timer cases. Keep the original failure visible. Independent static review finds
 no actionable defect; confirmation-specific safety and third-attempt race
-coverage are useful future extensions. Installed Preview is unchanged.
+coverage were suggested. Follow-up coverage now verifies third-attempt behavior
+in the split-read sequence and rejects password/unknown/changed-target metadata
+before any confirmation text read. It asserts no extra write or history and
+cleared transient buffers. The bounded rebuild succeeds and all 15 CTest
+targets pass in 124.18 seconds. The earlier timer failure remains part of the
+record. Installed Preview is unchanged.

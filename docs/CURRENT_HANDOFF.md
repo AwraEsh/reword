@@ -9,6 +9,14 @@ production release or local installation has been accepted.
 
 ## Current resumed work
 
+- **Confirmation safety coverage completed:** the split-read regression now
+  verifies the third attempt too. New password/unknown/changed-target cases
+  switch metadata during the first snapshot, assert no second text read or
+  additional write, no history entry and no retained transient text. Serial
+  bounded rebuild succeeds; all 15 CTest targets pass in 124.18 s, including
+  Fcitx. This does not erase the previous timer witness failure. Hosted Linux
+  CI for 86705b1 succeeds; Windows result is being checked. Undo's separate
+  post-write verification failure and active-workload CPU budget remain open.
 - **Retry reset isolated, 2026-10-23:** owned numeric tracing reproduces live-2
   mismatch at 95.006 s. First correction 3218239 ms, same-text caret reset
   3218299 ms, unexpected first correction 3218510 ms. A deterministic split-read
