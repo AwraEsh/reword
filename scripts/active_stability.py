@@ -21,6 +21,7 @@ from active_cleanup import cleanup_owned
 from active_history import HistoryCheck
 from process_metrics import read_child_pids
 from main_thread_metrics import MainThreadSeries
+from retry_diagnostics import RetryDiagnostics
 
 
 def sha256(path):
@@ -62,7 +63,9 @@ def run_owned(args):
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     database = seed_database(root / 'gui-data', fixture_path, executable)
     environment = dict(os.environ, REWORD_DATA_DIR=str(database.parent), QT_QPA_PLATFORM='xcb',
-                       QT_QUICK_BACKEND='software', QT_QPA_PLATFORMTHEME='')
+                       QT_QUICK_BACKEND='software', QT_QPA_PLATFORMTHEME='',
+                       REWORD_RETRY_DIAGNOSTICS='1')
+    retry_diagnostics = RetryDiagnostics()
     evidence = Evidence()
     metadata = {'scope': 'owned-X11-development-workload',
                 'productReleaseAccepted': False,
@@ -85,13 +88,26 @@ def run_owned(args):
         previous_handlers[number] = signal.signal(number, cancel)
 
     def publish():
+        metadata['retryEvents'] = list(retry_diagnostics.events)
         if client:
             metadata['lastSnapshotCharacters'] = client.last_snapshot_characters
         write_report(output / 'report.json', {**metadata, **evidence.report(),
                      'elapsedSeconds': round(time.monotonic() - started, 3)})
 
+    def drain_diagnostics():
+        if app and app.stderr:
+            for _ in range(4):
+                try:
+                    block = os.read(app.stderr.fileno(), 4096)
+                except BlockingIOError:
+                    break
+                if not block:
+                    break
+                retry_diagnostics.feed(block)
+
     def tick(force=False):
         nonlocal last_sample
+        drain_diagnostics()
         if client:
             client.pump()
         if app and app.poll() is not None:
@@ -205,7 +221,8 @@ def run_owned(args):
     try:
         publish()
         app = subprocess.Popen([str(app_run)], env=environment, cwd=app_run.parent,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                               stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        os.set_blocking(app.stderr.fileno(), False)
         watches['app'] = ProcessWatch(app.pid, 'app')
         def find_helper():
             for pid in read_child_pids(app.pid):
@@ -306,6 +323,9 @@ def run_owned(args):
     finally:
         try:
             result = cleanup_owned(fixture, app, watches, desktop)
+            drain_diagnostics()
+            if app and app.stderr:
+                app.stderr.close()
             metadata['shutdownForced'] = result['forced']
             metadata['forcedProcesses'] = result['forcedProcesses']
             metadata['cleanupFailed'] = result['failed']

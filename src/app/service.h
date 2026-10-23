@@ -38,8 +38,9 @@ class Service : public QObject {
     std::unique_ptr<QLockFile> jobLock_;
     void clearJobTarget();
     void cancelNativeJob();
-    void resetRetry();
-    void resetObservation();
+    void traceRetry(int reason) const;
+    void resetRetry(int reason = 3);
+    void resetObservation(int reason = 3);
     void runText(QString input, bool native, Field field = {});
     void tick();
     Field permitted(const Field *expected = nullptr);

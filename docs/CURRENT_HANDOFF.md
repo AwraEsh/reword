@@ -9,6 +9,25 @@ production release or local installation has been accepted.
 
 ## Current resumed work
 
+- **Retry reset isolated, 2026-10-23:** owned numeric tracing reproduces live-2
+  mismatch at 95.006 s. First correction 3218239 ms, same-text caret reset
+  3218299 ms, unexpected first correction 3218510 ms. A deterministic split-read
+  deletion regression fails before the fix (`the ` instead of `teh `). Service
+  now confirms a caret-only observation through the same target/privacy guards
+  before resetting; a persistent caret move still resets. Build passes and
+  Service passes including both new controls. Full CTest: 14/15 pass, 115.90 s;
+  fcitx_state timerCancelsPendingJobAfterPolicyChange(paused) fails witnessTicks
+  >= 2 (observed 0 after 211 ms). Focused private-D-Bus timer control then passes
+  all 5 cases, but the initial failure remains recorded. Do not call the whole
+  suite green. Independent review finds no actionable safety/correctness defect;
+  native split-read causality remains a modeled hypothesis, not proven atomic
+  GTK evidence. Post-fix owned workload completes 12 first/second/third/Undo
+  sequences and 121 selected corrections without text mismatch, then stops at
+  resource-budget after 68.993 s (app CPU 10.070% across 32.17 s baseline,
+  helper 5.197%, zero swap, private growth 340 KiB, clean shutdown). Receipt:
+  .deps/retry-confirm-active-120/report.json. This is not a 120-second pass.
+  See RETRY_DIAGNOSTICS.md for fixed numeric event codes and prior separate
+  post-write/Undo failure. Installed Preview remains unchanged.
 - **Important live retry reproduction:** hidden-history workload terminates at
   50.803 s with native-text-mismatch in live-2, not CPU budget. Second-attempt
   observation is corrected (five change records) instead of original. Five full

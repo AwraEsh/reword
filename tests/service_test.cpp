@@ -800,6 +800,38 @@ class ServiceTest : public QObject {
         h.adapter->type("teh ");
         QTRY_COMPARE(h.adapter->field.text, QString("the "));
     }
+    void deletionDuringCaretSnapshotKeepsRewriteCycle() {
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        // Native text and caret are separate reads. Deletion can finish after
+        // the old contents were read, producing old text with the new caret.
+        h.adapter->field.caret = 0;
+        h.adapter->onRead = [&] { h.adapter->type(""); };
+        auto before = h.adapter->reads;
+        QTRY_VERIFY(h.adapter->reads > before + 2);
+        h.adapter->type("teh ");
+        before = h.adapter->reads;
+        QTRY_VERIFY(h.adapter->reads > before + 2);
+        QCOMPARE(h.adapter->field.text, QString("teh "));
+        QCOMPARE(h.adapter->writes, 1);
+    }
+    void confirmedCaretMoveResetsRewriteCycle() {
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        h.adapter->field.caret = 0;
+        auto before = h.adapter->reads;
+        QTRY_VERIFY(h.adapter->reads > before + 2);
+        h.adapter->type("");
+        before = h.adapter->reads;
+        QTRY_VERIFY(h.adapter->reads > before + 2);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        QCOMPARE(h.adapter->writes, 2);
+    }
     void staleUndoPreservesNewText() {
         Harness h;
         QTRY_VERIFY(h.adapter->reads > 0);

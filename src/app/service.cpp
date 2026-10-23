@@ -4,6 +4,8 @@
 #include <QtConcurrent>
 #include <QDeadlineTimer>
 #include <QScopeGuard>
+#include <QElapsedTimer>
+#include <cstdio>
 namespace reword {
 void Service::clearJobTarget() {
     nativeJob_ = false;
@@ -14,19 +16,30 @@ void Service::cancelNativeJob() {
     if (jobRunning_ && nativeJob_ && !cancel_.load())
         cancel();
 }
-void Service::resetRetry() {
+void Service::traceRetry(int reason) const {
+    if (!qEnvironmentVariableIsSet("REWORD_RETRY_DIAGNOSTICS"))
+        return;
+    QElapsedTimer clock;
+    clock.start();
+    std::fprintf(stderr, "RTRY %lld %d %d\n",
+                 static_cast<long long>(clock.msecsSinceReference()), reason, retryStart_);
+    std::fflush(stderr);
+}
+void Service::resetRetry(int reason) {
+    if (retryStart_ >= 0)
+        traceRetry(reason);
     retry_.reset();
     retryStart_ = -1;
     retryPrefix_.clear();
     retryWord_.clear();
 }
-void Service::resetObservation() {
+void Service::resetObservation(int reason) {
     previous_ = {};
     undoAfter_ = {};
     undoBefore_.clear();
     undoCaret_ = 0;
     undoPassage_ = false;
-    resetRetry();
+    resetRetry(reason);
 }
 void Service::start() {
     try {
@@ -162,7 +175,7 @@ void Service::tick() {
                 cancelNativeJob();
             if (!safe(field, access, store_->options()) || field.id != previous_.id ||
                 field.app != previous_.app) {
-                resetObservation();
+                resetObservation(4);
             }
             return;
         }
@@ -178,17 +191,28 @@ void Service::tick() {
         auto f = permitted(jobRunning_ && nativeJob_ ? &jobTarget : nullptr);
         if (f.id.isEmpty()) {
             cancelNativeJob();
-            resetObservation();
+            resetObservation(5);
             return;
         }
         if (f.id != previous_.id) {
-            resetObservation();
+            resetObservation(6);
             previous_ = f;
             return;
         }
+        if (f.text == previous_.text && f.caret != previous_.caret) {
+            // Native APIs read text and caret separately. Confirm a caret-only
+            // change before erasing retry state: deletion may have completed
+            // between those reads. Reapply field and privacy guards as usual.
+            f = permitted(&f);
+            if (f.id.isEmpty()) {
+                cancelNativeJob();
+                resetObservation(5);
+                return;
+            }
+        }
         if (f.text == previous_.text) {
             if (f.caret != previous_.caret)
-                resetRetry();
+                resetRetry(7);
             previous_ = f;
             return;
         }
@@ -198,7 +222,7 @@ void Service::tick() {
             static const QRegularExpression continued(R"([\s.,!?،؛؟]+[^\s.,!?،؛؟])");
             if (f.caret < retryStart_ || f.text.left(retryStart_) != retryPrefix_ ||
                 continued.match(f.text.mid(retryStart_, f.caret - retryStart_)).hasMatch()) {
-                resetRetry();
+                resetRetry(8);
             }
         }
         if (jobRunning_)
@@ -224,7 +248,7 @@ void Service::tick() {
             auto correct = engine_->word(token, o, f.text.left(start).right(128));
             if (correct == token) {
                 if (retryStart_ == start && token != retryWord_) {
-                    resetRetry();
+                    resetRetry(9);
                 }
                 continue;
             }
@@ -232,7 +256,10 @@ void Service::tick() {
             retryStart_ = start;
             retryPrefix_ = f.text.left(start);
             retryWord_ = token;
-            if (!retry_.shouldCorrect(f.id, start, token, QDateTime::currentMSecsSinceEpoch()))
+            const bool correctNow = retry_.shouldCorrect(f.id, start, token,
+                                                        QDateTime::currentMSecsSinceEpoch());
+            traceRetry(correctNow ? 1 : 2);
+            if (!correctNow)
                 continue;
             QString updated = f.text;
             updated.replace(start, token.size(), correct);
@@ -245,7 +272,8 @@ void Service::tick() {
             auto after = permitted(&f);
             if (after.id != f.id || after.app != f.app || after.text != updated ||
                 after.caret != caret) {
-                resetObservation();
+                resetObservation(after.id != f.id || after.app != f.app ? 10
+                                 : after.text != updated ? 11 : 12);
                 break;
             }
             undoPassage_ = false;
