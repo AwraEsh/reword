@@ -30,6 +30,11 @@ and rule switches are in Settings. To allow direct correction in a supported
 application, choose **Yes** when asked; **Not now** and **No** leave it disabled.
 Use **Pause** before sensitive work. Unsupported fields are skipped.
 
+On X11, Reword requests desktop accessibility when it starts so that applications
+can be discovered. This does not enable the screen reader or allow applications
+automatically. If activation fails, the platform status explains that discovery
+is unavailable. The internal writing workspace remains available.
+
 Default shortcuts are Ctrl+Alt+R for selected text, Ctrl+Alt+Z for guarded Undo,
 and Ctrl+Alt+Shift+P for Pause. You can change them in Settings. Copy the latest
 original from session recovery if Undo is unavailable.

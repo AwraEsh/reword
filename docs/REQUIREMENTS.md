@@ -75,3 +75,20 @@ Approved by the user on 2026-10-15. This file is the durable requirements source
   and documented; system/root actions may still need the host's authentication.
 - Green CI alone is insufficient for release or local deployment. Preserve the full
   desktop compatibility, text-safety, rendered UI and active stability requirements.
+## Upgrade and replacement requirement — 2026-10-29
+
+The user requests replacing the previous local installation with each verified
+new build, rather than leaving competing versions or launchers installed.
+Updates on Windows and Linux must manage obsolete application files safely,
+keep a stable application identity/install location, avoid duplicate instances
+and preserve settings, consent decisions, personal dictionaries and history.
+Application binaries/resources and account data must have separate lifecycles.
+Do not delete user data as part of upgrading or uninstalling an old binary.
+Verify upgrade from a previously installed version on both platforms; a clean
+installation test alone does not prove upgrade safety. Failed replacement must
+leave a usable previous version or a clear recovery path. Linux AppImage,
+desktop entry and icon replacement, Debian upgrades and the Windows installer
+must each have documented ownership and obsolete-file cleanup rules. Remove
+only files owned by the previous Reword installation, never arbitrary files in
+the install directory. Local replacement is authorized once the new build is
+verified; do not present an unverified build as stable.

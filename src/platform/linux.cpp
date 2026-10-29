@@ -5,6 +5,7 @@
 #include <QKeySequence>
 #include <QDBusInterface>
 #include <QDBusReply>
+#include <QDBusVariant>
 #include <QElapsedTimer>
 #include <QQueue>
 #undef signals
@@ -17,6 +18,7 @@ namespace reword {
 template <class T> using GRef = std::unique_ptr<T, decltype(&g_object_unref)>;
 class LinuxAdapter final : public Adapter {
     bool available_ = false;
+    QString unavailableReason_ = "Accessibility bus unavailable · writing workspace only";
     AtspiAccessible *focus_ = nullptr;
     GRef<AtspiAccessible> validated_{nullptr, g_object_unref};
     AtspiEventListener *listener_ = nullptr;
@@ -120,6 +122,27 @@ class LinuxAdapter final : public Adapter {
   public:
     LinuxAdapter() {
         wayland_ = qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland";
+        if (!wayland_) {
+            QDBusInterface status("org.a11y.Bus", "/org/a11y/bus",
+                                  "org.freedesktop.DBus.Properties",
+                                  QDBusConnection::sessionBus());
+            status.setTimeout(300);
+            QDBusReply<QDBusVariant> enabled =
+                status.call("Get", "org.a11y.Status", "IsEnabled");
+            if (!enabled.isValid()) {
+                unavailableReason_ = "Desktop accessibility status unavailable · writing workspace only";
+                return;
+            }
+            if (!enabled.value().variant().toBool()) {
+                status.call("Set", "org.a11y.Status", "IsEnabled",
+                            QVariant::fromValue(QDBusVariant(true)));
+                enabled = status.call("Get", "org.a11y.Status", "IsEnabled");
+                if (!enabled.isValid() || !enabled.value().variant().toBool()) {
+                    unavailableReason_ = "Desktop accessibility is disabled · enable it to detect applications";
+                    return;
+                }
+            }
+        }
         QDBusInterface a11y("org.a11y.Bus", "/org/a11y/bus", "org.a11y.Bus",
                             QDBusConnection::sessionBus());
         a11y.setTimeout(100);
@@ -160,7 +183,7 @@ class LinuxAdapter final : public Adapter {
     }
     QString description() const override {
         if (!available_)
-            return "Accessibility bus unavailable · writing workspace only";
+            return unavailableReason_;
         return wayland_ ? "Wayland · Fcitx5 integration required for live correction"
                         : "X11 · accessible plain text fields";
     }

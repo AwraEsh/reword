@@ -49,7 +49,7 @@ def main():
                 if args.active_app:
                     command.extend(["--active-app", args.active_app, "--active-seconds",
                                     str(args.active_seconds), "--active-output", args.active_output])
-                result = subprocess.run(command)
+                result = subprocess.run(command, env=dict(os.environ, GSETTINGS_BACKEND='memory'))
             finally:
                 detach_test_mounts(directory)
             return result.returncode

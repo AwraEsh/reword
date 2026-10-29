@@ -6,6 +6,7 @@
 #include <QTemporaryDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
+#include <QFile>
 #include <iostream>
 #include <chrono>
 #include <X11/Xlib.h>
@@ -16,10 +17,13 @@ int main(int argc, char **argv) {
     app.setApplicationName("Reword integration probe");
     QTemporaryDir data;
     reword::Store store(data.path());
-    auto fixturePath =
+    auto fixtureSource =
         QFileInfo(QCoreApplication::applicationDirPath() + "/reword_fixture").canonicalFilePath();
-    store.discover(fixturePath, "Synthetic fixture");
-    store.decide(fixturePath, "allow");
+    // Reword's own executables are deliberately denied by default. Use an
+    // independent owned executable identity to test a new application's consent.
+    const auto fixturePath = data.path() + "/synthetic-note-app";
+    if (!QFile::copy(fixtureSource, fixturePath))
+        return 2;
     store.setValue("statistics", true);
     auto observer = reword::createAdapter();
     reword::Service service(data.path());
@@ -139,6 +143,13 @@ int main(int argc, char **argv) {
             return field.app == fixturePath && field.focused && field.known && !field.locked;
         }))
         return finish("FAIL: fixture focus unavailable.", 1);
+    if (!until([&] { return seenFixture; }))
+        return finish("FAIL: unknown application was not discovered for consent.", 1);
+    pump(150);
+    if (store.allowed(fixturePath) || !store.shouldAsk(fixturePath) || text() != "teh " ||
+        !store.histories().isEmpty() || !store.statistics().isEmpty())
+        return finish("FAIL: unknown application was processed before consent.", 1);
+    store.decide(fixturePath, "allow");
     auto blocker = reword::createAdapter();
     if (!blocker->shortcuts("Ctrl+Alt+Shift+X", "Ctrl+Alt+Shift+Y", "Ctrl+Alt+Shift+Z"))
         return finish("FAIL: native conflict fixture could not reserve shortcuts.", 1);

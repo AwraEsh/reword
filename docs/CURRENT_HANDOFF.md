@@ -1,11 +1,48 @@
-# Current handoff — 2026-10-22
+# Current handoff — 2026-10-29
+
+**ACTIVE — the user explicitly resumed on 2026-10-29.** The previous pause on
+2026-10-23 interrupted the owned write-outcome diagnostic with SIGINT for normal cleanup.
+Uncommitted changes remain in codex/usable-build-integration; last pushed commit
+is 6c67a8e. Latest full build/16-target CTest passes (134.21 s) before the final
+reason-16/17 instrumentation; final instrumented app build and Python suites
+(2 parser, 4 budget, 18 workload tests) pass. No new package was installed.
+The native post-write deletion change is NOT stability-accepted: its workload
+still fails live-2 after 48.293 s, with two correct decisions and no reset event
+between them. Investigate rollback after native replace returns false despite
+an observed edit; reason 16 now traces policy rejection, 17 replace rejection.
+The bool replacement contract may need explicit applied/unconfirmed/confirmed
+outcomes; do not simply advance retry on a genuinely rejected write. Preserve
+the rejected-write regression. Diagnostics and current partial deletion fix
+are documented in RETRY_DIAGNOSTICS.md. The stopped diagnostic receipt is
+.deps/write-outcome-diagnostic-180/report.json. Do not claim a duration pass.
+
+Current priority is the user's real-desktop report that Telegram/browser typing
+never triggers app consent. Host X11 reports toolkit-accessibility=false and
+org.a11y.Status.IsEnabled=false. The owned native harness enabled IsEnabled
+before probes, masking this startup prerequisite. A new private-bus helper
+probe fails before the change and passes after (0.55 s): X11 helper startup
+requests IsEnabled, verifies success, preserves ScreenReaderEnabled and retains
+per-app consent/read guards. Failure is explicit in platform status; Wayland
+keeps its Fcitx path. Tests now isolate GSettings in memory before private bus
+activation; UI/activation tests also have no host DISPLAY. Host settings were
+checked after initial probes and remained false. Full build and all 17 CTest
+targets pass (131.64 s). Owned X11 GTK probes pass, including unknown-app
+discovery/consent, unchanged synthetic text and empty history/statistics before
+allowance, shortcut guards, correction, Undo and protected fields. The fixture
+uses an independent copied executable identity; its old reword_fixture name
+was correctly denied by the self-application policy. Preview AppImage clean-env
+launch passes; SHA256
+48000cf808b8a89dc36c7599f14b492958d1a069c7d36256d221588958b47429.
+User-level replacement is pending. Upgrade replacement/data-preservation and
+obsolete-owned-file cleanup requirements are recorded in REQUIREMENTS.md;
+cross-platform upgrade safety is a new acceptance gate, not yet implemented.
 
 The user explicitly resumed work on 2026-10-21. The full product goal is active.
 After two unexplained host freezes, local C++/Qt work has resumed only as serial,
 resource-bounded jobs using existing dependencies. This is evidence for the tested
 source, not general host-stability acceptance. Requirements remain in
 [REQUIREMENTS.md](REQUIREMENTS.md); the repository is intentionally public. No
-production release or local installation has been accepted.
+production release has been accepted; the user later authorized Preview use.
 
 ## Current resumed work
 
