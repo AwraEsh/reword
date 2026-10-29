@@ -25,6 +25,19 @@ void Service::traceRetry(int reason) const {
                  static_cast<long long>(clock.msecsSinceReference()), reason, retryStart_);
     std::fflush(stderr);
 }
+int Service::observationFailureReason(const Field &expected, int reason) {
+    if (reason != 10 || !qEnvironmentVariableIsSet("REWORD_RETRY_DIAGNOSTICS"))
+        return reason;
+    // Metadata only; this classification never authorizes a text read/edit.
+    auto metadata = adapter_->inspect(false);
+    const bool focused = metadata.focused;
+    metadata.focused = true;
+    const Access access{store_->allowed(metadata.app), browserApp(metadata.app), store_->paused()};
+    if (metadata.id == expected.id && metadata.app == expected.app &&
+        safe(metadata, access, store_->options()))
+        return focused ? 14 : 13;
+    return reason;
+}
 void Service::resetRetry(int reason) {
     if (retryStart_ >= 0)
         traceRetry(reason);
@@ -264,16 +277,37 @@ void Service::tick() {
             QString updated = f.text;
             updated.replace(start, token.size(), correct);
             int caret = f.caret + correct.size() - token.size();
-            if (!policyCurrent(f, operationRevision, cancellation) ||
-                !adapter_->replace(f, updated, caret)) {
+            if (!policyCurrent(f, operationRevision, cancellation)) {
+                traceRetry(16);
+                retry_ = savedRetry;
+                break;
+            }
+            if (!adapter_->replace(f, updated, caret)) {
+                traceRetry(17);
                 retry_ = savedRetry;
                 break;
             }
             auto after = permitted(&f);
+            if (after.id == f.id && after.app == f.app && after.selectionStart < 0 &&
+                after.selectionEnd < 0 && after.caret >= start && after.caret < caret &&
+                after.text == updated.left(after.caret) + updated.mid(caret) &&
+                policyCurrent(after, operationRevision, cancellation)) {
+                // The verified write was followed by deletion at this word.
+                // Keep the retry decision, but never retain stale Undo or
+                // overwrite the user's newer text to finish confirmation.
+                traceRetry(11);
+                undoAfter_ = {};
+                undoBefore_.clear();
+                undoCaret_ = 0;
+                undoPassage_ = false;
+                previous_ = after;
+                break;
+            }
             if (after.id != f.id || after.app != f.app || after.text != updated ||
                 after.caret != caret) {
-                resetObservation(after.id != f.id || after.app != f.app ? 10
-                                 : after.text != updated ? 11 : 12);
+                int reason = after.id != f.id || after.app != f.app ? 10
+                             : after.text != updated ? 11 : 12;
+                resetObservation(observationFailureReason(f, reason));
                 break;
             }
             undoPassage_ = false;
@@ -467,6 +501,9 @@ void Service::undo() {
     const auto revision = store_->value("configRevision", 0).toLongLong();
     auto f = permitted(&undoAfter_);
     if (undoBefore_.isEmpty() || !sameTarget(undoAfter_, f)) {
+        traceRetry(undoBefore_.isEmpty() ? 15 : observationFailureReason(undoAfter_,
+            f.id != undoAfter_.id || f.app != undoAfter_.app ? 10
+            : f.text != undoAfter_.text ? 11 : 12));
         emit message(undoPassage_ ? "Undo is no longer safe. Copy the latest passage original from "
                                     "session recovery in Reword."
                                   : "Undo is no longer safe. Nothing was replaced.");

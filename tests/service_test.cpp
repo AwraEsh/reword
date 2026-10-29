@@ -803,6 +803,43 @@ class ServiceTest : public QObject {
         h.adapter->type("teh ");
         QTRY_COMPARE(h.adapter->field.text, QString("the "));
     }
+    void deletionAfterNativeWriteKeepsRewriteCycle() {
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        h.adapter->onWrite = [&] { h.adapter->type(""); };
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->writes, 1);
+        auto before = h.adapter->reads;
+        QTRY_VERIFY(h.adapter->reads > before + 2);
+        h.adapter->type("teh ");
+        before = h.adapter->reads;
+        QTRY_VERIFY(h.adapter->reads > before + 2);
+        QCOMPARE(h.adapter->field.text, QString("teh "));
+        QCOMPARE(h.adapter->writes, 1);
+        h.service.action("undo");
+        QCOMPARE(h.adapter->writes, 1);
+        h.adapter->type("");
+        before = h.adapter->reads;
+        QTRY_VERIFY(h.adapter->reads > before + 2);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        QCOMPARE(h.adapter->writes, 2);
+    }
+    void otherEditAfterNativeWriteResetsRewriteCycle() {
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        h.adapter->onWrite = [&] { h.adapter->type("newer text"); };
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->writes, 1);
+        auto before = h.adapter->reads;
+        QTRY_VERIFY(h.adapter->reads > before + 2);
+        h.adapter->type("");
+        before = h.adapter->reads;
+        QTRY_VERIFY(h.adapter->reads > before + 2);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        QCOMPARE(h.adapter->writes, 2);
+    }
     void deletionDuringCaretSnapshotKeepsRewriteCycle() {
         Harness h;
         QTRY_VERIFY(h.adapter->reads > 0);

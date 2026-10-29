@@ -39,6 +39,7 @@ class Service : public QObject {
     void clearJobTarget();
     void cancelNativeJob();
     void traceRetry(int reason) const;
+    int observationFailureReason(const Field &expected, int reason);
     void resetRetry(int reason = 3);
     void resetObservation(int reason = 3);
     void runText(QString input, bool native, Field field = {});

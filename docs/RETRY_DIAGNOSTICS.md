@@ -39,6 +39,14 @@ Format: `RTRY <monotonic milliseconds> <reason> <word start offset>`.
 | 10 | Post-write field identity unavailable/changed |
 | 11 | Post-write contents differ |
 | 12 | Post-write caret differs |
+| 13 | Failed snapshot, then same permitted metadata except missing focus |
+| 14 | Failed snapshot, then same permitted metadata with focus restored |
+| 15 | Undo requested with no saved original |
+| 16 | Policy rejected the live write before calling the adapter |
+| 17 | Native replacement returned false |
+
+Reasons 13/14 describe a later metadata observation, not proof of the original
+failure's cause. They never authorize text access or replacement.
 
 Earlier diagnostic run stopped in `live-undo` at 47.864 seconds after a
 post-write reset (then undifferentiated reason 10). That separate failure is
@@ -64,3 +72,39 @@ before any confirmation text read. It asserts no extra write or history and
 cleared transient buffers. The bounded rebuild succeeds and all 15 CTest
 targets pass in 124.18 seconds. The earlier timer failure remains part of the
 record. Installed Preview is unchanged.
+
+## Post-write deletion boundary
+
+The expanded diagnostic reproduces another live-2 mismatch at 42.976 seconds
+in `.deps/undo-diagnostic-180`: first correction 4834310 ms, post-write text
+differs at 4834366 ms (reason 11), unexpected first correction 4834578 ms.
+CPU had not exceeded its budget before this failure. A separate run stopped
+at `selected-undo` after 61.339 seconds, after its correction/history insert
+had succeeded. Its exact rejection was not yet instrumented; do not attribute
+it to a particular focus boundary.
+
+A deterministic deletion-after-write regression fails before the change:
+second attempt becomes `the ` instead of `teh `. An unrelated-edit control
+passes before the change. The new branch preserves the retry decision only
+for a freshly permitted, unchanged field/policy, no selection, a caret within
+the corrected word interval and text exactly matching deletion from the new
+caret through the previous correction caret. It clears stale Undo, observes
+the actual newer text, and performs no additional write, count or notification.
+Other post-write mismatches still clear observation. Full build and all 17
+CTest targets pass in 131.64 seconds on 2026-10-29. This does not establish
+native retry stability: `.deps/postwrite-deletion-diagnostic-180` still fails
+live-2 at 48.293 seconds, with two correct decisions and no reset between them.
+The replacement bool conflates refusal before a write with unsuccessful
+confirmation after an applied write; explicit native outcomes remain a candidate
+next change. Preserve the genuinely rejected-write rollback regression. Reasons
+16/17 now distinguish the two live rejection branches. The subsequent
+`.deps/write-outcome-diagnostic-180` was cancelled by the user at 138.657 seconds
+with its CPU-overrun failure recorded and clean, unforced shutdown.
+
+For rare-error diagnosis only, `REWORD_ACTIVE_DIAGNOSTIC_CONTINUE_CPU=1` lets
+the owned runner continue a CPU overrun while recording `resource-budget`
+failure and `cpuBudgetExceeded`. `finish()` cannot pass after that failure.
+The diagnostic target duration is capped at 300 seconds; memory, swap and
+growth overruns remain fatal. Default runs retain the original CPU abort gate.
+Four budget tests cover default abort, diagnostic failure retention, memory
+and swap limits, and rejection of targets over 300 seconds before setup.

@@ -22,6 +22,7 @@ from active_history import HistoryCheck
 from process_metrics import read_child_pids
 from main_thread_metrics import MainThreadSeries
 from retry_diagnostics import RetryDiagnostics
+from active_budget import enforce_budget
 
 
 def sha256(path):
@@ -51,6 +52,9 @@ def seed_database(directory, fixture, executable):
 
 
 def run_owned(args):
+    diagnostic_cpu = os.environ.get('REWORD_ACTIVE_DIAGNOSTIC_CONTINUE_CPU') == '1'
+    if diagnostic_cpu and args.seconds > 300:
+        raise WorkloadFailure('test-infrastructure')
     os.umask(0o077)
     desktop = OwnedDesktop(args.owned_directory)
     root = Path(args.owned_directory)
@@ -69,6 +73,7 @@ def run_owned(args):
     evidence = Evidence()
     metadata = {'scope': 'owned-X11-development-workload',
                 'productReleaseAccepted': False,
+                'diagnosticContinuesCpuFailure': diagnostic_cpu,
                 'startedUtc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 'targetSeconds': args.seconds, 'binarySha256': sha256(executable),
                 'helperSha256': sha256(helper), 'launcherSha256': sha256(app_run),
@@ -125,11 +130,7 @@ def run_owned(args):
                 except (OSError, ValueError):
                     raise WorkloadFailure('metrics-unavailable') from None
                 evidence.counter(role + '-sampled')
-                rss_limit = (512 if role == 'app' else 256) * 1024
-                if (sample['rssKiB'] > rss_limit or sample['swapKiB'] > 0 or
-                        (baseline and (sample['privateGrowthKiB'] > 64 * 1024 or
-                         (sample['elapsedSeconds'] >= 30 and sample['cpuPercent'] > 10)))):
-                    raise WorkloadFailure('resource-budget')
+                enforce_budget(sample, role, baseline, diagnostic_cpu, evidence, metadata)
             last_sample = now
             publish()
         if cancelled:
