@@ -7,6 +7,7 @@ namespace reword {
 class RecoveryServer;
 class Controller : public QObject {
     Q_OBJECT
+    friend struct ControllerTestAccess;
     Q_PROPERTY(QVariantMap settings READ settings NOTIFY updated)
     Q_PROPERTY(QVariantList apps READ apps NOTIFY updated)
     Q_PROPERTY(QVariantList history READ history NOTIFY updated)
@@ -58,7 +59,17 @@ class Controller : public QObject {
     QTimer refresh_;
     void refreshTray();
     void nextApplication();
+    void initializeNotifications();
+    void notifyConsent();
+    void closeConsentNotification();
+    uint notificationId_ = 0;
+    quint64 notificationGeneration_ = 0;
+    QString notificationApp_;
+    qint64 reminderAt_ = 0;
     bool rememberPassage(const QString &original, const QString &corrected);
+
+  private slots:
+    void notificationAction(uint id, const QString &action);
 
   public:
     explicit Controller(const QString &directory, QObject *parent = nullptr,

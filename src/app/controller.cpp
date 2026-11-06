@@ -31,6 +31,7 @@ void applyThemePalette(bool dark) {
 Controller::Controller(const QString &directory, QObject *parent, std::unique_ptr<Adapter> adapter)
     : QObject(parent), store_(directory) {
     applyThemePalette(dark());
+    initializeNotifications();
     recoveryServer_ = new RecoveryServer(this);
     connect(recoveryServer_, &RecoveryServer::passage, this,
             [this](QString original, QString corrected) { rememberPassage(original, corrected); });
@@ -131,6 +132,9 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
                 }
             }
             nextApplication();
+            if (!pendingId_.isEmpty() && QDateTime::currentMSecsSinceEpoch() >= reminderAt_ &&
+                store_.shouldAsk(pendingId_) && !store_.paused())
+                notifyConsent();
             refreshTray();
             emit updated();
         });
@@ -138,6 +142,7 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
     refresh_.start(10000);
 }
 Controller::~Controller() {
+    closeConsentNotification();
     recoveryServer_->stop();
     service_->cancel();
     QMetaObject::invokeMethod(service_, &Service::stop, Qt::BlockingQueuedConnection);
@@ -228,6 +233,10 @@ void Controller::set(QString key, QVariant value) {
     });
 }
 void Controller::decide(QString id, QString decision) {
+    if (id == pendingId_) {
+        consent(decision);
+        return;
+    }
     guard([&] {
         store_.decide(id, decision);
         emit updated();
@@ -243,18 +252,17 @@ void Controller::nextApplication() {
                 continue;
             pendingId_ = row["id"].toString();
             pendingName_ = row["name"].toString();
-            if (tray_)
-                tray_->showMessage("Allow Reword in " + pendingName_ + "?",
-                                   "Open Reword to choose Yes, Not now or No.",
-                                   QSystemTrayIcon::Information, 6000);
-            emit showWindow();
+            notifyConsent();
             break;
         }
         emit updated();
     });
 }
 void Controller::consent(QString decision) {
+    if (decision != "allow" && decision != "later" && decision != "deny")
+        return;
     guard([&] {
+        closeConsentNotification();
         if (!pendingId_.isEmpty() && !decision.isEmpty())
             store_.decide(pendingId_, decision);
         pendingId_.clear();

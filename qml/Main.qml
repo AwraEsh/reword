@@ -50,7 +50,7 @@ ApplicationWindow {
     }
 
     function presentPendingConsent() {
-        if (!root.visible || Backend.pendingName.length === 0 || consentDialog.visible)
+        if (!root.visible || !root.active || Backend.pendingName.length === 0 || consentDialog.visible)
             return;
         for (let dialog of [pauseDialog, historyDialog, clearDialog, practiceDialog]) {
             if (dialog.visible)
@@ -58,6 +58,7 @@ ApplicationWindow {
         }
         consentDialog.open();
     }
+    onActiveChanged: if (active) Qt.callLater(root.presentPendingConsent)
 
     component AppDialog: Dialog {
         id: appDialog

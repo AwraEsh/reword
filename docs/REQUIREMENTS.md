@@ -75,6 +75,62 @@ Approved by the user on 2026-10-15. This file is the durable requirements source
   and documented; system/root actions may still need the host's authentication.
 - Green CI alone is insufficient for release or local deployment. Preserve the full
   desktop compatibility, text-safety, rendered UI and active stability requirements.
+## Non-disruptive consent notifications — 2026-11-06
+
+The user confirmed that the newly installed build now detects applications and
+shows consent. New consent must not raise/activate Reword or steal focus from
+the current application. Use GNOME Shell native notifications on Linux and a
+native notification near the Windows notification area, requesting a 7000 ms
+display duration with OS-managed dismissal/fading. Do not claim exact fade
+timing where the desktop controls it. An ignored notification leaves the app
+unauthorized and keeps its pending request available inside Reword. Present
+the in-app consent when the user intentionally returns to Reword, without
+forcing an inactive window forward. Repeat ignored requests later with a
+bounded cooldown/coalescing policy, not on every keystroke/window switch.
+Explicit No remains permanent until the user changes it; Not now retains the
+next-calendar-day rule. Native actions where supported must retain Yes,
+Not now and No; fallback UI must not silently authorize an application.
+The user explicitly makes these three buttons mandatory on GNOME Shell's
+native consent notification; a text-only GNOME notification is insufficient.
+Button clicks must apply their decision without activating Reword, and stale
+buttons must never override a newer Settings decision.
+
+## Per-application correction mode — 2026-11-06
+
+The user explicitly requires an independently selectable mode for every
+application in Settings, with English labels:
+
+- **Automatic:** discover the active application and correct confident mistakes
+  automatically at word boundaries, without requiring a click or shortcut for
+  each correction. Preserve typed delimiters, independent language switches,
+  sensitivity/ranking safeguards and the existing same-location first/second/
+  third alternation (correct, preserve the rewritten mistake, correct again).
+- **Shortcut only:** disable live automatic spelling and normalization for that
+  application. Permit explicitly requested supported selected-text correction
+  via the configured shortcut, with the normal safety, cancellation, history
+  and Undo guards. Merely observing typing must not change the text.
+- **Disabled:** do not process or change that application's text, including
+  correction shortcuts. Application discovery/Settings visibility can remain
+  metadata-only; no text, statistics or history is collected from blocked fields.
+
+Modes must persist by executable identity and apply immediately to an active
+application and outstanding operations. Mode changes must participate in policy
+revision/revalidation; switching to Disabled cancels pending native work. A new
+application remains unauthorized until explicit consent. Yes may select the
+default authorized Automatic mode; this must be clear in the consent wording.
+No keeps it disabled without reminders; Not now remains unauthorized until a
+later explicit choice. Migrate existing allow/deny/later/unknown decisions
+without silently granting new access. Global pause, browser exclusion, language
+rules and password/unknown-field protections retain precedence over app mode.
+No mode authorizes unsafe replacement or makes an unsupported field editable.
+
+Acceptance requires real typing in Automatic, no edits while typing in
+Shortcut only, successful explicit shortcut correction where supported, and no
+text processing in Disabled, on both Linux and Windows. Include mode changes
+during active correction, restart persistence, consent migration and the retry
+alternation in automated/native checks. This requirement is recorded; current
+allow/deny application controls do not yet implement all three modes.
+
 ## Upgrade and replacement requirement — 2026-10-29
 
 On 2026-11-06 the user permits resetting existing preferences if necessary to

@@ -30,6 +30,37 @@
 #include <utility>
 #include "app/controller.h"
 #include "platform/recovery_channel.h"
+#ifndef Q_OS_WIN
+#include <QtDBus/QDBusConnection>
+#include <QScopeGuard>
+namespace reword {
+struct ControllerTestAccess {
+    static bool notified(const Controller &controller) { return controller.notificationId_ != 0; }
+    static void remind(Controller &controller) {
+        controller.reminderAt_ = 0;
+        QMetaObject::invokeMethod(&controller.refresh_, "timeout", Qt::DirectConnection);
+    }
+};
+}
+class ConsentNotificationFixture : public QObject {
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.freedesktop.Notifications")
+  public:
+    int requests = 0, timeout = 0;
+    QStringList actions;
+  public slots:
+    uint Notify(const QString &, uint, const QString &, const QString &, const QString &,
+                const QStringList &buttons, const QVariantMap &, int expiry) {
+        ++requests;
+        actions = buttons;
+        timeout = expiry;
+        return 41; // Exercise ID reuse; action generations must still be checked.
+    }
+    void CloseNotification(uint) {}
+  signals:
+    void ActionInvoked(uint id, const QString &action);
+};
+#endif
 class BlockedReply : public QNetworkReply {
   public:
     BlockedReply(const QNetworkRequest &request, QObject *parent) : QNetworkReply(parent) {
@@ -845,6 +876,73 @@ class UiTest : public QObject {
                     captures + (dark ? "/dark-consent-long.png" : "/light-consent-long.png")));
             }
         }
+    }
+#ifndef Q_OS_WIN
+    void nativeConsentNotification_data() {
+        QTest::addColumn<QString>("decision");
+        for (const auto value : {"allow", "later", "deny", "settings-deny"})
+            QTest::newRow(value) << QString(value);
+    }
+    void nativeConsentNotification() {
+        QFETCH(QString, decision);
+        auto bus = QDBusConnection::sessionBus();
+        ConsentNotificationFixture server;
+        QVERIFY(bus.registerService("org.freedesktop.Notifications"));
+        QVERIFY(bus.registerObject("/org/freedesktop/Notifications", &server,
+                                   QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals));
+        auto cleanup = qScopeGuard([&] {
+            bus.unregisterObject("/org/freedesktop/Notifications");
+            bus.unregisterService("org.freedesktop.Notifications");
+        });
+        QTemporaryDir data;
+        auto native = std::make_unique<UiMetadataAdapter>();
+        auto adapter = native.get();
+        reword::Controller controller(data.path(), nullptr, std::move(native));
+        QSignalSpy activations(&controller, &reword::Controller::showWindow);
+        adapter->application("synthetic-note-app");
+        QTRY_COMPARE(server.requests, 1);
+        QTRY_VERIFY(reword::ControllerTestAccess::notified(controller));
+        QCOMPARE(server.timeout, 7000);
+        QCOMPARE(activations.count(), 0);
+        reword::Store observer(data.path());
+        QVERIFY(!observer.allowed("synthetic-note-app"));
+        const auto obsolete = server.actions[2];
+        reword::ControllerTestAccess::remind(controller);
+        QTRY_COMPARE(server.requests, 2);
+        QMetaObject::invokeMethod(&controller, "notificationAction", Qt::DirectConnection,
+                                 Q_ARG(uint, 41), Q_ARG(QString, obsolete));
+        QVERIFY(!observer.allowed("synthetic-note-app"));
+        QVERIFY(!controller.pendingName().isEmpty());
+        if (decision == "settings-deny") {
+            const auto lateAllow = server.actions[2];
+            controller.decide("synthetic-note-app", "deny");
+            QMetaObject::invokeMethod(&controller, "notificationAction", Qt::DirectConnection,
+                                     Q_ARG(uint, 41), Q_ARG(QString, lateAllow));
+            QVERIFY(!observer.allowed("synthetic-note-app"));
+            QVERIFY(controller.pendingName().isEmpty());
+            return;
+        }
+        QString action;
+        for (const auto &candidate : server.actions)
+            if (candidate.startsWith(decision + ':'))
+                action = candidate;
+        QVERIFY(!action.isEmpty());
+        emit server.ActionInvoked(41, action);
+        QTRY_VERIFY(controller.pendingName().isEmpty());
+        QCOMPARE(observer.allowed("synthetic-note-app"), decision == "allow");
+        QVERIFY(!observer.shouldAsk("synthetic-note-app"));
+        QCOMPARE(activations.count(), 0);
+    }
+#endif
+    void discoveringApplicationDoesNotActivateWindow() {
+        QTemporaryDir data;
+        auto native = std::make_unique<UiMetadataAdapter>();
+        auto adapter = native.get();
+        reword::Controller controller(data.path(), nullptr, std::move(native));
+        QSignalSpy activations(&controller, &reword::Controller::showWindow);
+        adapter->application("synthetic-note-app");
+        QTRY_COMPARE_WITH_TIMEOUT(controller.pendingName(), QString("synthetic-note-app"), 12000);
+        QCOMPARE(activations.count(), 0);
     }
     void consentNoIsReachableWithKeyboard() {
         QTemporaryDir data;

@@ -37,6 +37,12 @@ is unavailable. The internal writing workspace remains available.
 An application can be detected while its fields remain unsupported. Reword
 corrects only fields it can safely read and replace.
 
+The next consent update uses system notifications without bringing Reword to
+the front. GNOME notifications offer **Yes**, **Not now** and **No**. Requests
+you ignore stay pending in Reword and are reminded after 15 minutes. Returning
+to Reword shows the pending choice. Notifications request seven seconds of
+display time; the desktop controls dismissal and fading.
+
 Default shortcuts are Ctrl+Alt+R for selected text, Ctrl+Alt+Z for guarded Undo,
 and Ctrl+Alt+Shift+P for Pause. You can change them in Settings. Copy the latest
 original from session recovery if Undo is unavailable.

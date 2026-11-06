@@ -27,8 +27,28 @@ Settings/consents were preserved; no browser/Telegram consent entries existed
 before launching. Rollback binary .deps/preview-before-20261106.AppImage;
 receipt ~/.local/opt/reword/installation.json. The new app is running as a
 transient user unit reword-preview-20261106 (768 MiB, no swap, CPU quota80%,
-output discarded; no login autostart). Actual Telegram/Chrome correction is
-not yet verified; user was asked whether the new consent dialog appears.
+output discarded; no login autostart). User CONFIRMS the new consent dialog
+appears in real use. Actual Telegram/Chrome correction is not yet verified.
+New priority: native system consent notifications without raising/activating
+Reword, 7000 ms requested timeout, pending in-app fallback when intentionally
+returning to Reword, and later cooldown reminders. REQUIREMENTS.md records it.
+Notification implementation now removes automatic showWindow, gates QML
+consent on an active window and handles activation changes. GNOME receives
+native Yes/Not now/No actions with generation tokens; Windows uses the native
+tray message with explicit-click opening. Both request 7000 ms OS expiry and
+retain pending consent; ignored requests retry at 15-minute cooldown. Initial
+NoFocus regression fails (count1 vs0), then passes. Review also exposed Apps
+No being overridden by old notification Yes; settings-deny regression fails
+before routing a matching Settings decision through consent/invalidation.
+All 17 CTest targets now pass in 101.71 s, including four native D-Bus cases,
+stale tokens with reused IDs, reminders and zero unsolicited activation.
+Receipts .deps/notification-focus-red.log, .deps/notification-settings-red.log,
+.deps/notification-full-tests.log. Independent review finds no blocker after
+fixes. Host GNOME reports actions capability; a harmless three-button native
+preview was posted, awaiting visual feedback. Notification build not deployed
+yet; installed source remains b30b88c. Per-app Automatic/Shortcut only/Disabled
+modes and mandatory GNOME buttons are recorded in REQUIREMENTS.md; modes are
+not yet implemented. Preserve all global safety/consent guards when adding them.
 Do not equate foreground detection with safe editable-field support.
 Legacy retry/Undo/CPU and upgrade acceptance gates remain open.
 
