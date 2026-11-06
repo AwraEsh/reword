@@ -18,7 +18,18 @@ live cycle/Undo, selection/history/Undo, password exclusion and shortcut guards.
 Receipts: .deps/foreground-full-tests.log and .deps/foreground-xres-native.log.
 The actual desktop metadata-only check now detects the executable and returns
 no text; previously the same check returned no application. libXRes is linked
-dynamically and CI includes its development package. Package refresh pending.
+dynamically and CI includes its development package. Source b30b88c is pushed;
+GitHub runs 42231443751 and 42231432264 are active at last check, not accepted.
+Fresh Linux packaging/audit and self-contained AppImage smoke pass. Installed
+Preview was atomically replaced at its existing path with SHA256
+323ef5f5ca2303384b9eb9f37d43f94181a2aa3f8f75121b9325c87025718565.
+Settings/consents were preserved; no browser/Telegram consent entries existed
+before launching. Rollback binary .deps/preview-before-20261106.AppImage;
+receipt ~/.local/opt/reword/installation.json. The new app is running as a
+transient user unit reword-preview-20261106 (768 MiB, no swap, CPU quota80%,
+output discarded; no login autostart). Actual Telegram/Chrome correction is
+not yet verified; user was asked whether the new consent dialog appears.
+Do not equate foreground detection with safe editable-field support.
 Legacy retry/Undo/CPU and upgrade acceptance gates remain open.
 
 At the previous pause, local commits were 107f5fe (post-write deletion/retry diagnostics) and
