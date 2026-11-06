@@ -114,6 +114,8 @@ ApplicationWindow {
             }
         }
         function onUpdated() {
+            if (Backend.pendingName.length === 0 && consentDialog.visible)
+                consentDialog.close();
             root.refreshHistory();
             root.presentPendingConsent();
         }

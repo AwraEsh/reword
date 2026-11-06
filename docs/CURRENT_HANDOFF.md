@@ -45,10 +45,26 @@ stale tokens with reused IDs, reminders and zero unsolicited activation.
 Receipts .deps/notification-focus-red.log, .deps/notification-settings-red.log,
 .deps/notification-full-tests.log. Independent review finds no blocker after
 fixes. Host GNOME reports actions capability; a harmless three-button native
-preview was posted, awaiting visual feedback. Notification build not deployed
-yet; installed source remains b30b88c. Per-app Automatic/Shortcut only/Disabled
+preview was posted, awaiting visual feedback. Source 1bddf7c is pushed; GitHub
+runs 42235787487 and 42235797225 succeed for it. Native Windows notification
+appearance is not proved by CI. Packaging and clean-environment AppImage smoke
+pass; notification artifact SHA256
+aef4f094221288d29a0ba827eb1432e8cfd782c1a71df96505e9d2ee7920338c.
+Notification build not deployed yet; installed/running source remains b30b88c.
+User was asked whether the running Reword editor contains unsaved text before
+closing it for replacement; do not close it without resolving that question.
+Final UI hardening: resolving consent via a native notification/settings must
+also close an already-open in-app dialog. New regression initially exposed
+the stale visible dialog, then passes after the QML updated handler closes it
+when pendingName is empty. Full 17-target suite passes again in 99.72 s;
+receipts .deps/notification-dialog-red-object.log,
+.deps/notification-dialog-green.log, .deps/notification-dialog-full-tests.log.
+The previously prepared aef4f0 artifact predates this final UI fix and needs
+refresh before deployment. Running user version remains b30b88c.
+Per-app Automatic/Shortcut only/Disabled
 modes and mandatory GNOME buttons are recorded in REQUIREMENTS.md; modes are
 not yet implemented. Preserve all global safety/consent guards when adding them.
+Implementation plan: docs/superpowers/plans/2026-11-06-application-modes.md.
 Do not equate foreground detection with safe editable-field support.
 Legacy retry/Undo/CPU and upgrade acceptance gates remain open.
 

@@ -934,6 +934,33 @@ class UiTest : public QObject {
         QCOMPARE(activations.count(), 0);
     }
 #endif
+    void resolvingConsentOutsideDialogClosesIt() {
+        QTemporaryDir data;
+        auto native = std::make_unique<UiMetadataAdapter>();
+        auto adapter = native.get();
+        reword::Controller controller(data.path(), nullptr, std::move(native));
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("Backend", &controller);
+        engine.load(QUrl::fromLocalFile(QString(REWORD_SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        QObject *dialog = nullptr;
+        for (auto object : engine.rootObjects().first()->findChildren<QObject *>()) {
+            if (object->property("title").toString().startsWith("Allow Reword in ")) {
+                dialog = object;
+                break;
+            }
+        }
+        QVERIFY(dialog);
+        adapter->application("synthetic-note-app");
+        QTRY_COMPARE(controller.pendingName(), QString("synthetic-note-app"));
+        QVERIFY(QMetaObject::invokeMethod(dialog, "open"));
+        QTRY_VERIFY(dialog->property("opened").toBool());
+        // Native notification actions and Applications settings resolve the
+        // request without invoking the QML dialog's own button handler.
+        controller.consent("deny");
+        QTRY_VERIFY(controller.pendingName().isEmpty());
+        QTRY_VERIFY(!dialog->property("visible").toBool());
+    }
     void discoveringApplicationDoesNotActivateWindow() {
         QTemporaryDir data;
         auto native = std::make_unique<UiMetadataAdapter>();
