@@ -59,8 +59,14 @@ the stale visible dialog, then passes after the QML updated handler closes it
 when pendingName is empty. Full 17-target suite passes again in 99.72 s;
 receipts .deps/notification-dialog-red-object.log,
 .deps/notification-dialog-green.log, .deps/notification-dialog-full-tests.log.
-The previously prepared aef4f0 artifact predates this final UI fix and needs
-refresh before deployment. Running user version remains b30b88c.
+Source 091714f adds this final fix and is pushed. Fresh packaging and isolated
+AppImage smoke pass, SHA256
+14e7ddea088eddc2a89de2798420c00e9f6489bb1d1daf56c5a3d53f118be592.
+Frozen deployment artifact .deps/notification-091714f-ready.AppImage; receipt
+.deps/notification-final-package-receipt.json. It supersedes the aef4f0 build.
+Running user version remains b30b88c. Do not stop it before resolving the
+pending unsaved-editor-text question; installer replacement is authorized but
+losing an unknown workspace draft is not. No other test/build jobs remain.
 Per-app Automatic/Shortcut only/Disabled
 modes and mandatory GNOME buttons are recorded in REQUIREMENTS.md; modes are
 not yet implemented. Preserve all global safety/consent guards when adding them.
