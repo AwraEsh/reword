@@ -11,6 +11,8 @@
 #undef signals
 #include <atspi/atspi.h>
 #include <X11/Xlib.h>
+#include <X11/Xatom.h>
+#include <X11/extensions/XRes.h>
 #include <X11/XKBlib.h>
 #include <X11/keysym.h>
 #include <unistd.h>
@@ -45,6 +47,56 @@ class LinuxAdapter final : public Adapter {
     };
     QQueue<Shortcut> pendingShortcuts_;
     bool wayland_ = false;
+    QString foregroundApplication() {
+        if (!display_)
+            return {};
+        XSync(display_, False);
+        trapped_ = display_;
+        trapError_ = 0;
+        previousHandler_ = XSetErrorHandler(errorHandler);
+        auto property = [&](Window window, const char *name, Atom expected) -> unsigned long {
+            Atom type = None;
+            int format = 0;
+            unsigned long count = 0, remaining = 0;
+            unsigned char *data = nullptr;
+            const auto atom = XInternAtom(display_, name, True);
+            if (atom == None)
+                return 0;
+            const int result = XGetWindowProperty(display_, window, atom, 0, 1, False,
+                                                  expected, &type, &format, &count, &remaining, &data);
+            unsigned long value = 0;
+            if (result == Success && type == expected && format == 32 && count == 1 && data)
+                value = *reinterpret_cast<unsigned long *>(data);
+            if (data)
+                XFree(data);
+            return value;
+        };
+        const auto window = property(DefaultRootWindow(display_), "_NET_ACTIVE_WINDOW", XA_WINDOW);
+        unsigned long pid = 0;
+        if (window) {
+            XResClientIdSpec specification{window, XRES_CLIENT_ID_PID_MASK};
+            long count = 0;
+            XResClientIdValue *identities = nullptr;
+            XResQueryClientIds(display_, 1, &specification, &count, &identities);
+            if (identities) {
+                for (long i = 0; i < count && i < 8; ++i) {
+                    const auto candidate = XResGetClientPid(&identities[i]);
+                    if (candidate > 0)
+                        pid = static_cast<unsigned long>(candidate);
+                }
+                XResClientIdsDestroy(count, identities);
+            }
+            if (!pid)
+                pid = property(window, "_NET_WM_PID", XA_CARDINAL);
+        }
+        XSync(display_, False);
+        const bool valid = trapError_ == 0;
+        XSetErrorHandler(previousHandler_);
+        trapped_ = nullptr;
+        if (!valid || !pid || pid == unsigned(getpid()) || pid == unsigned(getppid()))
+            return {};
+        return QFileInfo(QString("/proc/%1/exe").arg(pid)).symLinkTarget();
+    }
     static void event(AtspiEvent *e, void *data) {
         auto self = static_cast<LinuxAdapter *>(data);
         self->dirty_ = true;
@@ -201,7 +253,17 @@ class LinuxAdapter final : public Adapter {
         return changed;
     }
     Field inspect(bool includeText) override {
-        return snapshot(includeText, nullptr);
+        auto field = snapshot(includeText, nullptr);
+        if (!includeText && !wayland_) {
+            const auto app = foregroundApplication();
+            if (!app.isEmpty() && field.app != app) {
+                // Application consent needs only executable identity. A window
+                // without a validated text provider never becomes editable.
+                field = {};
+                field.app = app;
+            }
+        }
+        return field;
     }
     Field readExpected(const Field &expected) override {
         if (expected.app.isEmpty() || expected.id.isEmpty()) {

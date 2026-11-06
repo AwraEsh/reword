@@ -187,8 +187,10 @@ def main():
             if not 1 <= repeat <= 100:
                 raise RuntimeError("Native probe repeat count must be between 1 and 100.")
             for index in range(repeat):
-                for probe in ("reword_native_probe", "reword_native_service_probe"):
-                    result = subprocess.run([str(ROOT / "build" / probe)], env=env, timeout=40)
+                for probe, arguments in (("reword_native_service_probe", ["--foreground-only"]),
+                                         ("reword_native_probe", []),
+                                         ("reword_native_service_probe", [])):
+                    result = subprocess.run([str(ROOT / "build" / probe), *arguments], env=env, timeout=40)
                     if result.returncode:
                         raise RuntimeError(f"{probe} failed on run {index + 1}.")
             print(f"PASS: {repeat} controlled native probe cycles.", flush=True)

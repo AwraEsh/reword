@@ -1,6 +1,54 @@
-# Current handoff — 2026-10-29
+# Current handoff — 2026-11-06
 
-**ACTIVE — the user explicitly resumed on 2026-10-29.** The previous pause on
+**ACTIVE — explicitly resumed on 2026-11-06.** User reports no detection in
+Telegram/Chrome on the real desktop. The accessibility bus/socket is healthy
+now (no service restart performed). A new metadata-only X11 foreground fallback
+discovers executable identity without a text provider; it never marks a field
+known/editable or authorizes text access. Real desktop initially still failed:
+_NET_WM_PID advertised namespace PID2. XRes server host-PID resolution fixes
+that metadata-only check (application detected, no text returned). The owned
+foreground probe disables AT-SPI and advertises PID2 to cover both gaps.
+Matching-app metadata is preserved across passive-grab transient focus loss;
+an initial regression and independent review caught lost Undo before this fix.
+Private UI/activation/accessibility sessions now isolate XDG_RUNTIME_DIR before
+D-Bus startup as well as GSettings. Full build passes; all 17 CTest targets
+pass in 113.47 s and the host accessibility socket inode remains unchanged.
+Native X11 probes pass with NO_AT_BRIDGE and namespace PID2, plus consent,
+live cycle/Undo, selection/history/Undo, password exclusion and shortcut guards.
+Receipts: .deps/foreground-full-tests.log and .deps/foreground-xres-native.log.
+The actual desktop metadata-only check now detects the executable and returns
+no text; previously the same check returned no application. libXRes is linked
+dynamically and CI includes its development package. Package refresh pending.
+Legacy retry/Undo/CPU and upgrade acceptance gates remain open.
+
+At the previous pause, local commits were 107f5fe (post-write deletion/retry diagnostics) and
+9d892e8 (X11 accessibility activation, isolated UI tests, consent regression).
+They are not pushed; remote remains 6c67a8e. Preview WAS replaced atomically at
+the existing user launcher path with artifact SHA256
+48000cf808b8a89dc36c7599f14b492958d1a069c7d36256d221588958b47429.
+Account database metadata remained unchanged. Installation receipt:
+~/.local/opt/reword/installation.json; old binary rollback copy:
+.deps/installed-preview-backup-20261029.AppImage. No duplicate launcher or
+autostart was added. No stable release was published.
+
+**Unresolved real-desktop blocker:** the metadata/status-only helper check
+enabled org.a11y.Status.IsEnabled on the actual session and preserved
+ScreenReaderEnabled=false, but returned Accessibility bus unavailable. The
+host org.a11y.Bus.GetAddress returns /run/user/1000/at-spi/bus_0, whose socket
+is absent (directory exists and is empty). The systemd user
+at-spi-dbus-bus.service is active, launcher PID1914, bus PID1922, registry2055
+at observation; revalidate PIDs before any action. Do not claim Telegram/browser
+discovery works on the actual desktop. Investigate/recover the stale endpoint
+on resume. No service restart has been attempted. Private-bus UI/activation
+tests isolate GSettings and DISPLAY, but still need a unique XDG_RUNTIME_DIR
+before launching their buses: shared runtime socket cleanup is a plausible
+test interference mechanism, not proven. Native harness already supplies a
+private runtime and UpdateActivationEnvironment. Prevent further shared-runtime
+tests before host-service recovery. All local test/build/probe/package processes
+have finished; the last metadata-only helper was closed normally. The GUI was
+not left running. New upgrade requirements remain in REQUIREMENTS.md.
+
+Previous activity: the user explicitly resumed on 2026-10-29. The previous pause on
 2026-10-23 interrupted the owned write-outcome diagnostic with SIGINT for normal cleanup.
 Uncommitted changes remain in codex/usable-build-integration; last pushed commit
 is 6c67a8e. Latest full build/16-target CTest passes (134.21 s) before the final

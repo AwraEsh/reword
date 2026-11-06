@@ -77,6 +77,11 @@ Approved by the user on 2026-10-15. This file is the durable requirements source
   desktop compatibility, text-safety, rendered UI and active stability requirements.
 ## Upgrade and replacement requirement — 2026-10-29
 
+On 2026-11-06 the user permits resetting existing preferences if necessary to
+fix operation; preserve this as permission, not a requirement to discard data.
+The same request reiterates working Windows and Linux behavior as acceptance,
+not merely build compatibility.
+
 The user requests replacing the previous local installation with each verified
 new build, rather than leaving competing versions or launchers installed.
 Updates on Windows and Linux must manage obsolete application files safely,

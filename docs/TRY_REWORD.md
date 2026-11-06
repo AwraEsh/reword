@@ -34,6 +34,8 @@ On X11, Reword requests desktop accessibility when it starts so that application
 can be discovered. This does not enable the screen reader or allow applications
 automatically. If activation fails, the platform status explains that discovery
 is unavailable. The internal writing workspace remains available.
+An application can be detected while its fields remain unsupported. Reword
+corrects only fields it can safely read and replace.
 
 Default shortcuts are Ctrl+Alt+R for selected text, Ctrl+Alt+Z for guarded Undo,
 and Ctrl+Alt+Shift+P for Pause. You can change them in Settings. Copy the latest

@@ -55,6 +55,11 @@ int main(int argc, char **argv) {
     }
     QProcess fixture;
     auto fixtureEnvironment = QProcessEnvironment::systemEnvironment();
+    const bool foregroundOnly = app.arguments().contains("--foreground-only");
+    if (foregroundOnly) {
+        fixtureEnvironment.insert("NO_AT_BRIDGE", "1");
+        fixtureEnvironment.insert("REWORD_FIXTURE_NAMESPACE_PID", "1");
+    }
     fixtureEnvironment.insert("REWORD_FIXTURE_CHANGE_TIMING", "1");
     fixture.setProcessEnvironment(fixtureEnvironment);
     QList<qint64> changes;
@@ -140,11 +145,19 @@ int main(int argc, char **argv) {
     };
     if (!until([&] {
             auto field = observer->inspect(false);
-            return field.app == fixturePath && field.focused && field.known && !field.locked;
+            return field.app == fixturePath &&
+                   (foregroundOnly || (field.focused && field.known && !field.locked));
         }))
         return finish("FAIL: fixture focus unavailable.", 1);
     if (!until([&] { return seenFixture; }))
         return finish("FAIL: unknown application was not discovered for consent.", 1);
+    if (foregroundOnly) {
+        auto metadata = observer->inspect(false);
+        if (store.allowed(fixturePath) || !metadata.text.isEmpty() || metadata.known ||
+            !store.histories().isEmpty() || !store.statistics().isEmpty())
+            return finish("FAIL: inaccessible foreground application was authorized or read.", 1);
+        return finish("PASS: foreground discovery requests consent without a text provider.", 0);
+    }
     pump(150);
     if (store.allowed(fixturePath) || !store.shouldAsk(fixturePath) || text() != "teh " ||
         !store.histories().isEmpty() || !store.statistics().isEmpty())
