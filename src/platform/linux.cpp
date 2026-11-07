@@ -387,59 +387,61 @@ class LinuxAdapter final : public Adapter {
         return f;
     }
   public:
-    bool replace(const Field &expected, const QString &newText, int caret,
+    WriteResult replace(const Field &expected, const QString &newText, int caret,
                  const WriteAuthorization &authorize) override {
         auto current = readExpected(expected);
         if (!sameTarget(expected, current) || !validated_)
-            return false;
+            return {};
         GRef<AtspiAccessible> target(ATSPI_ACCESSIBLE(g_object_ref(validated_.get())),
                                      g_object_unref);
         GRef<AtspiEditableText> editable(atspi_accessible_get_editable_text_iface(target.get()),
                                          g_object_unref);
         GRef<AtspiText> text(atspi_accessible_get_text_iface(target.get()), g_object_unref);
         if (!editable || !text)
-            return false;
+            return {};
         const auto replacement = newText.toUtf8();
         const auto fieldEvents = fieldEvents_;
         const QDeadlineTimer authorizationWindow(WriteAuthorizationBudgetMs, Qt::PreciseTimer);
         if (!authorize || !authorize() || authorizationWindow.hasExpired())
-            return false;
+            return {};
         const QDeadlineTimer recheckWindow(WriteRecheckBudgetMs, Qt::PreciseTimer);
         if (!unlocked())
-            return false;
+            return {};
         // GTK can change the role of an existing entry without a text or
         // focus event. Refresh the metadata without requesting field text.
         atspi_accessible_clear_cache_single(target.get());
         Field eligibility;
         if (!readEligibility(target.get(), eligibility) || !eligibility.plain ||
             eligibility.password || !eligibility.editable || !eligibility.focused)
-            return false;
+            return {};
         dispatchPendingEvents();
         if (recheckWindow.hasExpired() || fieldEvents_ != fieldEvents ||
             g_main_context_pending(nullptr))
-            return false;
+            return {};
         // The provider recheck may take longer than a policy reply. Require
         // permission again after it, then check events before writing.
         const QDeadlineTimer finalWindow(WriteAuthorizationBudgetMs, Qt::PreciseTimer);
         if (!authorize() || finalWindow.hasExpired())
-            return false;
+            return {};
         dispatchPendingEvents();
         if (finalWindow.hasExpired() || fieldEvents_ != fieldEvents ||
             g_main_context_pending(nullptr))
-            return false;
+            return {};
         GError *error = nullptr;
         bool ok = atspi_editable_text_set_text_contents(editable.get(),
                                                         replacement.constData(), &error);
         if (error) {
             g_error_free(error);
-            return false;
+            return {};
         }
         if (!ok)
-            return false;
+            return {};
         atspi_text_set_caret_offset(text.get(), newText.left(caret).toUcs4().size(), nullptr);
         // A single set-contents call avoids delete/insert windows in supported plain fields.
-        auto after = readExpected(expected);
-        return after.id == expected.id && after.app == expected.app && after.text == newText;
+        const auto foreground = foregroundApplication();
+        if (!foreground.isEmpty() && foreground != expected.app)
+            return {true, {}};
+        return {true, readExpected(expected)};
     }
     bool shortcuts(const QString &fix, const QString &undo, const QString &pause) override {
         if (!display_)

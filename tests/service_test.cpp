@@ -36,10 +36,14 @@ class FixtureAdapter final : public Adapter {
     QStringList activeShortcuts;
     bool rejectRestore = false, rejectedShortcut = false;
     int rejectedShortcutAttempts = 0;
-    std::function<void()> onShortcutRejected, onRead, beforeWrite, onWrite, onMetadata;
+    std::function<void()> onShortcutRejected, onRead, beforeWrite, onWrite, onMetadata,
+        onTakeAction;
+    bool metadataBlurred = false;
     bool quiet = false;
     QString pendingAction;
     QString takeAction() override {
+        if (auto callback = std::exchange(onTakeAction, {}))
+            callback();
         return pendingAction;
     }
     bool changed() override {
@@ -68,6 +72,8 @@ class FixtureAdapter final : public Adapter {
             }
         } else {
             value.text.clear();
+            if (metadataBlurred)
+                value.focused = false;
             if (auto callback = std::exchange(onMetadata, {}))
                 callback();
         }
@@ -79,20 +85,21 @@ class FixtureAdapter final : public Adapter {
             return {};
         return inspect(true);
     }
-    bool replace(const Field &expected, const QString &text, int caret,
-                 const WriteAuthorization &authorize) override {
+    WriteResult replace(const Field &expected, const QString &text, int caret,
+                        const WriteAuthorization &authorize) override {
         ++writes;
         if (std::exchange(rejectNext, false) || !sameTarget(expected, field))
-            return false;
+            return {};
         if (auto callback = std::exchange(beforeWrite, {}))
             callback();
         if (!authorize || !authorize())
-            return false;
+            return {};
         type(text);
         field.caret = caret;
+        field.selectionStart = field.selectionEnd = -1;
         if (auto callback = std::exchange(onWrite, {}))
             callback();
-        return true;
+        return {true, readExpected(expected)};
     }
     QString description() const override {
         return "Synthetic text fixture";
@@ -517,6 +524,20 @@ class ServiceTest : public QObject {
         h.adapter->field.focused = true;
         h.adapter->pendingAction = "undo";
         QTRY_COMPARE(h.adapter->field.text, QString("teh "));
+    }
+    void shortcutArrivingAfterVerifiedWriteCanUndo() {
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        h.adapter->onWrite = [&] {
+            h.adapter->metadataBlurred = true;
+            h.adapter->onTakeAction = [&] {
+                h.adapter->metadataBlurred = false;
+                h.adapter->pendingAction = "undo";
+            };
+        };
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->writes, 2);
+        QCOMPARE(h.adapter->field.text, QString("teh "));
     }
     void confirmedPassageIsRecoverableWithoutHistory() {
         Harness h;

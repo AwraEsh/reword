@@ -113,9 +113,9 @@ class UiMetadataAdapter final : public reword::Adapter {
         field.id = "controlled-ui-field";
         return field;
     }
-    bool replace(const reword::Field &, const QString &, int,
-                 const reword::WriteAuthorization &) override {
-        return false;
+    reword::WriteResult replace(const reword::Field &, const QString &, int,
+                                const reword::WriteAuthorization &) override {
+        return {};
     }
     QString description() const override {
         return "Controlled UI metadata fixture";
@@ -160,17 +160,17 @@ class UiSelectionAdapter final : public reword::Adapter {
             ++actions;
         return action;
     }
-    bool replace(const reword::Field &expected, const QString &text, int caret,
-                 const reword::WriteAuthorization &authorize) override {
+    reword::WriteResult replace(const reword::Field &expected, const QString &text, int caret,
+                                const reword::WriteAuthorization &authorize) override {
         QMutexLocker lock(&mutex_);
         if (!reword::sameTarget(expected, field_) || !authorize || !authorize())
-            return false;
+            return {};
         ++writes;
         field_.text = text;
         field_.caret = caret;
         field_.selectionStart = field_.selectionEnd = -1;
         ++field_.revision;
-        return true;
+        return {true, field_};
     }
     bool shortcuts(const QString &, const QString &, const QString &) override { return true; }
     QString description() const override { return "Owned selection fixture"; }

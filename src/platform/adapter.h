@@ -6,6 +6,12 @@ namespace reword {
 using WriteAuthorization = std::function<bool()>;
 inline constexpr int WriteAuthorizationBudgetMs = 50;
 
+struct WriteResult {
+    bool accepted = false; // The provider acknowledged the edit.
+    Field after;          // Observed at the original target, if still readable.
+    explicit operator bool() const { return accepted; }
+};
+
 class Adapter {
   public:
     virtual ~Adapter() = default;
@@ -21,8 +27,8 @@ class Adapter {
     // Ask after native target validation, immediately before submitting the
     // edit. A missing or denied authorization must leave the target untouched.
     // The callback can be invoked again after a provider recheck.
-    virtual bool replace(const Field &expected, const QString &newText, int newCaret,
-                         const WriteAuthorization &authorize) = 0;
+    virtual WriteResult replace(const Field &expected, const QString &newText, int newCaret,
+                                const WriteAuthorization &authorize) = 0;
     virtual QString description() const = 0;
     // "pending" means a native shortcut still owns the keyboard/focus grace.
     // Callers must avoid text observation until an action or an empty result.

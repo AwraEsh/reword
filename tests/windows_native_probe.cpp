@@ -92,7 +92,9 @@ int main(int argc, char **argv) {
     field = adapter->readExpected(field);
     if (field.text != "newer")
         return finish("FAIL: a change during authorization was overwritten.", 1);
-    if (!adapter->replace(field, "the ", 4, allow))
+    const auto replacement = adapter->replace(field, "the ", 4, allow);
+    if (!replacement || replacement.after.id != field.id || replacement.after.text != "the " ||
+        replacement.after.caret != 4)
         return finish("FAIL: native replacement was not confirmed.", 1);
     auto command = [&](const QString &text) {
         fixture.write((text + '\n').toUtf8());

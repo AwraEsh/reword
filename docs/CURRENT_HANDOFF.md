@@ -50,6 +50,14 @@ measured active window), so the diagnostic continued without a resource pass.
 Receipt: `.deps/x11-late-grab-active-120/report.json`. Do not use this run as
 release or installation acceptance.
 
+The native adapter now returns the provider's immediate post-write observation
+to the service. This removes the second text read before recording live or
+passage Undo. Text, caret, selection and policy must match, and invoking Undo
+still reads and validates the current target. The targeted service regression
+failed before this change and passed afterward with the same test input.
+The focused run also passed newer-edit and protected-target cases.
+Receipts: `.deps/write-snapshot-red.log` and `.deps/write-snapshot-focused.log`.
+
 The local Preview now runs source `eda761b`. The per-user AppImage was replaced
 at the existing launcher path, with settings and history preserved. The old
 process was allowed to exit normally. The next running binary matched the new

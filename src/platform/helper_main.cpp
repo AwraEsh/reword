@@ -84,14 +84,16 @@ int main(int argc, char **argv) {
                     result = {{"field", reword::encodeField(adapter->readExpected(expected))}};
                 } else if (operation == "changed")
                     result = {{"changed", adapter->changed()}};
-                else if (operation == "replace-rechecked") {
+                else if (operation == "replace-observed") {
                     auto text = o["text"].toString();
                     int caret = o["caret"].toInt(-1);
                     bool bounded = text.size() <= 200000 && text.toUcs4().size() <= 100000 &&
                                    caret >= 0 && caret <= text.size();
-                    result = {{"ok", bounded && pending.isEmpty() && adapter->replace(
-                                                    reword::decodeField(o["expected"].toObject()),
-                                                    text, caret, requestAuthorization)}};
+                    reword::WriteResult edit;
+                    if (bounded && pending.isEmpty())
+                        edit = adapter->replace(reword::decodeField(o["expected"].toObject()),
+                                                text, caret, requestAuthorization);
+                    result = {{"accepted", edit.accepted}, {"after", reword::encodeField(edit.after)}};
                 } else if (operation == "shortcuts")
                     result = {{"ok", adapter->shortcuts(o["fix"].toString(), o["undo"].toString(),
                                                         o["pause"].toString())}};

@@ -7,6 +7,12 @@
 #include <QElapsedTimer>
 #include <cstdio>
 namespace reword {
+namespace {
+bool confirmedEdit(const Field &target, const Field &observed, const QString &text, int caret) {
+    return observed.id == target.id && observed.app == target.app && observed.text == text &&
+           observed.caret == caret && observed.selectionStart < 0 && observed.selectionEnd < 0;
+}
+}
 void Service::clearJobTarget() {
     nativeJob_ = false;
     nativeJobApp_.clear();
@@ -315,20 +321,21 @@ void Service::tick() {
                 break;
             }
             bool denied = false;
-            if (!adapter_->replace(f, updated, caret, [&] {
-                    denied = !policyCurrent(f, operationRevision, cancellation, ReadPurpose::Live);
-                    return !denied;
-                })) {
+            const auto edit = adapter_->replace(f, updated, caret, [&] {
+                denied = !policyCurrent(f, operationRevision, cancellation, ReadPurpose::Live);
+                return !denied;
+            });
+            if (!edit.accepted) {
                 traceRetry(denied ? 16 : 17);
                 retry_ = savedRetry;
                 break;
             }
-            auto after = permitted(&f, ReadPurpose::Live);
+            const auto &after = edit.after;
             if (after.id == f.id && after.app == f.app && after.selectionStart < 0 &&
                 after.selectionEnd < 0 && after.caret >= start && after.caret < caret &&
                 after.text == updated.left(after.caret) + updated.mid(caret) &&
                 policyCurrent(after, operationRevision, cancellation, ReadPurpose::Live)) {
-                // The verified write was followed by deletion at this word.
+                // The provider accepted the edit and the word was then shortened.
                 // Keep the retry decision, but never retain stale Undo or
                 // overwrite the user's newer text to finish confirmation.
                 traceRetry(11);
@@ -339,8 +346,7 @@ void Service::tick() {
                 previous_ = after;
                 break;
             }
-            if (after.id != f.id || after.app != f.app || after.text != updated ||
-                after.caret != caret) {
+            if (!confirmedEdit(f, after, updated, caret)) {
                 int reason = after.id != f.id || after.app != f.app ? 10
                              : after.text != updated ? 11 : 12;
                 resetObservation(observationFailureReason(f, reason));
@@ -464,18 +470,17 @@ void Service::runText(QString input, bool native, Field field) {
                                          : "Cancelled or settings changed. Nothing was replaced.");
                         return;
                     }
-                    if (!adapter_->replace(field, updated,
-                                           field.selectionStart + change.corrected.size(),
-                                           authorize)) {
+                    const int caret = field.selectionStart + change.corrected.size();
+                    const auto edit = adapter_->replace(field, updated, caret, authorize);
+                    if (!edit.accepted) {
                         resetObservation();
                         emit message(
                             "Replacement was not confirmed. Check the text; its original is "
                             "available in session recovery.");
                         return;
                     }
-                    auto after = permitted(&field);
-                    if (after.id != field.id || after.app != field.app || after.text != updated ||
-                        after.caret != field.selectionStart + change.corrected.size() ||
+                    const auto &after = edit.after;
+                    if (!confirmedEdit(field, after, updated, caret) ||
                         !policyCurrent(after, revision, cancellation)) {
                         resetObservation();
                         emit message("The field changed after correction. Copy the original from "
@@ -559,11 +564,12 @@ void Service::undo() {
         emit message("Cancelled or settings changed. Nothing was replaced.");
         return;
     }
-    if (adapter_->replace(f, undoBefore_, undoCaret_,
-                          [&] { return policyCurrent(f, revision, cancellation, purpose); })) {
-        auto after = permitted(&f, purpose);
-        if (after.id != f.id || after.app != f.app || after.text != undoBefore_ ||
-            after.caret != undoCaret_) {
+    const auto edit = adapter_->replace(
+        f, undoBefore_, undoCaret_, [&] { return policyCurrent(f, revision, cancellation, purpose); });
+    if (edit.accepted) {
+        const auto &after = edit.after;
+        if (!confirmedEdit(f, after, undoBefore_, undoCaret_) ||
+            !policyCurrent(after, revision, cancellation, purpose)) {
             resetObservation();
             emit message("The field changed after Undo. Check the application's text.");
             return;

@@ -97,10 +97,10 @@ class LinuxProxy final : public Adapter {
     bool changed() override {
         return request({{"operation", "changed"}})["changed"].toBool();
     }
-    bool replace(const Field &expected, const QString &text, int caret,
-                 const WriteAuthorization &authorize) override {
+    WriteResult replace(const Field &expected, const QString &text, int caret,
+                        const WriteAuthorization &authorize) override {
         if (!authorize)
-            return false;
+            return {};
         int grants = 0;
         const auto recheck = [&] {
             if (!authorize())
@@ -108,12 +108,14 @@ class LinuxProxy final : public Adapter {
             ++grants;
             return true;
         };
-        const auto response = request({{"operation", "replace-rechecked"},
+        const auto response = request({{"operation", "replace-observed"},
                                        {"expected", encodeField(expected)},
                                        {"text", text},
                                        {"caret", caret}},
                                       recheck);
-        return grants == NativeWriteChecks && response["ok"].toBool();
+        if (grants != NativeWriteChecks || !response["accepted"].toBool())
+            return {};
+        return {true, decodeField(response["after"].toObject())};
     }
     QString description() const override {
         auto description = healthy_ ? const_cast<LinuxProxy *>(this)

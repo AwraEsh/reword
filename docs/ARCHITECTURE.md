@@ -28,6 +28,10 @@ requests text. Adapters recheck the expected target and text, then ask the
 service to confirm the app's current mode, pause state, configuration revision
 and cancellation before submitting an edit. Selected-text edits also check the
 operation deadline. An authorization check lasting 50 ms or longer is rejected.
+The adapter returns the provider's acknowledgement and the state it observed
+immediately after the write. The service uses the confirmed text, caret and
+selection from that observation to record Undo and history. Undo still takes a
+fresh snapshot and checks the current policy before submitting a write.
 Desktop APIs cannot provide a universal cross-process atomic edit. An edit
 already sent to a provider can still complete during a policy or target change.
 

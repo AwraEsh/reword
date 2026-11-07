@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
         f.selectionEnd != f.text.size())
         return fail("A selection-only change was not preserved.");
     bool providerArmed = false;
-    const bool replacedWithSlowProvider = adapter->replace(f, "the ", 4, [&] {
+    const auto replacedWithSlowProvider = adapter->replace(f, "the ", 4, [&] {
         if (providerArmed)
             return true;
         auto request = QDBusMessage::createMethodCall(
@@ -101,7 +101,8 @@ int main(int argc, char **argv) {
     });
     if (!providerArmed)
         return fail("The controlled lock provider did not acknowledge the delay.");
-    if (!replacedWithSlowProvider)
+    if (!replacedWithSlowProvider || replacedWithSlowProvider.after.id != f.id ||
+        replacedWithSlowProvider.after.text != "the " || replacedWithSlowProvider.after.caret != 4)
         return fail("Guarded replacement failed with a responsive but slow lock provider.");
     f = adapter->readExpected(f);
     bool passwordObserved = false;

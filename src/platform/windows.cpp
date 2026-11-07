@@ -256,32 +256,32 @@ class WindowsAdapter final : public Adapter {
         return f;
     }
   public:
-    bool replace(const Field &expected, const QString &text, int caret,
+    WriteResult replace(const Field &expected, const QString &text, int caret,
                  const WriteAuthorization &authorize) override {
         if (!authorize || !sameTarget(expected, readExpected(expected)))
-            return false;
+            return {};
         auto e = validated_;
         ComPtr<IUIAutomationValuePattern> v;
         BOOL password = TRUE, focused = FALSE;
         if (!e || FAILED(e->get_CurrentIsPassword(&password)) || password ||
             FAILED(e->get_CurrentHasKeyboardFocus(&focused)) || !focused || !unlocked() ||
             FAILED(e->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&v))))
-            return false;
+            return {};
         const auto authorizeFresh = [&] {
             const QDeadlineTimer window(WriteAuthorizationBudgetMs, Qt::PreciseTimer);
             return authorize() && !window.hasExpired();
         };
         if (!authorizeFresh() || !sameTarget(expected, readExpected(expected)))
-            return false;
+            return {};
         std::unique_ptr<OLECHAR, decltype(&SysFreeString)> replacement(
             SysAllocStringLen(reinterpret_cast<const OLECHAR *>(text.utf16()), UINT(text.size())),
             &SysFreeString);
         if (!replacement || !authorizeFresh())
-            return false;
+            return {};
         HRESULT written = v->SetValue(replacement.get());
         replacement.reset();
         if (FAILED(written))
-            return false;
+            return {};
         ComPtr<IUIAutomationTextPattern> p;
         ComPtr<IUIAutomationTextRange> r;
         HWND native = nullptr;
@@ -298,8 +298,7 @@ class WindowsAdapter final : public Adapter {
                                   text.left(caret).toUcs4().size(), &moved);
             r->Select();
         }
-        auto after = readExpected(expected);
-        return after.id == expected.id && after.app == expected.app && after.text == text;
+        return {true, readExpected(expected)};
     }
     bool shortcuts(const QString &fix, const QString &undo, const QString &pause) override {
         if (!window_)
