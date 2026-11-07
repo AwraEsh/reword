@@ -1,14 +1,17 @@
 # Current handoff — 2026-11-07
 
-The local Preview installer receipt records source `091714f`. That build
-detects apps and delivers native consent. The user confirmed that a GNOME demo
+The local Preview now runs source `eda761b`. The per-user AppImage was replaced
+at the existing launcher path, with settings and history preserved. The old
+process was allowed to exit normally. The next running binary matched the new
+build by SHA256. Rollback: `.deps/preview-before-eda761b.AppImage`.
+
+The previous build, `091714f`, added native consent. The user confirmed that a GNOME demo
 notification appeared with action buttons. The demo buttons had no effect on
 saved permissions. Windows notification appearance and real Telegram/Chrome
 correction still need desktop testing.
 
-The integration branch adds per-app modes, **Remove rule**, and the sidebar
-credit **Built by AwraEsh for AwraEsh**. The previous AppImage does not contain
-these changes. Removing a rule invalidates pending consent and revokes access.
+This build adds per-app modes, **Remove rule**, and the sidebar credit
+**Built by AwraEsh for AwraEsh**. Removing a rule invalidates pending consent and revokes access.
 An app can be rediscovered later without permission. The Windows setup EXE,
 Linux AppImage and Debian package are the requested release assets. Publish
 after the runtime acceptance and binary/source pairing checks for those assets.
@@ -21,10 +24,26 @@ from an earlier prompt are rejected after the next request is queued.
 Receipts: `.deps/application-modes-verified-build.log` and
 `.deps/application-modes-verified-tests.log`.
 
-The previous Debian runtime manifest needs four source versions beyond the
+The [hosted run](https://github.com/AwraEsh/reword/actions/runs/42354120585)
+passed on both Windows and Linux for `eda761b`. The Windows runner verified
+install, clean-PATH launch, uninstall and native Win32 controls. The AppImage
+and extracted Debian package passed isolated launch checks on the Debian host.
+An Applications screenshot from the packaged AppImage confirms the credit,
+three modes and Remove rule controls with synthetic app data.
+Receipts: `.deps/application-modes-package-smoke.log` and
+`.deps/application-modes-preview.png`.
+
+The [draft release](https://github.com/AwraEsh/reword/releases/tag/untagged-7e704e117a508e889abf)
+targets exact source `eda761b` and contains the Windows installer, AppImage,
+Debian package and SHA256SUMS. GitHub reported each file uploaded, with size
+and SHA256 matching the local asset. Receipt:
+`.deps/release-eda761b-windows/release-receipt.json`.
+
+The final Debian runtime manifest needs four source versions beyond the
 archived set: brotli `1.1.0-2+deb13u1`, curl `8.14.1-2+deb13u7`, expat
-`2.9.0-1~deb13u1` and libxres `2:1.2.1-1`. Compare the final manifest again
-before release. Windows notice and source pairing is also open. Changing a
+`2.9.0-1~deb13u1` and libxres `2:1.2.1-1`. The manifest SHA256 is
+`7a448d3077b430f5e75ad60d03cfea6d1a25a63138e615acada894339bcc22bf`.
+Windows notice and source pairing is also open. Changing a
 rule invalidates pending computations, but a native setter that has already
 been dispatched can finish during revocation. See COMPATIBILITY.md.
 
