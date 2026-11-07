@@ -1,5 +1,23 @@
 # Current handoff — 2026-11-07
 
+## Immediate live Undo in the private IBus session
+
+The compiled IBus engine now accepts the configured Undo key for one
+confirmed live correction. It rechecks the current text, caret, target,
+permission and configuration revision. The real GNOME Text Editor run
+verified the original typo was restored, correction worked afterward,
+and Undo did not overwrite text typed after a later correction.
+Receipts: `.deps/ibus-live-undo-red/report.json`,
+`.deps/ibus-live-undo-direct/report.json` and the independent passing
+repeat `.deps/ibus-live-undo-direct-repeat/report.json`.
+
+An intervening Save can consume the surrounding observation. GTK may
+withhold a duplicate observation when text is unchanged, in which case
+Undo refuses rather than trusting the older buffer. Receipt:
+`.deps/ibus-live-undo-green-2/report.json`. The successful run exercised
+the IBus engine without the GUI's competing X11 shortcut grab. Check
+that routing before packaging. No package was installed.
+
 ## Resumed after the Codex limit reset
 
 The user resumed work. The pause below is historical. The precise paused

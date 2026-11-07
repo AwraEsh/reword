@@ -121,6 +121,8 @@ def run_probe(desktop, root, output, reword_engine):
     address = f"unix:path={root}/runtime/reword-ibus"
     env = dict(os.environ, IBUS_ADDRESS=address, GTK_IM_MODULE="ibus", QT_IM_MODULE="ibus",
                IBUS_ENABLE_SYNC_MODE="1", GSK_RENDERER="cairo", REWORD_DATA_DIR=str(root / "reword"))
+    if reword_engine:
+        env["REWORD_IBUS_DIAGNOSTICS"] = "1"
     children = []
     result = {}
 
@@ -263,6 +265,32 @@ def run_probe(desktop, root, output, reword_engine):
 
                 result["editor_second_preserved"] = rewrite("teh")
                 result["editor_third_corrected"] = rewrite("the")
+                def live_writes():
+                    return (output / "engine.log").read_bytes().splitlines().count(b"IBUS 13")
+
+                # Save itself can invalidate the last IBus snapshot. Exercise
+                # Undo immediately after a fresh correction without saving first.
+                writes = live_writes()
+                for _ in range(4):
+                    desktop._keys(["BackSpace"])
+                    time.sleep(.10)
+                desktop._keys(["Left"])
+                desktop._keys(["Right"])
+                type_typo(desktop)
+                result["editor_undo_correction_observed"] = wait_for(
+                    lambda: live_writes() > writes, 2)
+                desktop.shortcut("undo")
+                desktop._keys(["Control_L", "s"], chord=True)
+                result["editor_live_undo"] = (result["editor_undo_correction_observed"] and
+                    wait_for(lambda: saved_correction(document, "teh"), 4))
+                if result["editor_live_undo"]:
+                    result["editor_correction_after_undo"] = rewrite("the")
+                desktop._keys(["x"])
+                desktop.shortcut("undo")
+                desktop._keys(["Control_L", "s"], chord=True)
+                result["editor_undo_preserves_new_text"] = wait_for(
+                    lambda: saved_input(document, "the x"), 4)
+                desktop._keys(["BackSpace"])
                 update_settings("INSERT OR REPLACE INTO settings VALUES(?,?)", ("pauseUntil", "[-1]"))
                 result["editor_pause_preserved"] = rewrite("teh")
                 update_settings("UPDATE settings SET value=? WHERE key=?", ("[0]", "pauseUntil"))
@@ -371,7 +399,8 @@ setInterval(() => {
                                 "editor_denied_preserved", "editor_fast_input_intact",
                                 "editor_persian_corrected", "editor_persian_disabled",
                                 "editor_english_stays_enabled", "editor_english_disabled",
-                                "editor_persian_stays_enabled"))
+                                "editor_persian_stays_enabled", "editor_live_undo",
+                                "editor_correction_after_undo", "editor_undo_preserves_new_text"))
     else:
         passed = passed and result.get("browser_preedit")
     return 0 if passed else 1

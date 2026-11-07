@@ -3,6 +3,7 @@
 
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <QKeySequence>
 #include <QScopeGuard>
 #include <QStandardPaths>
 #include <chrono>
@@ -32,6 +33,7 @@ enum class Trace {
     Focused = 1, Blurred, Key, NoSurrounding, Unverified, Policy, Snapshot, NoSnapshot,
     NoWord, NoCorrection, RetrySkipped, TimedOut, Write, Reset, NoFocus, NoPreparedEdit,
     MissingWitness, WitnessBeforeFocus, ExpiredWitness, ForegroundChanged,
+    UndoRejected, UndoApplied, UndoNoRecord, UndoNoObservation,
 };
 void trace(Trace reason) {
     static const bool enabled = qEnvironmentVariableIsSet("REWORD_IBUS_DIAGNOSTICS");
@@ -189,8 +191,15 @@ class SuggestionWorker {
     }
 };
 
-struct PendingEdit {
+struct UndoEdit {
     Observation expected;
+    QString original;
+    guint replacementLength = 0;
+    qint64 revision = 0;
+};
+
+struct PendingEdit {
+    UndoEdit undo;
     reword::RetryCycle retry;
     Clock::time_point expires;
 };
@@ -202,6 +211,7 @@ struct Context {
     reword::InputMethodTarget target;
     std::optional<Observation> surrounding;
     std::optional<PendingEdit> pending;
+    std::optional<UndoEdit> undo;
     reword::RetryCycle retry;
     QString prefix, lastToken;
     int retryStart = -1;
@@ -216,6 +226,7 @@ struct Context {
     void clear() {
         resetRetry();
         surrounding.reset();
+        undo.reset();
         target = {};
         deletionUntil = {};
     }
@@ -357,6 +368,7 @@ void reset(IBusEngine *engine) {
     trace(Trace::Reset);
     auto &context = state(engine);
     context.surrounding.reset();
+    context.undo.reset();
     runtime->suggestions.cancel(context.generation);
     if (Clock::now() > context.deletionUntil)
         context.resetRetry();
@@ -402,11 +414,14 @@ void observe(IBusEngine *engine, IBusText *text, guint cursor, guint anchor) {
         }
         const auto caret = QString::fromUcs4(
             reinterpret_cast<const char32_t *>(points.constData()), cursor).size();
+        Observation observed{value, int(caret)};
+        if (context.undo && observed != context.undo->expected)
+            context.undo.reset();
         if (context.pending) {
-            const auto &expected = context.pending->expected;
-            if (Clock::now() <= context.pending->expires && value == expected.text &&
-                caret == expected.caret) {
+            if (Clock::now() <= context.pending->expires &&
+                observed == context.pending->undo.expected) {
                 context.retry = context.pending->retry;
+                context.undo = std::move(context.pending->undo);
                 context.pending.reset();
             } else {
                 context.resetRetry();
@@ -415,13 +430,64 @@ void observe(IBusEngine *engine, IBusText *text, guint cursor, guint anchor) {
         if (context.retryStart >= 0 &&
             (caret < context.retryStart || value.left(context.retryStart) != context.prefix))
             context.resetRetry();
-        context.surrounding = Observation{value, int(caret)};
+        context.surrounding = std::move(observed);
         runtime->suggestions.offer({context.generation,
             runtime->store.value("configRevision", 0).toLongLong(), *context.surrounding});
         trace(Trace::Snapshot);
     } catch (...) {
         clear(context);
     }
+}
+
+bool undoShortcut(guint key, guint modifiers) {
+    if (!(modifiers & (IBUS_SHIFT_MASK | IBUS_CONTROL_MASK | IBUS_MOD1_MASK |
+                       IBUS_MOD4_MASK | IBUS_SUPER_MASK | IBUS_META_MASK)) ||
+        modifiers & (IBUS_MOD5_MASK | IBUS_HYPER_MASK))
+        return false;
+    const auto letter = QChar::toUpper(ibus_keyval_to_unicode(key));
+    if (letter < 'A' || letter > 'Z')
+        return false;
+    const auto shortcut = QKeySequence::fromString(
+        runtime->store.value("undoShortcut", "Ctrl+Alt+Z").toString(),
+        QKeySequence::PortableText);
+    if (shortcut.count() != 1 || shortcut[0].key() != int(letter))
+        return false;
+    Qt::KeyboardModifiers pressed;
+    if (modifiers & IBUS_SHIFT_MASK)
+        pressed |= Qt::ShiftModifier;
+    if (modifiers & IBUS_CONTROL_MASK)
+        pressed |= Qt::ControlModifier;
+    if (modifiers & IBUS_MOD1_MASK)
+        pressed |= Qt::AltModifier;
+    if (modifiers & (IBUS_MOD4_MASK | IBUS_SUPER_MASK | IBUS_META_MASK))
+        pressed |= Qt::MetaModifier;
+    return shortcut[0].keyboardModifiers() == pressed;
+}
+
+bool applyUndo(IBusEngine *engine, Context &context, const reword::InputMethodTarget &target,
+               const std::optional<Observation> &observed, Clock::time_point started) {
+    auto undo = std::exchange(context.undo, std::nullopt);
+    if (!undo || !observed) {
+        trace(!undo ? Trace::UndoNoRecord : Trace::UndoNoObservation);
+        return false;
+    }
+    if (*observed != undo->expected ||
+        !sameField(runtime->targetFor(engine, context), target) || !runtime->allowed(target) ||
+        runtime->store.value("configRevision", 0).toLongLong() != undo->revision ||
+        Clock::now() - started > keyBudget) {
+        trace(Trace::UndoRejected);
+        return false;
+    }
+    auto *restored = ibus_text_new_from_string(undo->original.toUtf8().constData());
+    if (!restored)
+        return false;
+    context.resetRetry();
+    runtime->suggestions.cancel(context.generation);
+    ibus_engine_delete_surrounding_text(engine, -int(undo->replacementLength),
+                                       undo->replacementLength);
+    ibus_engine_commit_text(engine, restored);
+    trace(Trace::UndoApplied);
+    return true;
 }
 
 gboolean process(IBusEngine *engine, guint key, guint, guint modifiers) {
@@ -444,7 +510,17 @@ gboolean process(IBusEngine *engine, guint key, guint, guint modifiers) {
         // Only a verified, permitted field can request surrounding text.
         // The toolkit sends snapshots in later IBus callbacks.
         ibus_engine_get_surrounding_text(engine, nullptr, nullptr, nullptr);
+        // Pressing a physical modifier does not edit the surrounding text.
+        // Keep the observation available for the following shortcut key.
+        if (key == IBUS_KEY_Control_L || key == IBUS_KEY_Control_R ||
+            key == IBUS_KEY_Alt_L || key == IBUS_KEY_Alt_R ||
+            key == IBUS_KEY_Shift_L || key == IBUS_KEY_Shift_R ||
+            key == IBUS_KEY_Meta_L || key == IBUS_KEY_Meta_R ||
+            key == IBUS_KEY_Super_L || key == IBUS_KEY_Super_R)
+            return FALSE;
         auto observed = std::exchange(context.surrounding, std::nullopt);
+        if (undoShortcut(key, modifiers))
+            return applyUndo(engine, context, target, observed, started);
         const auto code = ibus_keyval_to_unicode(key);
         const bool modified = modifiers & (IBUS_CONTROL_MASK | IBUS_MOD1_MASK | IBUS_SUPER_MASK);
         context.deletionUntil = key == IBUS_KEY_BackSpace || key == IBUS_KEY_Delete
@@ -453,6 +529,7 @@ gboolean process(IBusEngine *engine, guint key, guint, guint modifiers) {
             key == IBUS_KEY_Down || key == IBUS_KEY_Home || key == IBUS_KEY_End ||
             key == IBUS_KEY_Page_Up || key == IBUS_KEY_Page_Down) {
             context.resetRetry();
+            context.undo.reset();
             return FALSE;
         }
         const QChar mark{char16_t(code)};
@@ -514,8 +591,11 @@ gboolean process(IBusEngine *engine, guint key, guint, guint modifiers) {
         context.prefix = prefix;
         context.lastToken = word.token;
         context.retryStart = word.start;
-        context.pending = PendingEdit{{expected, int(prefix.size() + replacement.size())},
-                                      std::move(retry), Clock::now() + 300ms};
+        context.undo.reset();
+        context.pending = PendingEdit{
+            {{expected, int(prefix.size() + replacement.size())}, word.token + mark,
+             guint(replacement.toUcs4().size()), revision},
+            std::move(retry), Clock::now() + 300ms};
         const int length = word.token.toUcs4().size();
         const auto encoded = replacement.toUtf8();
         ibus_engine_delete_surrounding_text(engine, -length, length);

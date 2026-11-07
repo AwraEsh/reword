@@ -74,6 +74,14 @@ Focus loss and blocked policy discard the result. A missing result leaves
 the key with the application. Dictionary changes and correction settings
 advance the revision in the same SQLite transaction as the change.
 
+The development IBus engine records one live Undo after observing the exact
+result of a correction. The configured Undo key can apply that record only
+with a matching current observation, the same authorized target and the
+same settings revision. Physical modifier presses keep the observation for
+the following shortcut key. Commands that could edit the document consume
+the observation. The engine waits for a new observation before it can make
+another guarded edit.
+
 ## Threads and storage
 
 The native service runs on a worker thread. Full-passage work uses asynchronous
