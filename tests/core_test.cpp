@@ -90,6 +90,20 @@ class CoreTest : public QObject {
         writer.setCorrectionOption("english", false);
         QCOMPARE(revision(), initial + 5);
     }
+    void pauseAndResumeInvalidatePreparedCorrections() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        const auto revision = [&] { return reader.value("configRevision", 0).toLongLong(); };
+        const auto initial = revision();
+        writer.pause(-1);
+        QVERIFY(reader.paused());
+        QCOMPARE(revision(), initial + 1);
+        writer.pause(-1);
+        QCOMPARE(revision(), initial + 1);
+        writer.pause(0);
+        QVERIFY(!reader.paused());
+        QCOMPARE(revision(), initial + 2);
+    }
     void oversizedOptionsDoNotBypassOperationCeiling() {
         Engine engine;
         Options options;

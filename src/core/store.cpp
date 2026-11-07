@@ -414,9 +414,9 @@ bool Store::paused(qint64 now) const {
     return until == -1 || until > now;
 }
 void Store::pause(int minutes) {
-    setValue("pauseUntil", minutes < 0    ? qint64(-1)
-                           : minutes == 0 ? qint64(0)
-                                          : QDateTime::currentSecsSinceEpoch() +
-                                                qint64(std::clamp(minutes, 1, 10080)) * 60);
+    setCorrectionOption("pauseUntil", minutes < 0    ? qint64(-1)
+                                      : minutes == 0 ? qint64(0)
+                                                     : QDateTime::currentSecsSinceEpoch() +
+                                                           qint64(std::clamp(minutes, 1, 10080)) * 60);
 }
 } // namespace reword

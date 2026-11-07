@@ -35,14 +35,15 @@ function sendWord(word, reply) {
 
 chrome.runtime.onMessage.addListener((request, sender, send) => {
     if (sender.id !== chrome.runtime.id || sender.origin !== PROBE_ORIGIN || sender.frameId !== 0 ||
-        !['plain', 'multiline', 'stale', 'blur', 'policy', 'revoke'].includes(request?.test)) return false;
+        !['plain', 'multiline', 'stale', 'blur', 'policy', 'revoke', 'pause-cycle', 'pending-caret', 'retry']
+            .includes(request?.test)) return false;
 
     if (PROBE_ENGINE) {
         if (request.policy === true) sendWord({policy: true}, send);
         else {
             sendWord(request.word, reply => {
-                if (['stale', 'blur', 'revoke'].includes(request.test)) {
-                    setTimeout(() => send(reply), request.test === 'revoke' ? 1000 : 650);
+                if (['stale', 'blur', 'revoke', 'pause-cycle', 'pending-caret'].includes(request.test)) {
+                    setTimeout(() => send(reply), 1000);
                 } else {
                     send(reply);
                 }

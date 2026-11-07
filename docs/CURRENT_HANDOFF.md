@@ -1,5 +1,43 @@
 # Current handoff — 2026-11-07
 
+## Browser rewrite cycle and Pause invalidation
+
+The red browser probe corrected all three attempts. The red Core test also
+showed that Pause changed the current state without changing its revision.
+See `.deps/browser-retry-cycle-red/report.json` and
+`.deps/browser-pause-revision-red.log`.
+
+The browser host now uses the shared `RetryCycle`. Its continuation token is
+retained by the extension only after the range and current policy match.
+The extension tracks deletion and reinsertion using trusted edit events.
+It checks the exact left context, word and right context after policy
+permits reading the field again. It discards that state on focus or caret
+changes, continued typing, or expiry.
+
+Pause and Resume now advance the same revision used by pending corrections.
+The browser policy fixture calls the real Store API. Both Helium and Chrome
+passed the first/second/third rewrite, the reset checks, and a Pause/Resume
+round trip while a correction reply was pending. The first reports are
+`.deps/browser-retry-helium/report.json` and `.deps/browser-retry-chrome/report.json`.
+
+An added test reproduced a late correction after a real left/right
+round trip. Trusted caret navigation and pointer presses now invalidate
+outstanding proposals. The failing report is
+`.deps/browser-pending-caret-red/report.json`. Both final browser runs
+passed the caret round trip in addition to the earlier checks. Their
+reports are `.deps/browser-retry-final-helium/report.json` and
+`.deps/browser-retry-final-chrome/report.json`.
+
+Core, Service, UI and Fcitx state tests passed after relinking against
+the Store change. The fixed-response browser probe and the joint
+GNOME Text Editor, IBus and GUI probe also passed. Reports are
+`.deps/browser-retry-desktop-ctest.log`,
+`.deps/browser-retry-final-transport/report.json` and
+`.deps/browser-retry-final-ibus/report.json`.
+
+Browser Undo, page input notifications, installation and real Windows
+browser behavior are still pending. The installed Preview is unchanged.
+
 ## Browser live correction transport
 
 The installed Helium 0.12.4.1 and Google Chrome 151.0.7922.173 can run an
@@ -48,12 +86,10 @@ The original fixed-response probe passed again. Reports are under
 Core, fixture options and retry diagnostics passed. A direct launch from a
 non-browser parent exited before opening storage or emitting any output.
 
-Next, verify page input notifications, alternating rewrites and Undo.
-Add a Pause and Resume round-trip test for an outstanding correction.
-The current Store updates `pauseUntil` without advancing the revision,
-so a full pause and resume between two browser checks could go unseen.
-Then test browser registration and upgrades on Linux and Windows.
-Normal profiles, rich editors and YukiGram's message composer remain open.
+The rewrite cycle and Pause round-trip test are recorded above. Page input
+notifications, Undo, normal browser profiles, browser registration and
+upgrades on Linux and Windows, rich editors and YukiGram's message composer
+remain open.
 
 The Undo change at `24cba30` passed the regular hosted Linux and Windows
 test matrix in both GitHub runs. The combined GUI and IBus probe ran

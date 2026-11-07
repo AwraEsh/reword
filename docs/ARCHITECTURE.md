@@ -96,12 +96,20 @@ frames have a 4 KiB limit. The host uses the same application mode, browser
 toggle, Pause state and configuration revision as the desktop adapter.
 It checks current policy before parsing a word request and again before
 returning a suggestion. A persistent port keeps the dictionary loaded.
+Pause and Resume advance the configuration revision in the same
+transaction as the setting change.
 
 The test extension checks browser policy before reading the field value.
 It compares field identity, focus, input generation, text, caret and
 settings revision after asynchronous work. Only then does it replace
 the reported range. The current fixture does not cover web editors that
 need a page-level input event or a browser-native Undo entry.
+
+The host uses the shared retry cycle and returns an in-memory continuation
+token with each candidate or deliberate skip. The extension sends it again
+only after a verified delete and rewrite in the same location. A canceled
+proposal cannot confirm its continuation token. The host keeps a digest
+of the original word for that comparison.
 
 ## Threads and storage
 

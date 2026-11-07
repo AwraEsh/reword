@@ -3,7 +3,7 @@ import {execFileSync, spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {chmod, copyFile, mkdir, readFile, readlink, writeFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
-import {join} from 'node:path';
+import {dirname, join} from 'node:path';
 import {createInterface} from 'node:readline';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
@@ -141,13 +141,14 @@ try {
         throw new Error('Unexpected extension identity');
     }
     let application;
-    const setPolicy = (...change) => execFileSync('/usr/bin/python3',
-        [join(fixture, 'settings.py'), join(root, 'reword'), application, ...change], {timeout: 5000});
+    const setPolicy = (...change) => execFileSync(
+        join(dirname(engineHost), 'reword_browser_policy_fixture'),
+        [join(root, 'reword'), application, ...change], {timeout: 5000});
     if (engineHost) {
         const {processInfo} = await call('SystemInfo.getProcessInfo');
         const parent = processInfo.find(process => process.type === 'browser');
         application = await readlink('/proc/' + parent.id + '/exe');
-        setPolicy();
+        setPolicy('rule', 'allow');
     }
     const {targetId} = await call('Target.createTarget', {url: origin});
     const {sessionId} = await call('Target.attachToTarget', {targetId, flatten: true});
@@ -178,6 +179,12 @@ try {
             await insert(' ');
         } else {
             await insert(word + ' ');
+        }
+    };
+    const pressKey = async (key, windowsVirtualKeyCode) => {
+        for (const type of ['rawKeyDown', 'keyUp']) {
+            await call('Input.dispatchKeyEvent', {type, key, code: key, windowsVirtualKeyCode},
+                       sessionId);
         }
     };
     const status = field => evaluate(
@@ -239,17 +246,32 @@ try {
     if (engineHost) {
         result.stage = 'pending-policy-change';
         const replies = () => result.nativeHostStages.filter(stage => stage === 5).length;
-        const before = replies();
-        await focus('revoke');
-        await typeWord();
-        if (!await waitFor(() => replies() >= before + 2)) {
-            throw new Error('The native host did not answer the pending correction');
-        }
-        setPolicy('rule', 'deny');
-        const revoked = await outcome('revoke');
-        result.pendingPolicyRevoked = revoked.value === 'teh ' && revoked.outcome === 'stale';
+        const pendingEdit = async (field, change) => {
+            const before = replies();
+            await focus(field);
+            await typeWord();
+            if (!await waitFor(() => replies() >= before + 2)) {
+                throw new Error('The native host did not answer the pending correction');
+            }
+            await change();
+            const observed = await outcome(field);
+            return observed.value === 'teh ' && observed.outcome === 'stale';
+        };
+        result.pendingPolicyRevoked = await pendingEdit('revoke', () => setPolicy('rule', 'deny'));
         if (!result.pendingPolicyRevoked) throw new Error('The revoked correction was not discarded');
         setPolicy('rule', 'allow');
+        result.pendingPauseResume = await pendingEdit('pause-cycle', () => {
+            setPolicy('pauseUntil', '-1');
+            setPolicy('pauseUntil', '0');
+        });
+        if (!result.pendingPauseResume) throw new Error('Pause and Resume left a stale correction valid');
+        result.pendingCaretMove = await pendingEdit('pending-caret', async () => {
+            await pressKey('ArrowLeft', 37);
+            if ((await status('pending-caret')).caret !== 3) throw new Error('The caret did not move left');
+            await pressKey('ArrowRight', 39);
+            if ((await status('pending-caret')).caret !== 4) throw new Error('The caret did not return');
+        });
+        if (!result.pendingCaretMove) throw new Error('Caret movement left a stale correction valid');
 
         result.stage = 'live-policy';
         result.policy = {};
@@ -286,6 +308,44 @@ try {
         await verifyWord('persianStillEnabled', 'سلاام', 'سلام');
         if (!Object.values(result.policy).every(Boolean)) {
             throw new Error('A browser live policy check failed');
+        }
+        result.stage = 'retry-cycle';
+        setPolicy('english', 'true');
+        await focus('retry', 7);
+        result.retry = [];
+        const removeWord = async () => {
+            for (let index = 0; index < 4; index++) await pressKey('Backspace', 8);
+            const erased = await status('retry');
+            if (erased.value !== 'prefix suffix' || erased.caret !== 7) {
+                throw new Error('The browser did not erase the previous attempt in place');
+            }
+        };
+        const verifyRetry = async (expected, state) => {
+            await evaluate("delete document.getElementById('retry').dataset.outcome");
+            await typeWord();
+            const observed = await outcome('retry');
+            return observed.value === 'prefix ' + expected + ' suffix' &&
+                observed.caret === 11 && observed.outcome === state;
+        };
+        for (const [attempt, expected] of ['the', 'teh', 'the'].entries()) {
+            if (attempt) await removeWord();
+            result.retry.push(await verifyRetry(expected, attempt === 1 ? 'skipped' : 'applied'));
+        }
+        if (!result.retry.every(Boolean)) throw new Error('The browser rewrite did not alternate');
+        await pressKey('ArrowLeft', 37);
+        await pressKey('ArrowRight', 39);
+        await removeWord();
+        result.retryAfterCaretMove = await verifyRetry('the', 'applied');
+        await removeWord();
+        await focus('plain', 0);
+        await focus('retry', 7);
+        result.retryAfterFocusChange = await verifyRetry('the', 'applied');
+        await insert('x');
+        await pressKey('Backspace', 8);
+        await removeWord();
+        result.retryAfterContinuing = await verifyRetry('the', 'applied');
+        if (!result.retryAfterCaretMove || !result.retryAfterFocusChange || !result.retryAfterContinuing) {
+            throw new Error('The rewrite cycle persisted after leaving the original edit');
         }
     }
     result.stage = 'complete';

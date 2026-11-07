@@ -1,7 +1,9 @@
 #include "core/store.h"
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDeadlineTimer>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -57,6 +59,10 @@ class BrowserCorrection {
     reword::Engine engine_;
     reword::Options options_;
     qint64 settingsRevision_ = -1;
+    reword::RetryCycle retry_;
+    QElapsedTimer clock_;
+    quint64 lastOffer_ = 0;
+    qint64 lastOfferRevision_ = -1;
 
     bool permitted() const {
         return !store_.paused() && store_.allowed(application_) &&
@@ -65,7 +71,9 @@ class BrowserCorrection {
 
   public:
     BrowserCorrection(const QString &application, const QString &directory)
-        : application_(application), store_(directory, 0) {}
+        : application_(application), store_(directory, 0) {
+        clock_.start();
+    }
 
     QJsonObject suggest(const QByteArray &payload) {
         const QDeadlineTimer deadline(MaximumSuggestionAgeMs, Qt::PreciseTimer);
@@ -81,7 +89,9 @@ class BrowserCorrection {
         const auto text = request.value("text").toString();
         const auto caret = request.value("caret").toInt(-1);
         const auto boundary = request.value("boundary").toString();
-        if (request.size() != 4 || request.value("revision").toString() != expectedRevision ||
+        const auto continuation = request.value("continuation");
+        if (request.size() != (continuation.isString() ? 5 : 4) ||
+            request.value("revision").toString() != expectedRevision ||
             text.isEmpty() || text.size() >= MaxFieldUnits ||
             boundary.size() != 1 || !QStringView(u" .,!؟?،").contains(boundary.front())) {
             trace(Stage::InvalidRequest);
@@ -111,7 +121,21 @@ class BrowserCorrection {
             trace(Stage::Deadline);
             return {};
         }
-        return {{"start", word->start}, {"length", word->token.size()}, {"corrected", corrected}};
+        if (!lastOffer_ || lastOfferRevision_ != revision ||
+            continuation.toString() != QString::number(lastOffer_))
+            retry_.reset();
+        // The host keeps the retry decision without keeping the original word.
+        const auto wordKey = QString::fromLatin1(
+            QCryptographicHash::hash(word->token.toUtf8(), QCryptographicHash::Sha256).toHex());
+        const bool apply = retry_.shouldCorrect(application_, word->start, wordKey, clock_.elapsed());
+        lastOfferRevision_ = revision;
+        QJsonObject response{{"start", word->start}, {"length", word->token.size()},
+                             {"attempt", QString::number(++lastOffer_)}};
+        if (apply)
+            response.insert("corrected", corrected);
+        else
+            response.insert("skipped", true);
+        return response;
     }
 };
 }
