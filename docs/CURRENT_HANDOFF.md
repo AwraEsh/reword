@@ -33,7 +33,7 @@ three modes and Remove rule controls with synthetic app data.
 Receipts: `.deps/application-modes-package-smoke.log` and
 `.deps/application-modes-preview.png`.
 
-The [draft release](https://github.com/AwraEsh/reword/releases/tag/untagged-7e704e117a508e889abf)
+The draft `v0.1.0-preview.1` in [GitHub Releases](https://github.com/AwraEsh/reword/releases)
 targets exact source `eda761b` and contains the Windows installer, AppImage,
 Debian package and SHA256SUMS. GitHub reported each file uploaded, with size
 and SHA256 matching the local asset. Receipt:
