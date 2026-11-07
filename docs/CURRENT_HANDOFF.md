@@ -19,13 +19,41 @@ Both checked-in runs passed. The reports are
 `.deps/browser-transport-final-helium/report.json` and
 `.deps/browser-transport-final-google-chrome/report.json`.
 
-Next, replace the fixed response with a bounded native messaging host using
-the existing Reword dictionary and Store. Bind the request to the browser
-application rule and recheck Pause and settings before offering a result.
-Test page input notifications, the alternating rewrite cycle, and Undo in
-the browser before treating the route as a release candidate. Normal
-browser profiles, rich editors, Windows host registration and YukiGram's
-message composer are still unverified.
+The opt-in `reword-browser-host` now runs the actual dictionary and Store.
+The red probe reported `native-host-unavailable`. An initial compiled run
+hit the two-second startup wait. With a longer cold-start wait, the
+isolated browser runs then corrected both input types. The same live
+connection observed policy changes without a browser restart. Tested
+states include Shortcut Only, denial, rule removal, Pause, Resume, the
+browser toggle and independent language switches.
+
+The browser fixture asks for policy before sending a field value and
+rechecks policy before applying a suggestion. It preserves input after
+the rule is revoked while a reply is pending. No password or
+one-time-code field sends a text request. The developer-only Linux host
+is registered inside the fixture's temporary browser profile.
+
+Numeric event 11 identified a host deadline rejection under the bounded
+X11 test workload. The fixture now prewarms the host with a metadata
+request before typing. The host caches dictionary settings by revision and
+discards a suggestion after 150 ms. This cutoff is separate from the
+user's 50 ms p95 performance target, which still needs measurement.
+The deadline diagnostic is in
+`.deps/browser-host-reason-helium/report.json`.
+
+The final compiled probe passed twice in Helium and once in Google Chrome.
+The original fixed-response probe passed again. Reports are under
+`.deps/browser-host-warm-helium/`, `.deps/browser-host-warm-helium-repeat/`,
+`.deps/browser-host-warm-google-chrome/` and `.deps/browser-host-warm-transport/`.
+Core, fixture options and retry diagnostics passed. A direct launch from a
+non-browser parent exited before opening storage or emitting any output.
+
+Next, verify page input notifications, alternating rewrites and Undo.
+Add a Pause and Resume round-trip test for an outstanding correction.
+The current Store updates `pauseUntil` without advancing the revision,
+so a full pause and resume between two browser checks could go unseen.
+Then test browser registration and upgrades on Linux and Windows.
+Normal profiles, rich editors and YukiGram's message composer remain open.
 
 The Undo change at `24cba30` passed the regular hosted Linux and Windows
 test matrix in both GitHub runs. The combined GUI and IBus probe ran

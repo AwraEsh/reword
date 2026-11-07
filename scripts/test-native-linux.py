@@ -36,9 +36,11 @@ def main():
                         help="Include the Reword GUI and its native shortcut grabs")
     parser.add_argument("--browser-output", help="Run the private browser transport fixture")
     parser.add_argument("--browser", choices=("helium", "google-chrome"))
+    parser.add_argument("--browser-engine", action="store_true",
+                        help="Use the compiled Reword browser host")
     args = parser.parse_args()
-    if args.browser and not args.browser_output:
-        parser.error("--browser needs --browser-output.")
+    if (args.browser or args.browser_engine) and not args.browser_output:
+        parser.error("Browser options need --browser-output.")
     if args.browser_output:
         if args.ibus_output or args.fixture_timing_only or args.active_app or args.active_output:
             parser.error("The browser fixture runs separately from other private probes.")
@@ -70,6 +72,8 @@ def main():
                 if args.browser_output:
                     command.extend(["--browser-output", args.browser_output,
                                     "--browser", args.browser or "helium"])
+                    if args.browser_engine:
+                        command.append("--browser-engine")
                 if args.ibus_output:
                     command.extend(["--ibus-output", args.ibus_output])
                     if args.ibus_engine:
@@ -167,8 +171,11 @@ def main():
                     raise RuntimeError("Private window manager did not become ready.")
                 time.sleep(.05)
             if args.browser_output:
-                driver = spawn(["node", str(ROOT / "tests/browser_transport/probe.mjs"),
-                                str(folder), args.browser_output, args.browser], "browser-probe")
+                command = ["node", str(ROOT / "tests/browser_transport/probe.mjs"),
+                           str(folder), args.browser_output, args.browser]
+                if args.browser_engine:
+                    command.append(str(ROOT / "build/reword-browser-host"))
+                driver = spawn(command, "browser-probe")
                 result = driver.wait(timeout=55)
                 print("PASS: private browser transport fixture." if result == 0 else
                       "FAIL: private browser transport fixture. Inspect its report.", flush=True)

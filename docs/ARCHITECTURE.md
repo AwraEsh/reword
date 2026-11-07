@@ -90,6 +90,19 @@ Focus changes and expiry return the chord to the native helper. Fix and
 Pause keep their existing grabs. The route changes key delivery only. The
 engine still checks focus, permission and current text before applying Undo.
 
+The opt-in Linux browser host verifies the configured extension origin and
+gets the browser executable path from its parent process. Native messaging
+frames have a 4 KiB limit. The host uses the same application mode, browser
+toggle, Pause state and configuration revision as the desktop adapter.
+It checks current policy before parsing a word request and again before
+returning a suggestion. A persistent port keeps the dictionary loaded.
+
+The test extension checks browser policy before reading the field value.
+It compares field identity, focus, input generation, text, caret and
+settings revision after asynchronous work. Only then does it replace
+the reported range. The current fixture does not cover web editors that
+need a page-level input event or a browser-native Undo entry.
+
 ## Threads and storage
 
 The native service runs on a worker thread. Full-passage work uses asynchronous
