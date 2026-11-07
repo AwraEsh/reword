@@ -29,7 +29,12 @@ def main():
     parser.add_argument("--active-app", help="Exercise this packaged AppDir/AppRun in the owned desktop")
     parser.add_argument("--active-seconds", type=int, default=120)
     parser.add_argument("--active-output", help="New directory for content-free workload reports")
+    parser.add_argument("--ibus-output", help="Run the experimental IBus probe in this report directory")
     args = parser.parse_args()
+    if args.ibus_output:
+        if args.fixture_timing_only or args.active_app or args.active_output:
+            parser.error("The IBus probe runs separately from native fixtures and the active workload.")
+        args.ibus_output = str(Path(args.ibus_output).resolve())
     if args.active_app:
         if args.fixture_timing_only or not args.active_output or not 5 <= args.active_seconds <= 14400:
             parser.error("Active workload needs a new report directory and 5–14400 seconds.")
@@ -46,6 +51,8 @@ def main():
                 ]
                 if args.fixture_timing_only:
                     command.append("--fixture-timing-only")
+                if args.ibus_output:
+                    command.extend(["--ibus-output", args.ibus_output])
                 if args.active_app:
                     command.extend(["--active-app", args.active_app, "--active-seconds",
                                     str(args.active_seconds), "--active-output", args.active_output])
@@ -154,7 +161,7 @@ def main():
                             str(ROOT / "build/reword_fixture")], env=env, timeout=25, check=True)
             if args.fixture_timing_only:
                 return 0
-            if args.active_app:
+            if args.active_app or args.ibus_output:
                 from process_metrics import sample_process
                 context = {key: env[key] for key in
                            ("DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR")}
@@ -164,6 +171,15 @@ def main():
                 with context_file.open("x", encoding="utf-8") as stream:
                     json.dump(context, stream)
                 context_file.chmod(0o600)
+            if args.ibus_output:
+                driver = spawn([sys.executable, str(ROOT / "scripts/ibus-x11-probe.py"),
+                                "--owned-directory", str(folder),
+                                "--output", args.ibus_output], "ibus-probe")
+                result = driver.wait(timeout=80)
+                print("PASS: private IBus editing probe." if result == 0 else
+                      "FAIL: private IBus editing probe; inspect the content-free report.", flush=True)
+                return result
+            if args.active_app:
                 driver = spawn([sys.executable, str(ROOT / "scripts/active_stability.py"),
                                 "--owned-directory", str(folder), "--app", args.active_app,
                                 "--fixture", str(ROOT / "build/reword_fixture"),

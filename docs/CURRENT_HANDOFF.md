@@ -21,6 +21,27 @@ window but did not verify input reached the document, so it cannot establish
 whether that route corrects text. Keep the user's normal desktop reproduction
 as the acceptance case. Receipt: `.deps/real-gnome-editor-x11-fcitx-save/report.json`.
 
+A private IBus 1.5.32 experiment then corrected the fixed typo in GNOME Text
+Editor and saved the reference text intact. A GTK 4 multiline control also
+passed. Helium did not supply surrounding text but accepted correction in
+an IBus preedit composition. The password control remained unchanged.
+The browser did not report its field purpose. This is a transport test with
+a fixed word and a known synthetic field, not production support. Receipts:
+`.deps/real-ibus-x11-gnome-editor-cairo/report.json` and
+`.deps/real-ibus-x11-gtk4-preedit-2/report.json`.
+The checked-in `--ibus-output` probe then passed all four checks (GTK entry,
+GNOME Text Editor saved result, Helium plain input, Helium password input).
+Receipt: `.deps/ibus-x11-checked-in-final/report.json`.
+
+For a production IBus path, start with eligible multiline editor fields so
+the X11 accessibility adapter keeps sole ownership of single-line writes.
+Bind each input context to the focused application and verified field before
+requesting text or writing. Reuse the existing dictionary, policy and retry
+rules. For browser composition without surrounding text, require a trusted
+field signal or a browser integration before handling the user's keys. Keep
+ordinary typing, focus changes, password/PIN, and existing input sources in
+the acceptance tests. YukiGram's actual message composer remains unverified.
+
 The user confirmed after the host restart that reliable correction and Undo in
 allowed applications are the product priority. See [REQUIREMENTS.md](REQUIREMENTS.md).
 Track skipped edits in ordinary supported fields as functional failures. The
