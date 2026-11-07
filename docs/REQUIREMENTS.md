@@ -26,6 +26,10 @@ Approved by the user on 2026-10-15. This file is the durable requirements source
 - Revalidate field, selection/caret and expected text before any write. Refuse uncertain/stale operations.
 - Undo must not overwrite subsequent user edits. Original remains copyable after a stale undo.
 - Explicit personal dictionary and custom replacements; no permanent learning from temporary rejection.
+- The user's current Debian X11 acceptance targets are live correction in
+  YukiGram, GNOME Text Editor and Helium in ordinary message, editor and web
+  fields. Prioritize live correction over the shortcut failure reported in
+  those applications. Verify with the named programs and explicit permission.
 
 ## Selected text and rules
 - Configurable shortcut: immediate replacement with guarded Undo.

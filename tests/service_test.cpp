@@ -188,6 +188,28 @@ struct BlockedWorkerPool {
 class ServiceTest : public QObject {
     Q_OBJECT
   private slots:
+    void heliumHonorsBrowserSwitch() {
+        Harness h;
+        h.store.setValue("browsers", false);
+        h.adapter->field.app = "/opt/helium/helium";
+        h.store.discover(h.adapter->field.app, "Helium");
+        h.store.decide(h.adapter->field.app, "allow");
+        const auto reads = h.adapter->reads;
+        const auto inspections = h.adapter->inspections;
+        h.adapter->type("teh ");
+        QTRY_VERIFY(h.adapter->inspections > inspections + 1);
+        QCOMPARE(h.adapter->reads, reads);
+        QCOMPARE(h.adapter->field.text, QString("teh "));
+
+        h.store.setValue("browsers", true);
+        QTRY_VERIFY(h.adapter->reads > reads);
+        const auto beforeClear = h.adapter->reads;
+        h.adapter->type("");
+        QTRY_VERIFY(h.adapter->reads > beforeClear);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        QVERIFY(browserApp("fcitx:helium"));
+    }
     void shortcutOnlyLeavesTypingUnreadButAllowsSelectionAndUndo() {
         Harness h;
         h.store.decide(h.adapter->field.app, "shortcut");

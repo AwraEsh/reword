@@ -1,5 +1,26 @@
 # Current handoff — 2026-11-07
 
+The user tried the installed Preview in YukiGram 7.1.5.0, GNOME Text Editor
+48.3 and Helium 0.12.4.1. None corrected live, and shortcuts reported
+unavailable. The user asked to prioritize live editing. Confirmed the
+installation receipt for `eda761b` against the AppImage checksum, an active
+X11 helper, an unlocked session and Automatic rules for all three apps.
+GNOME Text Editor exposes a multiline editable field. Helium reproduced the
+failure in an isolated X11 session with a temporary profile. The Chrome
+control exposed a focused entry with renderer accessibility forced, but it
+had no EditableText interface. A first private Fcitx-on-X11 Helium diagnostic
+also did not correct the test word. Receipts are
+`.deps/real-helium-x11-meta-0/report.json`,
+`.deps/real-helium-x11-meta-1/report.json`,
+`.deps/real-chrome-x11-meta-1/report.json` and
+`.deps/real-helium-x11-fcitx/report.json`. Production support still requires
+range editing in the real applications. The host uses IBus. The private
+experiments did not change its input method or install a new Preview.
+The private GNOME Text Editor input-method experiment reached an active
+window but did not verify input reached the document, so it cannot establish
+whether that route corrects text. Keep the user's normal desktop reproduction
+as the acceptance case. Receipt: `.deps/real-gnome-editor-x11-fcitx-save/report.json`.
+
 The user confirmed after the host restart that reliable correction and Undo in
 allowed applications are the product priority. See [REQUIREMENTS.md](REQUIREMENTS.md).
 Track skipped edits in ordinary supported fields as functional failures. The

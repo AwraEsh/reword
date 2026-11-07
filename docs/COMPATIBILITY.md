@@ -5,6 +5,10 @@ This table describes tested fixtures, not blanket support for applications.
 | Environment | Evidence | Limits |
 |---|---|---|
 | Debian 13 / GNOME X11 | Local GTK entry and end-to-end service probes have passed. | Plain single-line editable fields. Shared-desktop focus can be interrupted by other apps. Browser/editor matrix pending. |
+| Debian X11 / GNOME Text Editor 48.3 | The user reported that live correction did not run. Metadata confirms a multiline editable text widget. | The current adapter supports single-line fields. GTK's full-buffer setter marks the edit irreversible, so a local range editing path is needed. |
+| Debian X11 / Helium 0.12.4.1 | The user's failure reproduced in a temporary browser profile with an allowed rule and focused HTML input. The password control remained unchanged. | The tested browser exposed its window but no editable field to AT-SPI, including with forced renderer accessibility. |
+| Debian X11 / Chrome 151.0.7922.173 | With forced renderer accessibility, a temporary browser profile exposed the focused HTML input. The typed typo remained unchanged. | The browser input did not expose the AT-SPI EditableText interface in that test. |
+| Debian X11 / YukiGram 7.1.5.0 (Flatpak) | The user reported live correction did not run with Automatic selected. | The message field has no confirmed writable native path. |
 | GNOME Shell consent | The user saw a native demo banner with Yes, Not now and No. The app's action handling, reminder and stale-response checks run on a private D-Bus test session. | The demo did not alter permissions. Windows banner appearance still needs a desktop check. |
 | Controlled Linux Xvfb / Openbox | CI at 03069a1 passed build, four automated suites, GUI launch and three native GTK/service probe cycles. | Synthetic single-line fields; no physical lock-screen proof. |
 | Linux without accessibility bus | Helper reports unavailable; internal workspace remains usable. | No native correction. |
@@ -19,6 +23,10 @@ AT-SPI supports GtkEntry-style single-line fields, including TEXT roles marked
 SINGLE_LINE. Rich/multiline fields are not rewritten wholesale. Windows requires
 a non-password Edit control with bounded, verifiable text access, using UI
 Automation or the standard Win32 Edit fallback. Missing capabilities fail closed.
+
+[GTK's AT-SPI text-view implementation](https://raw.githubusercontent.com/GNOME/gtk/4.18.6/gtk/a11y/gtkatspieditabletext.c)
+uses the whole-buffer setter for replacement. [GTK marks that setter as
+irreversible](https://raw.githubusercontent.com/GNOME/gtk/4.18.6/gtk/gtktextbuffer.c).
 
 Fcitx application names have separate consent entries (`fcitx:` prefix). Existing
 executable permissions are not silently reused for input-method clients.
