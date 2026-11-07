@@ -33,6 +33,13 @@ The checked-in `--ibus-output` probe then passed all four checks (GTK entry,
 GNOME Text Editor saved result, Helium plain input, Helium password input).
 Receipt: `.deps/ibus-x11-checked-in-final/report.json`.
 
+The X11 native helper now provides an independent multiline target witness.
+It reads only role, state, process and window identity. The private real-app
+probe found the focused GNOME Text Editor field and excluded the GTK
+single-line and password controls. Native AT-SPI editing remains single-line.
+Receipt: `.deps/ibus-target-real-1/report.json`. The token lookup used before
+committing a delimiter is now shared with the Fcitx path.
+
 For a production IBus path, start with eligible multiline editor fields so
 the X11 accessibility adapter keeps sole ownership of single-line writes.
 Bind each input context to the focused application and verified field before

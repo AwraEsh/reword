@@ -12,6 +12,11 @@ struct WriteResult {
     explicit operator bool() const { return accepted; }
 };
 
+struct InputMethodTarget {
+    QString app, field;
+    quint32 window = 0;
+};
+
 class Adapter {
   public:
     virtual ~Adapter() = default;
@@ -21,6 +26,8 @@ class Adapter {
     virtual Field readExpected(const Field &) {
         return {};
     }
+    // Metadata witness for a separate X11 input method. Never reads text.
+    virtual InputMethodTarget inputMethodTarget() { return {}; }
     virtual bool changed() {
         return true;
     }

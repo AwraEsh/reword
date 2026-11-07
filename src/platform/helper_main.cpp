@@ -82,6 +82,10 @@ int main(int argc, char **argv) {
                     expected.app = o["app"].toString();
                     expected.id = o["id"].toString();
                     result = {{"field", reword::encodeField(adapter->readExpected(expected))}};
+                } else if (operation == "input-method-target") {
+                    const auto target = adapter->inputMethodTarget();
+                    result = {{"app", target.app}, {"field", target.field},
+                              {"window", qint64(target.window)}};
                 } else if (operation == "changed")
                     result = {{"changed", adapter->changed()}};
                 else if (operation == "replace-observed") {

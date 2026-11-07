@@ -97,6 +97,11 @@ class LinuxProxy final : public Adapter {
     bool changed() override {
         return request({{"operation", "changed"}})["changed"].toBool();
     }
+    InputMethodTarget inputMethodTarget() override {
+        const auto target = request({{"operation", "input-method-target"}});
+        return {target["app"].toString(), target["field"].toString(),
+                quint32(target["window"].toInteger())};
+    }
     WriteResult replace(const Field &expected, const QString &text, int caret,
                         const WriteAuthorization &authorize) override {
         if (!authorize)

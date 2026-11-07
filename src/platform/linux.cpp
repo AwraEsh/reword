@@ -59,7 +59,7 @@ class LinuxAdapter final : public Adapter {
     };
     QQueue<Shortcut> pendingShortcuts_;
     bool wayland_ = false;
-    QString foregroundApplication() {
+    QString foregroundApplication(Window *activeWindow = nullptr, unsigned long *process = nullptr) {
         if (!display_)
             return {};
         XSync(display_, False);
@@ -107,6 +107,10 @@ class LinuxAdapter final : public Adapter {
         trapped_ = nullptr;
         if (!valid || !pid || pid == unsigned(getpid()) || pid == unsigned(getppid()))
             return {};
+        if (activeWindow)
+            *activeWindow = window;
+        if (process)
+            *process = pid;
         return QFileInfo(QString("/proc/%1/exe").arg(pid)).symLinkTarget();
     }
     static void event(AtspiEvent *e, void *data) {
@@ -287,8 +291,26 @@ class LinuxAdapter final : public Adapter {
         }
         return snapshot(true, &expected);
     }
+    InputMethodTarget inputMethodTarget() override {
+        Window before = 0, after = 0;
+        unsigned long foregroundPid = 0, finalPid = 0;
+        unsigned providerPid = 0;
+        bool multiline = false;
+        const auto app = foregroundApplication(&before, &foregroundPid);
+        if (app.isEmpty() || !before)
+            return {};
+        const auto field = snapshot(false, nullptr, &multiline, &providerPid);
+        if (!multiline || field.app != app || field.id.isEmpty() ||
+            providerPid != foregroundPid || !field.editable || !field.focused ||
+            field.password || field.locked)
+            return {};
+        if (foregroundApplication(&after, &finalPid) != app || before != after ||
+            foregroundPid != finalPid)
+            return {};
+        return {app, field.id, quint32(after)};
+    }
   private:
-    static bool readEligibility(AtspiAccessible *target, Field &field) {
+    static bool readEligibility(AtspiAccessible *target, Field &field, bool *multiline = nullptr) {
         GError *error = nullptr;
         const auto role = atspi_accessible_get_role(target, &error);
         if (error) {
@@ -303,16 +325,21 @@ class LinuxAdapter final : public Adapter {
         field.editable = atspi_state_set_contains(states.get(), ATSPI_STATE_EDITABLE) &&
                          atspi_state_set_contains(states.get(), ATSPI_STATE_SENSITIVE);
         const bool singleLine = atspi_state_set_contains(states.get(), ATSPI_STATE_SINGLE_LINE);
+        if (multiline)
+            *multiline = role == ATSPI_ROLE_TEXT && !singleLine &&
+                         atspi_state_set_contains(states.get(), ATSPI_STATE_MULTI_LINE);
         field.plain = role == ATSPI_ROLE_ENTRY || (role == ATSPI_ROLE_TEXT && singleLine);
         field.known = field.plain || field.password;
         return true;
     }
-    Field snapshot(bool includeText, const Field *expected) {
+    Field snapshot(bool includeText, const Field *expected, bool *multiline = nullptr,
+                   unsigned *providerPid = nullptr) {
         validated_.reset();
         if (!available_)
             return {};
         dispatchPendingEvents();
         discoverInitialFocus();
+        const auto fieldEvents = fieldEvents_;
         Field f;
         if (!focus_)
             return f;
@@ -325,6 +352,8 @@ class LinuxAdapter final : public Adapter {
             g_error_free(error);
             return f;
         }
+        if (providerPid)
+            *providerPid = pid;
         f.app = QFileInfo(QString("/proc/%1/exe").arg(pid)).symLinkTarget();
         if (f.app.isEmpty() || (pid == getpid() || pid == getppid()))
             return Field{};
@@ -332,10 +361,17 @@ class LinuxAdapter final : public Adapter {
         f.id = QString::fromUtf8(obj->app->bus_name) + QString::fromUtf8(obj->path);
         if (expected && (f.id != expected->id || f.app != expected->app))
             return {};
-        if (!readEligibility(target.get(), f))
+        if (multiline)
+            atspi_accessible_clear_cache_single(target.get());
+        if (!readEligibility(target.get(), f, multiline))
             return f;
         // The Fcitx addon owns Wayland live edits; never double-correct via AT-SPI.
         f.locked = !unlocked();
+        if (multiline) {
+            dispatchPendingEvents();
+            if (focus_ != target.get() || fieldEvents_ != fieldEvents)
+                return {};
+        }
         if (!includeText || f.password || !f.known || !f.editable || !f.focused || f.locked)
             return f;
         GRef<AtspiText> text(atspi_accessible_get_text_iface(target.get()), g_object_unref);

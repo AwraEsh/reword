@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import select
 import subprocess
 import sys
 import time
@@ -85,6 +86,13 @@ def saved_correction(document):
     return (text.count("the ") == 1 and text.replace("the ", "", 1) == "anchor!\n"
             or text in ("anchor!\nthe\n", "anchor!\nthe \n"))
 
+def input_method_target(helper):
+    helper.stdin.write(b'{"operation":"input-method-target"}\n')
+    helper.stdin.flush()
+    if not select.select([helper.stdout], [], [], 3)[0]:
+        raise RuntimeError("Native helper did not answer the metadata request")
+    return json.loads(helper.stdout.readline(8192))
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -124,6 +132,8 @@ def run_probe(desktop, root, output):
                 child.wait(timeout=4)
 
     try:
+        helper = spawn([str(ROOT / "build/reword-native-helper")], "native-helper",
+                       stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         spawn(["ibus-daemon", "--single", "--panel=disable", "--emoji-extension=disable",
                "--config=disable", "--address=" + address], "ibus-daemon")
         if not wait_for(lambda: (root / "runtime/reword-ibus").is_socket(), 5):
@@ -143,8 +153,13 @@ def run_probe(desktop, root, output):
         client.command("text:")
         client.wait_text("", 3)
         time.sleep(.2)
+        result["single_line_witness_excluded"] = not input_method_target(helper).get("window")
         type_typo(desktop)
         result["gtk_control"] = client.snapshot() == "the "
+        client.command("password")
+        client.command("text:")
+        client.wait_text("", 3)
+        result["password_witness_excluded"] = not input_method_target(helper).get("window")
         client.command("quit")
         control.wait(timeout=3)
 
@@ -156,8 +171,14 @@ def run_probe(desktop, root, output):
         if result["editor_active"]:
             time.sleep(1.2)
             result["stage"] = "gnome-editor-click"
-            click_editor(desktop, desktop.normal_window(editor.pid))
+            window = desktop.normal_window(editor.pid)
+            click_editor(desktop, window)
             time.sleep(.25)
+            def matches_editor():
+                target = input_method_target(helper)
+                return (Path(target.get("app", "")).name == "gnome-text-editor"
+                        and bool(target.get("field")) and target.get("window") == window)
+            result["editor_witness"] = wait_for(matches_editor, 4)
             desktop._keys(["Control_L", "End"], chord=True)
             time.sleep(.2)
             type_typo(desktop)
@@ -188,6 +209,7 @@ setInterval(() => {
                "--host-resolver-rules=MAP * ~NOTFOUND", page.as_uri()], "helium")
         result["browser_focused"] = wait_for(lambda: browser_state() == "rw-plain-empty", 16)
         if result["browser_focused"]:
+            result["old_editor_witness_excluded"] = not input_method_target(helper).get("window")
             type_typo(desktop)
             result["browser_preedit"] = wait_for(lambda: browser_state() == "rw-plain-corrected", 3)
             desktop._keys(["Tab"])
@@ -206,7 +228,9 @@ setInterval(() => {
         (output / "report.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
 
     passed = all(result.get(key) for key in
-                 ("gtk_control", "editor_range_edit", "browser_preedit", "browser_password_unchanged"))
+                 ("gtk_control", "editor_range_edit", "browser_preedit", "browser_password_unchanged",
+                  "single_line_witness_excluded", "password_witness_excluded", "editor_witness",
+                  "old_editor_witness_excluded"))
     return 0 if passed else 1
 
 

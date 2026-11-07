@@ -457,22 +457,12 @@ class RewordAddon final : public fcitx::AddonInstance {
             }
             auto before = QString::fromUcs4(reinterpret_cast<const char32_t *>(points.constData()),
                                             st.cursor());
-            char32_t delimiter = code;
-            auto mark = QString::fromUcs4(&delimiter, 1);
-            reword::Field snapshot;
-            snapshot.app = id;
-            snapshot.id = current;
-            snapshot.text = text;
-            snapshot.caret = before.size();
-            auto typed = snapshot;
-            typed.text.insert(typed.caret, mark);
-            typed.caret += mark.size();
-            const auto words = reword::completedWords(snapshot, typed);
-            if (words.isEmpty())
+            const QChar mark{char16_t(code)};
+            const auto word = reword::wordBeforeBoundary(text, before.size(), mark);
+            if (!word)
                 return;
             const auto cursorBefore = st.cursor(), anchorBefore = st.anchor();
-            const auto &word = words.back();
-            auto token = word.token, prefix = before.left(word.start);
+            auto token = word->token, prefix = before.left(word->start);
             if (prefix != prefix_) {
                 resetRetry();
                 prefix_ = prefix;
@@ -484,9 +474,9 @@ class RewordAddon final : public fcitx::AddonInstance {
             auto corrected = engine_->word(token, options, prefix.right(128));
             if (corrected == token)
                 return;
-            retryStart_ = word.start;
+            retryStart_ = word->start;
             auto tentativeRetry = retry_;
-            if (!tentativeRetry.shouldCorrect(current, word.start, token,
+            if (!tentativeRetry.shouldCorrect(current, word->start, token,
                                               QDateTime::currentMSecsSinceEpoch())) {
                 retry_ = tentativeRetry;
                 return;

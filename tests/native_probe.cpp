@@ -32,6 +32,8 @@ int main(int argc, char **argv) {
         return fail("Fixture focus was not observed.");
     if (!f.text.isEmpty())
         return fail("Metadata inspection read text.");
+    if (adapter->inputMethodTarget().window)
+        return fail("The multiline input method accepted a single-line entry.");
     auto otherTarget = f;
     otherTarget.id += "-different-target";
     if (!adapter->readExpected(otherTarget).text.isEmpty())

@@ -5,6 +5,19 @@ using namespace reword;
 class CoreTest : public QObject {
     Q_OBJECT
   private slots:
+    void inputMethodBoundarySharesTextProtections() {
+        const auto text = QString::fromUtf8("🙂 teh rest");
+        const auto english = wordBeforeBoundary(text, 6, u' ');
+        QVERIFY(english);
+        QCOMPARE(english->token, QString("teh"));
+        QCOMPARE(english->start, 3);
+        const auto persian = wordBeforeBoundary(QString::fromUtf8("سلام"), 4, u'،');
+        QVERIFY(persian);
+        QCOMPARE(persian->token, QString::fromUtf8("سلام"));
+        QVERIFY(!wordBeforeBoundary(text, 1, u' '));
+        QVERIFY(!wordBeforeBoundary(QString("https://example.com"), 19, u' '));
+        QVERIFY(!wordBeforeBoundary(QString("teh"), 3, u'x'));
+    }
     void shortcutDecisionPersistsWithoutEnablingLegacyLiveAccess() {
         QTemporaryDir data;
         Store reader(data.path()), writer(data.path());

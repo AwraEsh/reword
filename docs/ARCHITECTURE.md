@@ -53,6 +53,17 @@ Wayland live correction belongs to the Fcitx5 addon, using its input context and
 surrounding text. It is disabled on X11 to avoid two correction cycles. Pending
 edits are observed before counts/history are saved. The addon shares the GUI's
 local store and passage-operation lock. Host input-method setup is required.
+The core's `wordBeforeBoundary` is for an input method that sees the delimiter
+before the application inserts it. It uses the same token and protected-span
+rules as live observation after insertion. It takes a UTF-16 caret offset.
+
+The X11 native helper can also report a metadata-only witness for a focused
+multiline text widget. It verifies the active window and provider process
+before and after refreshing the field's eligibility. The witness is separate
+from the adapter's single-line read and write capabilities. A future IBus
+client must bind that witness to the current input context and read the text
+from IBus. Do not query an application's accessibility provider synchronously
+from the IBus key callback. The application can be waiting on that callback.
 
 ## Threads and storage
 
