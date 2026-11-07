@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QUuid>
+#include <algorithm>
 #include <stdexcept>
 namespace reword {
 static void checked(QSqlQuery &q) {
@@ -19,7 +20,7 @@ void Store::exec(const QString &sql) {
     q.prepare(sql);
     checked(q);
 }
-Store::Store(const QString &directory) {
+Store::Store(const QString &directory, int busyTimeoutMs) {
     validateStorageLocation(directory);
     if (QFileInfo(directory).isSymLink())
         throw std::runtime_error("Unsafe data directory.");
@@ -46,7 +47,7 @@ Store::Store(const QString &directory) {
         if (!db_.open())
             throw std::runtime_error("Cannot open local database.");
         restrictStoragePath(path, false);
-        exec("PRAGMA busy_timeout=1000");
+        exec(QString("PRAGMA busy_timeout=%1").arg(std::clamp(busyTimeoutMs, 0, 1000)));
         exec("PRAGMA secure_delete=ON");
         exec("CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
         exec("CREATE TABLE IF NOT EXISTS applications(id TEXT PRIMARY KEY,name TEXT NOT "

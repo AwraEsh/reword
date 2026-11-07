@@ -13,7 +13,7 @@ class Store {
     void changeApplicationPolicy(QSqlQuery &query);
 
   public:
-    explicit Store(const QString &directory);
+    explicit Store(const QString &directory, int busyTimeoutMs = 1000);
     ~Store();
     QVariant value(const QString &, const QVariant &fallback = {}) const;
     void setValue(const QString &, const QVariant &);

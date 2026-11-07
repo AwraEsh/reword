@@ -30,7 +30,11 @@ def main():
     parser.add_argument("--active-seconds", type=int, default=120)
     parser.add_argument("--active-output", help="New directory for content-free workload reports")
     parser.add_argument("--ibus-output", help="Run the experimental IBus probe in this report directory")
+    parser.add_argument("--ibus-engine", action="store_true",
+                        help="Use the compiled Reword engine instead of the fixed-word IBus probe")
     args = parser.parse_args()
+    if args.ibus_engine and not args.ibus_output:
+        parser.error("The compiled IBus engine test needs --ibus-output.")
     if args.ibus_output:
         if args.fixture_timing_only or args.active_app or args.active_output:
             parser.error("The IBus probe runs separately from native fixtures and the active workload.")
@@ -53,6 +57,8 @@ def main():
                     command.append("--fixture-timing-only")
                 if args.ibus_output:
                     command.extend(["--ibus-output", args.ibus_output])
+                    if args.ibus_engine:
+                        command.append("--ibus-engine")
                 if args.active_app:
                     command.extend(["--active-app", args.active_app, "--active-seconds",
                                     str(args.active_seconds), "--active-output", args.active_output])
@@ -172,9 +178,11 @@ def main():
                     json.dump(context, stream)
                 context_file.chmod(0o600)
             if args.ibus_output:
-                driver = spawn([sys.executable, str(ROOT / "scripts/ibus-x11-probe.py"),
-                                "--owned-directory", str(folder),
-                                "--output", args.ibus_output], "ibus-probe")
+                command = [sys.executable, str(ROOT / "scripts/ibus-x11-probe.py"),
+                           "--owned-directory", str(folder), "--output", args.ibus_output]
+                if args.ibus_engine:
+                    command.append("--reword-engine")
+                driver = spawn(command, "ibus-probe")
                 result = driver.wait(timeout=80)
                 print("PASS: private IBus editing probe." if result == 0 else
                       "FAIL: private IBus editing probe; inspect the content-free report.", flush=True)

@@ -49,6 +49,17 @@ field signal or a browser integration before handling the user's keys. Keep
 ordinary typing, focus changes, password/PIN, and existing input sources in
 the acceptance tests. YukiGram's actual message composer remains unverified.
 
+The optional C++ `reword-ibus` development target now uses the real Store,
+dictionary and RetryCycle in GNOME Text Editor. It samples the X11 witness
+off the key callback, checks that the witness is newer than IBus focus, and
+rechecks app policy and foreground window before an edit. In the private
+real-app probe, first/second/third, Pause, and per-app denial all passed.
+Receipt: `.deps/ibus-engine-final/report.json`. The build option defaults
+off and there is no installer or automatic input-source switch. Before
+packaging, move dictionary work off the key callback, test the desktop
+input-source setup, and cover Persian input, Undo, longer runs, and rapid
+focus changes. Browser editing still needs its own verified route.
+
 The user confirmed after the host restart that reliable correction and Undo in
 allowed applications are the product priority. See [REQUIREMENTS.md](REQUIREMENTS.md).
 Track skipped edits in ordinary supported fields as functional failures. The
