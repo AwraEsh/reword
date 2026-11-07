@@ -36,6 +36,20 @@ The same test passes, along with the password, lock, pause and per-app
 boundaries for pending shortcuts. Receipts: `.deps/x11-provider-active-120/report.json`,
 `.deps/x11-late-grab-red.log`, and `.deps/x11-late-grab-green.log`.
 
+The follow-up run is not stability-accepted. It reached 122 selected edits,
+13 successful live Undos and 12 complete cycles. Live p95 was 39.7 ms across
+28 samples. It then timed out at live Undo again, this time with trace reason
+14 immediately before 15: the service's post-write text read failed even
+though a metadata-only probe still saw the same permitted, focused field.
+Unlike the earlier reason-5 case, Undo was never recorded for this write.
+Investigate returning the adapter's verified post-write snapshot (including
+the caret) with the write result, then revalidate on Undo and discard it at
+real focus or policy boundaries. Avoid treating an unverified write as a
+successful retry. The app also exceeded the 10% CPU target (12.45% in the
+measured active window), so the diagnostic continued without a resource pass.
+Receipt: `.deps/x11-late-grab-active-120/report.json`. Do not use this run as
+release or installation acceptance.
+
 The local Preview now runs source `eda761b`. The per-user AppImage was replaced
 at the existing launcher path, with settings and history preserved. The old
 process was allowed to exit normally. The next running binary matched the new
