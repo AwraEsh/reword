@@ -2,6 +2,9 @@
 
 ## Hold after the current IBus work
 
+Start a resumed session with [the frozen checkpoint](RESUME_2026-11-07.md).
+It records the exact Git, installation and test state at the pause.
+
 The user asked to finish the work and checks already running, document the
 result, and hold further work. The worker and settings changes are recorded
 in a local checkpoint commit. The latest source is a development checkpoint,
