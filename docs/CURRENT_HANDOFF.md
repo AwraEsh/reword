@@ -57,6 +57,13 @@ still reads and validates the current target. The targeted service regression
 failed before this change and passed afterward with the same test input.
 The focused run also passed newer-edit and protected-target cases.
 Receipts: `.deps/write-snapshot-red.log` and `.deps/write-snapshot-focused.log`.
+The owned X11 follow-up reached 26 live Undos, 25 selected Undos and 135
+selected edits before one selected Undo timed out. Word latency p95 was
+38.6 ms across 52 samples. Active app CPU was 13.59% against the 10% gate.
+This run did not pass stability acceptance. Receipt:
+`.deps/write-snapshot-active-120/report.json`. The Undo path now emits
+content-free reason codes to distinguish shortcut delivery, write refusal
+and failed verification in the next run.
 
 The local Preview now runs source `eda761b`. The per-user AppImage was replaced
 at the existing launcher path, with settings and history preserved. The old

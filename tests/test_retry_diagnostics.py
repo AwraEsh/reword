@@ -9,9 +9,9 @@ from retry_diagnostics import RetryDiagnostics
 class RetryDiagnosticsTest(unittest.TestCase):
     def test_only_fixed_numeric_events_survive(self):
         diagnostic = RetryDiagnostics()
-        diagnostic.feed(b'private passage\nRTRY 12 1 0\nRTRY 13 99 0\nRTRY 14 17 0\n')
+        diagnostic.feed(b'private passage\nRTRY 12 1 0\nRTRY 13 99 0\nRTRY 14 22 -1\n')
         self.assertEqual(list(diagnostic.events), [{'atMs': 12, 'reason': 1, 'start': 0},
-                                                  {'atMs': 14, 'reason': 17, 'start': 0}])
+                                                  {'atMs': 14, 'reason': 22, 'start': -1}])
         self.assertNotIn('private', json.dumps(list(diagnostic.events)))
 
     def test_fragmentation_and_event_memory_are_bounded(self):

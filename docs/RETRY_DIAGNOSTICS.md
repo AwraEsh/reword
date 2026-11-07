@@ -44,6 +44,11 @@ Format: `RTRY <monotonic milliseconds> <reason> <word start offset>`.
 | 15 | Undo requested with no saved original |
 | 16 | Policy rejected the live write before calling the adapter |
 | 17 | Native replacement returned false |
+| 18 | Undo shortcut reached the service |
+| 19 | Current policy rejected Undo before contacting the adapter |
+| 20 | The adapter did not acknowledge the Undo write |
+| 21 | The write was acknowledged but the field or policy could not confirm Undo |
+| 22 | Undo was confirmed |
 
 Reasons 13/14 describe a later metadata observation, not proof of the original
 failure's cause. They never authorize text access or replacement.

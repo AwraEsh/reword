@@ -547,6 +547,7 @@ void Service::fixSelection() {
             field);
 }
 void Service::undo() {
+    traceRetry(18);
     const auto cancellation = cancellationRevision_.load();
     const auto revision = store_->value("configRevision", 0).toLongLong();
     const auto purpose = undoPassage_ ? ReadPurpose::Explicit : ReadPurpose::Live;
@@ -561,24 +562,30 @@ void Service::undo() {
         return;
     }
     if (!policyCurrent(f, revision, cancellation, purpose)) {
+        traceRetry(19);
         emit message("Cancelled or settings changed. Nothing was replaced.");
         return;
     }
     const auto edit = adapter_->replace(
         f, undoBefore_, undoCaret_, [&] { return policyCurrent(f, revision, cancellation, purpose); });
-    if (edit.accepted) {
-        const auto &after = edit.after;
-        if (!confirmedEdit(f, after, undoBefore_, undoCaret_) ||
-            !policyCurrent(after, revision, cancellation, purpose)) {
-            resetObservation();
-            emit message("The field changed after Undo. Check the application's text.");
-            return;
-        }
-        previous_ = after;
-        undoBefore_.clear();
-        undoAfter_ = {};
-        emit message("Correction restored.");
+    if (!edit.accepted) {
+        traceRetry(20);
+        emit message("Undo was not confirmed. Check the application's text.");
+        return;
     }
+    const auto &after = edit.after;
+    if (!confirmedEdit(f, after, undoBefore_, undoCaret_) ||
+        !policyCurrent(after, revision, cancellation, purpose)) {
+        traceRetry(21);
+        resetObservation();
+        emit message("The field changed after Undo. Check the application's text.");
+        return;
+    }
+    previous_ = after;
+    undoBefore_.clear();
+    undoAfter_ = {};
+    traceRetry(22);
+    emit message("Correction restored.");
 }
 void Service::action(QString name) {
     try {
