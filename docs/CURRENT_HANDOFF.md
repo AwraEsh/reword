@@ -1,5 +1,32 @@
 # Current handoff — 2026-11-07
 
+## Resumed after the Codex limit reset
+
+The user resumed work. The pause below is historical. The precise paused
+state is preserved in [the frozen checkpoint](RESUME_2026-11-07.md).
+
+Split IBus witness rejection into numeric events 17 (missing target), 18
+(observation predates focus), 19 (expired observation) and 20 (foreground
+changed). Four successive private X11 runs on the resumed code passed
+GNOME Text Editor live editing, first/second/third, pause, denial, the
+25 ms English typing case, Persian correction and disabling Persian.
+The previous first-word failure did not recur and its cause is still open.
+Receipts: `.deps/ibus-resume-trace-1/report.json` through
+`.deps/ibus-resume-trace-4/report.json`.
+
+A fifth run changed language settings in both directions while the same
+GNOME Text Editor document was open. Persian disabled left Persian input
+unchanged while English still corrected. English disabled left English
+input unchanged while Persian still corrected. The saved document check
+preserved the surrounding reference text. Helium plain and password
+controls both passed through unchanged. Receipt:
+`.deps/ibus-resume-language-independence/report.json`.
+
+These runs used the private IBus daemon and experimental development
+target. Desktop input-source installation, rapid focus handoffs, Undo,
+sustained workload and live editing in Helium and YukiGram remain open.
+The installed Preview has not been replaced.
+
 ## Hold after the current IBus work
 
 Start a resumed session with [the frozen checkpoint](RESUME_2026-11-07.md).

@@ -31,6 +31,7 @@ constexpr char engineName[] = "reword-x11";
 enum class Trace {
     Focused = 1, Blurred, Key, NoSurrounding, Unverified, Policy, Snapshot, NoSnapshot,
     NoWord, NoCorrection, RetrySkipped, TimedOut, Write, Reset, NoFocus, NoPreparedEdit,
+    MissingWitness, WitnessBeforeFocus, ExpiredWitness, ForegroundChanged,
 };
 void trace(Trace reason) {
     static const bool enabled = qEnvironmentVariableIsSet("REWORD_IBUS_DIAGNOSTICS");
@@ -268,10 +269,20 @@ class Runtime {
             return {};
         }
         const auto witness = observer_.latest();
-        if (!witness.target.window || witness.observed < context.focused ||
-            Clock::now() - witness.observed > witnessLifetime ||
-            activeWindow() != witness.target.window) {
-            trace(Trace::Unverified);
+        if (!witness.target.window) {
+            trace(Trace::MissingWitness);
+            return {};
+        }
+        if (witness.observed < context.focused) {
+            trace(Trace::WitnessBeforeFocus);
+            return {};
+        }
+        if (Clock::now() - witness.observed > witnessLifetime) {
+            trace(Trace::ExpiredWitness);
+            return {};
+        }
+        if (activeWindow() != witness.target.window) {
+            trace(Trace::ForegroundChanged);
             return {};
         }
         return witness.target;

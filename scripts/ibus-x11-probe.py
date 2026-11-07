@@ -295,6 +295,25 @@ def run_probe(desktop, root, output, reword_engine):
                         type_persian_typo()
                         result["editor_persian_disabled"] = wait_for(
                             lambda: saved_input(document, prefix + "سلام سلاام "), 5)
+                        if result["editor_persian_disabled"]:
+                            prefix += "سلام سلاام "
+                            type_typo(desktop)
+                            desktop._keys(["Control_L", "s"], chord=True)
+                            result["editor_english_stays_enabled"] = wait_for(
+                                lambda: saved_input(document, prefix + "the "), 5)
+                            if result["editor_english_stays_enabled"]:
+                                prefix += "the "
+                                update_settings(
+                                    "INSERT OR REPLACE INTO settings VALUES(?,?),(?,?)",
+                                    ("english", "[false]", "persian", "[true]"), invalidate=True)
+                                type_typo(desktop)
+                                desktop._keys(["Control_L", "s"], chord=True)
+                                result["editor_english_disabled"] = wait_for(
+                                    lambda: saved_input(document, prefix + "teh "), 5)
+                                if result["editor_english_disabled"]:
+                                    type_persian_typo()
+                                    result["editor_persian_stays_enabled"] = wait_for(
+                                        lambda: saved_input(document, prefix + "teh سلام "), 5)
         stop(editor)
 
         result["stage"] = "helium"
@@ -350,7 +369,9 @@ setInterval(() => {
                                ("browser_pass_through", "editor_second_preserved", "editor_third_corrected",
                                 "editor_pause_preserved", "editor_rule_change_observed",
                                 "editor_denied_preserved", "editor_fast_input_intact",
-                                "editor_persian_corrected", "editor_persian_disabled"))
+                                "editor_persian_corrected", "editor_persian_disabled",
+                                "editor_english_stays_enabled", "editor_english_disabled",
+                                "editor_persian_stays_enabled"))
     else:
         passed = passed and result.get("browser_preedit")
     return 0 if passed else 1
