@@ -82,6 +82,14 @@ the following shortcut key. Commands that could edit the document consume
 the observation. The engine waits for a new observation before it can make
 another guarded edit.
 
+With `REWORD_IBUS=ON`, the engine advertises a short-lived X11 Undo route
+for the verified editor window. The property contains only the window ID
+and a monotonic timestamp. While the route is fresh and matches the
+foreground window, the native helper releases only its Undo grab.
+Focus changes and expiry return the chord to the native helper. Fix and
+Pause keep their existing grabs. The route changes key delivery only. The
+engine still checks focus, permission and current text before applying Undo.
+
 ## Threads and storage
 
 The native service runs on a worker thread. Full-passage work uses asynchronous

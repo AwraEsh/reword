@@ -32,7 +32,11 @@ def main():
     parser.add_argument("--ibus-output", help="Run the experimental IBus probe in this report directory")
     parser.add_argument("--ibus-engine", action="store_true",
                         help="Use the compiled Reword engine instead of the fixed-word IBus probe")
+    parser.add_argument("--ibus-gui", action="store_true",
+                        help="Include the Reword GUI and its native shortcut grabs")
     args = parser.parse_args()
+    if args.ibus_gui and not args.ibus_engine:
+        parser.error("The IBus GUI test needs --ibus-engine.")
     if args.ibus_engine and not args.ibus_output:
         parser.error("The compiled IBus engine test needs --ibus-output.")
     if args.ibus_output:
@@ -59,6 +63,8 @@ def main():
                     command.extend(["--ibus-output", args.ibus_output])
                     if args.ibus_engine:
                         command.append("--ibus-engine")
+                    if args.ibus_gui:
+                        command.append("--ibus-gui")
                 if args.active_app:
                     command.extend(["--active-app", args.active_app, "--active-seconds",
                                     str(args.active_seconds), "--active-output", args.active_output])
@@ -182,6 +188,8 @@ def main():
                            "--owned-directory", str(folder), "--output", args.ibus_output]
                 if args.ibus_engine:
                     command.append("--reword-engine")
+                if args.ibus_gui:
+                    command.append("--reword-gui")
                 driver = spawn(command, "ibus-probe")
                 result = driver.wait(timeout=80)
                 print("PASS: private IBus editing probe." if result == 0 else

@@ -19,6 +19,7 @@
 #include <ibus.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
+#include "platform/x11_ibus_undo_route.h"
 
 namespace {
 using Clock = std::chrono::steady_clock;
@@ -238,7 +239,9 @@ bool sameField(const reword::InputMethodTarget &a, const reword::InputMethodTarg
 
 class Runtime {
     std::unique_ptr<Display, decltype(&XCloseDisplay)> display_{XOpenDisplay(nullptr), XCloseDisplay};
-    Atom activeWindow_ = display_ ? XInternAtom(display_.get(), "_NET_ACTIVE_WINDOW", True) : None;
+    Atom activeWindow_ = display_ ? XInternAtom(display_.get(), "_NET_ACTIVE_WINDOW", False) : None;
+    Atom undoRoute_ = display_ ? XInternAtom(display_.get(), reword::IBusUndoRouteProperty, False) : None;
+    quint32 undoWindow_ = 0;
     TargetObserver observer_;
 
   public:
@@ -250,20 +253,32 @@ class Runtime {
     explicit Runtime(const QString &directory) : store(directory, 0), suggestions(directory) {}
 
     quint32 activeWindow() const {
-        if (activeWindow_ == None)
-            return 0;
-        Atom type = None;
-        int format = 0;
-        unsigned long count = 0, remaining = 0;
-        unsigned char *value = nullptr;
-        const auto status = XGetWindowProperty(display_.get(), DefaultRootWindow(display_.get()),
-            activeWindow_, 0, 1, False, XA_WINDOW, &type, &format, &count, &remaining, &value);
-        quint32 window = 0;
-        if (status == Success && type == XA_WINDOW && format == 32 && count == 1 && value)
-            window = quint32(*reinterpret_cast<unsigned long *>(value));
-        if (value)
-            XFree(value);
-        return window;
+        return quint32(reword::x11RootValue(display_.get(), activeWindow_, XA_WINDOW));
+    }
+
+    void publishUndoRoute(quint32 window) {
+        if (undoRoute_ == None || (!window && !undoWindow_))
+            return;
+        undoWindow_ = window;
+        const auto root = DefaultRootWindow(display_.get());
+        if (window) {
+            // This advertises shortcut routing only. It never authorizes a text edit.
+            const unsigned long lease[] = {window, reword::x11RouteClock()};
+            XChangeProperty(display_.get(), root, undoRoute_, XA_CARDINAL, 32, PropModeReplace,
+                            reinterpret_cast<const unsigned char *>(lease), 2);
+        } else {
+            XDeleteProperty(display_.get(), root, undoRoute_);
+        }
+        XFlush(display_.get());
+    }
+
+    void refreshUndoRoute(const Context &context) {
+        if (!undoWindow_ || context.target.window != undoWindow_)
+            return;
+        const auto witness = observer_.latest();
+        if (sameField(witness.target, context.target) && witness.observed >= context.focused &&
+            Clock::now() - witness.observed <= witnessLifetime)
+            publishUndoRoute(undoWindow_);
     }
 
     reword::InputMethodTarget targetFor(IBusEngine *engine, const Context &context) {
@@ -323,6 +338,8 @@ Context &state(IBusEngine *engine) {
 }
 
 void clear(Context &context) {
+    if (context.target.window)
+        runtime->publishUndoRoute(0);
     runtime->suggestions.cancel(context.generation);
     context.clear();
     context.generation = ++runtime->nextGeneration;
@@ -357,6 +374,8 @@ gboolean dropUnavailableObservation(gpointer data) {
             if (context.target.window &&
                 (!app.allowed(context.target) || app.activeWindow() != context.target.window))
                 clear(context);
+            else
+                app.refreshUndoRoute(context);
         } catch (...) {
             clear(context);
         }
@@ -433,6 +452,7 @@ void observe(IBusEngine *engine, IBusText *text, guint cursor, guint anchor) {
         context.surrounding = std::move(observed);
         runtime->suggestions.offer({context.generation,
             runtime->store.value("configRevision", 0).toLongLong(), *context.surrounding});
+        runtime->publishUndoRoute(target.window);
         trace(Trace::Snapshot);
     } catch (...) {
         clear(context);
@@ -625,8 +645,10 @@ void reword_ibus_engine_class_init(RewordIBusEngineClass *klass) {
     G_OBJECT_CLASS(klass)->finalize = [](GObject *object) {
         auto *context = reinterpret_cast<RewordIBusEngine *>(object)->context;
         if (runtime) {
-            if (runtime->focusedEngine == IBUS_ENGINE(object))
+            if (runtime->focusedEngine == IBUS_ENGINE(object)) {
+                runtime->publishUndoRoute(0);
                 runtime->focusedEngine = nullptr;
+            }
             runtime->suggestions.cancel(context->generation);
         }
         delete context;
@@ -678,6 +700,7 @@ int main(int argc, char **argv) {
         const auto sweep = g_timeout_add(125, dropUnavailableObservation, &state);
         g_main_loop_run(loop.get());
         g_source_remove(sweep);
+        state.publishUndoRoute(0);
         g_signal_handlers_disconnect_by_data(bus.get(), loop.get());
         return 0;
     } catch (...) {

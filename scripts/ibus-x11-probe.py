@@ -106,17 +106,18 @@ def main():
     parser.add_argument("--owned-directory", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--reword-engine", action="store_true")
+    parser.add_argument("--reword-gui", action="store_true")
     args = parser.parse_args()
     os.umask(0o077)
     root = args.owned_directory
     desktop = OwnedDesktop(root)
     try:
-        return run_probe(desktop, root, args.output, args.reword_engine)
+        return run_probe(desktop, root, args.output, args.reword_engine, args.reword_gui)
     finally:
         desktop.close()
 
 
-def run_probe(desktop, root, output, reword_engine):
+def run_probe(desktop, root, output, reword_engine, reword_gui):
     output.mkdir(mode=0o700)
     address = f"unix:path={root}/runtime/reword-ibus"
     env = dict(os.environ, IBUS_ADDRESS=address, GTK_IM_MODULE="ibus", QT_IM_MODULE="ibus",
@@ -125,6 +126,7 @@ def run_probe(desktop, root, output, reword_engine):
         env["REWORD_IBUS_DIAGNOSTICS"] = "1"
     children = []
     result = {}
+    gui = None
 
     def spawn(argv, tag, **kwargs):
         with (output / (tag + ".log")).open("wb") as log:
@@ -149,6 +151,11 @@ def run_probe(desktop, root, output, reword_engine):
                 revision = json.loads(row[0])[0] if row else 0
                 database.execute("INSERT OR REPLACE INTO settings VALUES(?,?)",
                                  ("configRevision", json.dumps([revision + 1])))
+
+    def pause_until():
+        with closing(sqlite3.connect(root / "reword/reword.sqlite", timeout=1)) as database:
+            row = database.execute("SELECT value FROM settings WHERE key='pauseUntil'").fetchone()
+            return json.loads(row[0])[0] if row else 0
 
     def type_persian_typo():
         desktop.check_alive()
@@ -201,6 +208,14 @@ def run_probe(desktop, root, output, reword_engine):
         if not wait_for(select_engine, 12):
             raise RuntimeError("Private engine did not register")
 
+        if reword_gui:
+            env.update(QT_QPA_PLATFORM="xcb", QT_QUICK_BACKEND="software",
+                       REWORD_RETRY_DIAGNOSTICS="1")
+            gui = spawn([str(ROOT / "build/reword")], "reword-gui")
+            result["gui_active"] = wait_for(lambda: active_process(desktop, gui), 10)
+            if not result["gui_active"]:
+                raise RuntimeError("Reword GUI did not start")
+
         result["stage"] = "gtk-control"
         fixture = ROOT / "build/reword_fixture"
         if reword_engine:
@@ -216,7 +231,11 @@ def run_probe(desktop, root, output, reword_engine):
         time.sleep(.2)
         result["single_line_witness_excluded"] = not input_method_target(helper).get("window")
         type_typo(desktop)
-        result["gtk_control"] = client.snapshot() == ("teh " if reword_engine else "the ")
+        expected = "teh " if reword_engine and not reword_gui else "the "
+        result["gtk_control"] = wait_for(lambda: client.snapshot() == expected, 3)
+        if reword_gui:
+            desktop.shortcut("undo")
+            result["gui_single_line_undo"] = wait_for(lambda: client.snapshot() == "teh ", 3)
         client.command("password")
         client.command("text:")
         client.wait_text("", 3)
@@ -291,9 +310,18 @@ def run_probe(desktop, root, output, reword_engine):
                 result["editor_undo_preserves_new_text"] = wait_for(
                     lambda: saved_input(document, "the x"), 4)
                 desktop._keys(["BackSpace"])
-                update_settings("INSERT OR REPLACE INTO settings VALUES(?,?)", ("pauseUntil", "[-1]"))
+                if reword_gui:
+                    desktop.shortcut("pause")
+                    result["gui_pause_in_editor"] = wait_for(lambda: pause_until() == -1, 3)
+                else:
+                    update_settings("INSERT OR REPLACE INTO settings VALUES(?,?)",
+                                    ("pauseUntil", "[-1]"))
                 result["editor_pause_preserved"] = rewrite("teh")
-                update_settings("UPDATE settings SET value=? WHERE key=?", ("[0]", "pauseUntil"))
+                if reword_gui:
+                    desktop.shortcut("pause")
+                    result["gui_resume_in_editor"] = wait_for(lambda: pause_until() == 0, 3)
+                else:
+                    update_settings("UPDATE settings SET value=? WHERE key=?", ("[0]", "pauseUntil"))
                 update_settings("UPDATE applications SET decision=? WHERE id=?", ("deny", editor_path))
                 # A matching file from before denial does not prove another attempt ran.
                 desktop._keys(["BackSpace"])
@@ -378,9 +406,27 @@ setInterval(() => {
                 type_typo(desktop)
                 result["browser_password_unchanged"] = wait_for(
                     lambda: browser_state() == "rw-password-original", 3)
+        if reword_gui:
+            result["stage"] = "gtk-return"
+            update_settings("INSERT OR REPLACE INTO settings VALUES(?,?)",
+                            ("english", "[true]"), invalidate=True)
+            control = spawn([str(fixture)], "gtk-return",
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+            if not wait_for(lambda: active_process(desktop, control), 8):
+                raise RuntimeError("GTK return control did not receive focus")
+            client = FixtureClient(control)
+            client.command("text:")
+            client.wait_text("", 3)
+            time.sleep(.2)
+            type_typo(desktop)
+            result["gui_return_correction"] = wait_for(lambda: client.snapshot() == "the ", 3)
+            desktop.shortcut("undo")
+            result["gui_return_undo"] = wait_for(lambda: client.snapshot() == "teh ", 3)
     except (OSError, RuntimeError, subprocess.SubprocessError, TypeError, ValueError) as error:
         result["failure"] = type(error).__name__
     finally:
+        if gui is not None:
+            result["gui_remained_running"] = gui.poll() is None
         metrics = root / "ibus-stats"
         if metrics.is_file():
             result["engine"] = json.loads(metrics.read_text(encoding="utf-8"))
@@ -403,6 +449,11 @@ setInterval(() => {
                                 "editor_correction_after_undo", "editor_undo_preserves_new_text"))
     else:
         passed = passed and result.get("browser_preedit")
+    if reword_gui:
+        passed = passed and all(result.get(key) for key in
+                               ("gui_active", "gui_remained_running", "gui_single_line_undo",
+                                "gui_pause_in_editor", "gui_resume_in_editor",
+                                "gui_return_correction", "gui_return_undo"))
     return 0 if passed else 1
 
 

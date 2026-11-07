@@ -1,5 +1,39 @@
 # Current handoff — 2026-11-07
 
+## Undo with the GUI and IBus running together
+
+The combined private X11 probe reproduced the conflict. GNOME Text Editor
+corrected the word, but the GUI's global X11 grab took the Undo chord before
+IBus could handle it. The report is `.deps/ibus-gui-undo-red/report.json`.
+
+With the opt-in routing change, the same setup restored the original typo
+in GNOME Text Editor and kept subsequent typing intact. The GUI still handled
+Pause and Resume in the editor. A GTK single-line control used the native
+Undo before opening the editor and again after leaving it. The complete
+probe also passed alternating retry, independent English and Persian
+settings, and password exclusion. The report is
+`.deps/ibus-gui-undo-routing/report.json`.
+
+The full build completed with the opt-in route enabled. All 17 CTest
+targets passed across two bounded runs. The initial 100-second wrapper
+stopped during Service after 15 passes. Service and Storage then passed
+separately. The logs are `.deps/ibus-gui-undo-final-ctest.log` and
+`.deps/ibus-gui-undo-final-ctest-remainder.log`.
+
+The first repeat on that build passed the editor and the GTK return
+checks, but missed the first Undo in the GTK control before the editor
+was opened. The report is `.deps/ibus-gui-undo-final/report.json`.
+The next run passed all checks with numeric tracing enabled, including
+both GTK Undo checks. The report is `.deps/ibus-gui-undo-trace/report.json`.
+The first GTK Undo remains part of the strict probe. If the failure
+recurs, compare the `RTRY` events in the GUI log around its first Undo.
+
+This evidence is from an isolated X server, with the GUI and experimental
+engine sharing a test store. The regular desktop input source and installed
+Preview were left in place. Next, verify focus handoffs and input-source
+setup on the normal Debian session. Helium still passed through unchanged
+and the YukiGram message composer still needs a real target probe.
+
 ## Immediate live Undo in the private IBus session
 
 The compiled IBus engine now accepts the configured Undo key for one
@@ -15,8 +49,8 @@ An intervening Save can consume the surrounding observation. GTK may
 withhold a duplicate observation when text is unchanged, in which case
 Undo refuses rather than trusting the older buffer. Receipt:
 `.deps/ibus-live-undo-green-2/report.json`. The successful run exercised
-the IBus engine without the GUI's competing X11 shortcut grab. Check
-that routing before packaging. No package was installed.
+the IBus engine without the GUI's competing X11 shortcut grab. The joint
+test and remaining packaging gates are recorded above.
 
 ## Resumed after the Codex limit reset
 

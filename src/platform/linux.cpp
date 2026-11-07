@@ -18,6 +18,7 @@
 #include <X11/XKBlib.h>
 #include <X11/keysym.h>
 #include <unistd.h>
+#include "x11_ibus_undo_route.h"
 namespace reword {
 template <class T> using GRef = std::unique_ptr<T, decltype(&g_object_unref)>;
 class LinuxAdapter final : public Adapter {
@@ -51,6 +52,10 @@ class LinuxAdapter final : public Adapter {
     int scanApplication_ = 0;
     Display *display_ = nullptr;
     QHash<int, QString> keys_;
+    Atom ibusUndoRoute_ = None, activeWindowAtom_ = None;
+    int undoShortcut_ = 0;
+    bool undoGrabbed_ = false;
+    QElapsedTimer lastUndoGrabFailure_;
     struct Shortcut {
         int key;
         QString action;
@@ -479,6 +484,47 @@ class LinuxAdapter final : public Adapter {
             return {true, {}};
         return {true, readExpected(expected)};
     }
+    void setShortcutGrab(int id, bool grab) {
+        const auto root = DefaultRootWindow(display_);
+        for (unsigned extra :
+             {0u, unsigned(LockMask), unsigned(Mod2Mask), unsigned(LockMask | Mod2Mask)}) {
+            const auto modifiers = unsigned(id & 0xffff) | extra;
+            if (grab)
+                XGrabKey(display_, id >> 16, modifiers, root, False, GrabModeAsync, GrabModeAsync);
+            else
+                XUngrabKey(display_, id >> 16, modifiers, root);
+        }
+    }
+    void updateUndoGrab() {
+        if (!undoShortcut_ || ibusUndoRoute_ == None)
+            return;
+        const bool native = !x11IBusOwnsUndo(display_, ibusUndoRoute_, activeWindowAtom_);
+        if (native == undoGrabbed_)
+            return;
+        if (!native) {
+            setShortcutGrab(undoShortcut_, false);
+            undoGrabbed_ = false;
+            pendingShortcuts_.removeIf([](const Shortcut &shortcut) {
+                return shortcut.action == "undo";
+            });
+            return;
+        }
+        if (lastUndoGrabFailure_.isValid() && lastUndoGrabFailure_.elapsed() < 1000)
+            return;
+        trapped_ = display_;
+        trapError_ = 0;
+        previousHandler_ = XSetErrorHandler(errorHandler);
+        setShortcutGrab(undoShortcut_, true);
+        XSync(display_, False);
+        undoGrabbed_ = trapError_ == 0;
+        if (!undoGrabbed_) {
+            // A different client may have grabbed one of the lock variants.
+            setShortcutGrab(undoShortcut_, false);
+            lastUndoGrabFailure_.start();
+        }
+        XSetErrorHandler(previousHandler_);
+        trapped_ = nullptr;
+    }
     bool shortcuts(const QString &fix, const QString &undo, const QString &pause) override {
         if (!display_)
             return false;
@@ -489,6 +535,13 @@ class LinuxAdapter final : public Adapter {
         XUngrabKey(display_, AnyKey, AnyModifier, DefaultRootWindow(display_));
         keys_.clear();
         pendingShortcuts_.clear();
+        undoShortcut_ = 0;
+        undoGrabbed_ = false;
+        lastUndoGrabFailure_.invalidate();
+#ifdef REWORD_IBUS_UNDO_ROUTING
+        ibusUndoRoute_ = XInternAtom(display_, IBusUndoRouteProperty, False);
+        activeWindowAtom_ = XInternAtom(display_, "_NET_ACTIVE_WINDOW", False);
+#endif
         auto grab = [&](QString sequence, QString action) {
             QKeySequence seq(sequence);
             if (seq.count() != 1)
@@ -511,10 +564,9 @@ class LinuxAdapter final : public Adapter {
             int id = (code << 16) | int(mods);
             if (!code || keys_.contains(id))
                 return false;
-            for (unsigned extra :
-                 {0u, unsigned(LockMask), unsigned(Mod2Mask), unsigned(LockMask | Mod2Mask)})
-                XGrabKey(display_, code, mods | extra, DefaultRootWindow(display_), False,
-                         GrabModeAsync, GrabModeAsync);
+            setShortcutGrab(id, true);
+            if (action == "undo")
+                undoShortcut_ = id;
             keys_[id] = action;
             return true;
         };
@@ -526,22 +578,26 @@ class LinuxAdapter final : public Adapter {
         if (!ok) {
             XUngrabKey(display_, AnyKey, AnyModifier, DefaultRootWindow(display_));
             keys_.clear();
+            undoShortcut_ = 0;
             XSync(display_, False);
         }
         XSetErrorHandler(previousHandler_);
         trapped_ = nullptr;
+        undoGrabbed_ = ok;
+        updateUndoGrab();
         return ok;
     }
     QString takeAction() override {
         if (!display_)
             return {};
+        updateUndoGrab();
         for (int count = 0; count < 64 && XPending(display_); ++count) {
             XEvent e;
             XNextEvent(display_, &e);
             if (e.type == KeyPress) {
                 auto mods = e.xkey.state & ~(LockMask | Mod2Mask);
                 const auto action = keys_.value((e.xkey.keycode << 16) | mods);
-                if (action.isEmpty())
+                if (action.isEmpty() || (action == "undo" && !undoGrabbed_))
                     continue;
                 bool held = false;
                 for (const auto &pending : pendingShortcuts_)

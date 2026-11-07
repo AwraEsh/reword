@@ -10,7 +10,7 @@ This table describes tested fixtures, not blanket support for applications.
 | Debian X11 / Chrome 151.0.7922.173 | With forced renderer accessibility, a temporary browser profile exposed the focused HTML input. The typed typo remained unchanged. | The browser input did not expose the AT-SPI EditableText interface in that test. |
 | Debian X11 / YukiGram 7.1.5.0 (Flatpak) | The user reported live correction did not run with Automatic selected. | The message field has no confirmed writable native path. |
 | Private Debian X11 / IBus 1.5.32 | A fixed-word test engine corrected text in GNOME Text Editor 48.3 and preserved the reference text. In Helium, the test engine corrected its own preedit composition before committing it. The HTML password control kept its original text. | Diagnostic engine only. Helium sent key events and accepted composition but did not send surrounding text or report field purpose to the engine during the test. YukiGram and the production correction policies remain unverified on this path. |
-| Private Debian X11 / compiled Reword IBus engine | GNOME Text Editor 48.3 corrected English and Persian. Independent language switches, alternating retry, pause, per-app denial, 25 ms English key spacing, immediate live Undo and preservation of subsequent typing passed. | Opt-in development target. Undo requires a current surrounding-text observation. Shortcut routing when the Reword GUI also owns the X11 grab, selected-text correction, Helium, YukiGram and normal-desktop installation remain open. |
+| Private Debian X11 / compiled Reword IBus engine and GUI | GNOME Text Editor 48.3 corrected English and Persian. Independent language switches, alternating retry, Pause and Resume, per-app denial, 25 ms English key spacing, and live Undo passed. The native Undo also worked in a GTK single-line control before and after the editor. | Opt-in development target. Undo requires a current surrounding-text observation. Selected-text correction, live editing in Helium and YukiGram, and normal-desktop installation remain open. |
 | GNOME Shell consent | The user saw a native demo banner with Yes, Not now and No. The app's action handling, reminder and stale-response checks run on a private D-Bus test session. | The demo did not alter permissions. Windows banner appearance still needs a desktop check. |
 | Controlled Linux Xvfb / Openbox | CI at 03069a1 passed build, four automated suites, GUI launch and three native GTK/service probe cycles. | Synthetic single-line fields; no physical lock-screen proof. |
 | Linux without accessibility bus | Helper reports unavailable; internal workspace remains usable. | No native correction. |
@@ -77,13 +77,13 @@ and build with the existing X11 toolchain. On Debian the headers are in
 
 ```sh
 cmake -S . -B build -DREWORD_IBUS=ON
-cmake --build build --target reword-ibus reword_fixture
-python3 scripts/test-native-linux.py --ibus-engine --ibus-output ./local-reword-ibus-report
+cmake --build build --target reword reword-ibus reword_fixture
+python3 scripts/test-native-linux.py --ibus-engine --ibus-gui --ibus-output ./local-reword-ibus-report
 ```
 
 The driver uses a separate profile, store, X server and IBus daemon. It
-checks the first three attempts, pause, per-app denial and normal typing
-when the adapter cannot verify a target.
+checks the first three attempts, Pause and Resume, per-app denial, Undo
+routing and normal typing when the adapter cannot verify a target.
 
 X11 probes require Xvfb, Xauth, Openbox, xprop, Python GI and AT-SPI's runtime
 service. Wayland probes require GNOME Shell, Fcitx5, Python GI and the GTK/Qt
