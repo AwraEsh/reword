@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
                     result = {{"field", reword::encodeField(adapter->readExpected(expected))}};
                 } else if (operation == "changed")
                     result = {{"changed", adapter->changed()}};
-                else if (operation == "replace-authorized") {
+                else if (operation == "replace-rechecked") {
                     auto text = o["text"].toString();
                     int caret = o["caret"].toInt(-1);
                     bool bounded = text.size() <= 200000 && text.toUcs4().size() <= 100000 &&

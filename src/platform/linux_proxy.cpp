@@ -23,7 +23,7 @@ class LinuxProxy final : public Adapter {
         }
         QElapsedTimer time;
         time.start();
-        bool challenged = false;
+        int challenges = 0;
         while (time.elapsed() < NativeRequestTimeoutMs) {
             pending_ += child_.readAllStandardOutput();
             if (pending_.size() > 1024 * 1024)
@@ -39,9 +39,9 @@ class LinuxProxy final : public Adapter {
                 const auto response = doc.object();
                 if (!response.contains("authorize"))
                     return response;
-                if (!authorize || challenged || !response["authorize"].toBool())
+                if (!authorize || challenges == NativeWriteChecks || !response["authorize"].toBool())
                     break;
-                challenged = true;
+                ++challenges;
                 bool allowed = false;
                 try {
                     allowed = authorize();
@@ -101,13 +101,19 @@ class LinuxProxy final : public Adapter {
                  const WriteAuthorization &authorize) override {
         if (!authorize)
             return false;
-        bool allowed = false;
-        const auto response = request({{"operation", "replace-authorized"},
+        int grants = 0;
+        const auto recheck = [&] {
+            if (!authorize())
+                return false;
+            ++grants;
+            return true;
+        };
+        const auto response = request({{"operation", "replace-rechecked"},
                                        {"expected", encodeField(expected)},
                                        {"text", text},
                                        {"caret", caret}},
-                                      [&] { return allowed = authorize(); });
-        return allowed && response["ok"].toBool();
+                                      recheck);
+        return grants == NativeWriteChecks && response["ok"].toBool();
     }
     QString description() const override {
         auto description = healthy_ ? const_cast<LinuxProxy *>(this)

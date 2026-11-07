@@ -34,9 +34,11 @@ already sent to a provider can still complete during a policy or target change.
 On X11, AT-SPI runs in `reword-native-helper`. Bounded JSON frames pass over its
 parent-owned stdin/stdout pipes. This keeps its GLib event loop separate from the
 Qt Quick GUI. Only plain single-line editable fields are currently supported.
-The helper asks for authorization only after it validates the field. One reply
-is accepted for that request. A broken handshake closes the connection. Focus
-and target change events observed during the check invalidate the edit.
+The helper asks for authorization after validating the field and again after
+refreshing the lock and field state. Each policy reply has a short deadline.
+Provider queries have their own time limits. Focus and target change events
+observed during either check invalidate the edit. A broken handshake closes
+the connection.
 
 Windows uses UI Automation, with bounded Win32 snapshots for standard Edit
 controls. It refreshes the expected field after the first authorization check

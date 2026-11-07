@@ -18,6 +18,16 @@ Undo after denied or stale attempts. Local receipts:
 and `.deps/native-write-sensitive-native.log`. The draft installers below
 were built before this change.
 
+The repeated X11 workload then exposed an ordinary selection edit that was
+rejected when the lock and field refresh outlasted the short policy reply
+deadline. The two now have separate bounds. The helper asks for final
+permission again after the refresh, so a revocation during the provider calls
+still prevents the write. Three private X11 probe cycles passed on the Debian
+host with a deliberately delayed lock reply, final permission denial, live
+and selected correction, Undo, and password exclusion. Diagnostic receipts:
+`.deps/native-write-selected-trace-2/report.json` and
+`.deps/x11-provider-final-native.log`.
+
 The local Preview now runs source `eda761b`. The per-user AppImage was replaced
 at the existing launcher path, with settings and history preserved. The old
 process was allowed to exit normally. The next running binary matched the new

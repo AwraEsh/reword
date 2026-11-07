@@ -139,14 +139,13 @@ def main():
             bus.call_sync("org.a11y.Bus", "/org/a11y/bus", "org.freedesktop.DBus.Properties", "Set",
                           GLib.Variant("(ssv)", ("org.a11y.Status", "IsEnabled", GLib.Variant("b", True))),
                           None, Gio.DBusCallFlags.NONE, 3000, None)
-            spawn([sys.executable, str(ROOT / "tests/test_lock_service.py")], "lock")
+            lock_ready = folder / "lock-ready"
+            lock = spawn([sys.executable, str(ROOT / "tests/test_lock_service.py"),
+                          str(lock_ready)], "lock")
             for _ in range(40):
-                ready = subprocess.run([
-                    "gdbus", "call", "--session", "--dest", "org.gnome.ScreenSaver",
-                    "--object-path", "/org/gnome/ScreenSaver",
-                    "--method", "org.gnome.ScreenSaver.GetActive",
-                ], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                if ready.returncode == 0:
+                if lock.poll() is not None:
+                    raise RuntimeError("Controlled lock service exited during startup.")
+                if lock_ready.is_file():
                     break
                 time.sleep(.05)
             else:

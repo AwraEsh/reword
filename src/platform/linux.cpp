@@ -4,6 +4,7 @@
 #include <QGuiApplication>
 #include <QKeySequence>
 #include <QDBusInterface>
+#include <QDBusMessage>
 #include <QDBusReply>
 #include <QDBusVariant>
 #include <QDeadlineTimer>
@@ -20,6 +21,10 @@
 namespace reword {
 template <class T> using GRef = std::unique_ptr<T, decltype(&g_object_unref)>;
 class LinuxAdapter final : public Adapter {
+    static constexpr int LockQueryTimeoutMs = 100;
+    // AT-SPI and D-Bus are separate providers. Give their verification a
+    // bounded window of its own without accepting a late policy decision.
+    static constexpr int WriteRecheckBudgetMs = 250;
     bool available_ = false;
     QString unavailableReason_ = "Accessibility bus unavailable · writing workspace only";
     AtspiAccessible *focus_ = nullptr;
@@ -172,16 +177,15 @@ class LinuxAdapter final : public Adapter {
     }
     bool unlocked() {
         // A missing lock service is uncertainty, not permission to read text.
-        QDBusInterface lock("org.gnome.ScreenSaver", "/org/gnome/ScreenSaver",
-                            "org.gnome.ScreenSaver", QDBusConnection::sessionBus());
-        lock.setTimeout(100);
-        QDBusReply<bool> r = lock.call("GetActive");
+        const auto bus = QDBusConnection::sessionBus();
+        const auto query = [&bus](const QString &service, const QString &path) {
+            auto request = QDBusMessage::createMethodCall(service, path, service, "GetActive");
+            return QDBusReply<bool>(bus.call(request, QDBus::Block, LockQueryTimeoutMs));
+        };
+        const auto r = query("org.gnome.ScreenSaver", "/org/gnome/ScreenSaver");
         if (r.isValid())
             return !r.value();
-        QDBusInterface other("org.freedesktop.ScreenSaver", "/ScreenSaver",
-                             "org.freedesktop.ScreenSaver", QDBusConnection::sessionBus());
-        other.setTimeout(100);
-        QDBusReply<bool> s = other.call("GetActive");
+        const auto s = query("org.freedesktop.ScreenSaver", "/ScreenSaver");
         return s.isValid() && !s.value();
     }
 
@@ -398,7 +402,10 @@ class LinuxAdapter final : public Adapter {
         const auto replacement = newText.toUtf8();
         const auto fieldEvents = fieldEvents_;
         const QDeadlineTimer authorizationWindow(WriteAuthorizationBudgetMs, Qt::PreciseTimer);
-        if (!authorize || !authorize() || authorizationWindow.hasExpired() || !unlocked())
+        if (!authorize || !authorize() || authorizationWindow.hasExpired())
+            return false;
+        const QDeadlineTimer recheckWindow(WriteRecheckBudgetMs, Qt::PreciseTimer);
+        if (!unlocked())
             return false;
         // GTK can change the role of an existing entry without a text or
         // focus event. Refresh the metadata without requesting field text.
@@ -408,7 +415,16 @@ class LinuxAdapter final : public Adapter {
             eligibility.password || !eligibility.editable || !eligibility.focused)
             return false;
         dispatchPendingEvents();
-        if (authorizationWindow.hasExpired() || fieldEvents_ != fieldEvents ||
+        if (recheckWindow.hasExpired() || fieldEvents_ != fieldEvents ||
+            g_main_context_pending(nullptr))
+            return false;
+        // The provider recheck may take longer than a policy reply. Require
+        // permission again after it, then check events before writing.
+        const QDeadlineTimer finalWindow(WriteAuthorizationBudgetMs, Qt::PreciseTimer);
+        if (!authorize() || finalWindow.hasExpired())
+            return false;
+        dispatchPendingEvents();
+        if (finalWindow.hasExpired() || fieldEvents_ != fieldEvents ||
             g_main_context_pending(nullptr))
             return false;
         GError *error = nullptr;

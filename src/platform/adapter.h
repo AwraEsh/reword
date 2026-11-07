@@ -20,6 +20,7 @@ class Adapter {
     }
     // Ask after native target validation, immediately before submitting the
     // edit. A missing or denied authorization must leave the target untouched.
+    // The callback can be invoked again after a provider recheck.
     virtual bool replace(const Field &expected, const QString &newText, int newCaret,
                          const WriteAuthorization &authorize) = 0;
     virtual QString description() const = 0;
