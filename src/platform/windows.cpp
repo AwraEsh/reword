@@ -4,6 +4,7 @@
 #include <UIAutomation.h>
 #include <wrl/client.h>
 #include "adapter.h"
+#include <QDeadlineTimer>
 #include <QKeySequence>
 #include <QFileInfo>
 #include <vector>
@@ -126,6 +127,17 @@ class WindowsAdapter final : public Adapter {
         return "Windows · UI Automation and native plain edit fields";
     }
     Field inspect(bool read) override {
+        return snapshot(read, nullptr);
+    }
+    Field readExpected(const Field &expected) override {
+        if (expected.app.isEmpty() || expected.id.isEmpty()) {
+            validated_.Reset();
+            return {};
+        }
+        return snapshot(true, &expected);
+    }
+  private:
+    Field snapshot(bool read, const Field *expected) {
         validated_.Reset();
         Field f;
         if (!automation_)
@@ -159,6 +171,8 @@ class WindowsAdapter final : public Adapter {
             }
             SafeArrayDestroy(runtime);
         }
+        if (expected && (f.id != expected->id || f.app != expected->app))
+            return {};
         BOOL password = TRUE, enabled = FALSE, focused = FALSE;
         CONTROLTYPEID type = 0;
         if (FAILED(e->get_CurrentIsPassword(&password)) ||
@@ -241,24 +255,33 @@ class WindowsAdapter final : public Adapter {
         validated_ = e;
         return f;
     }
-    bool replace(const Field &expected, const QString &text, int caret) override {
-        if (!sameTarget(expected, inspect(true)))
-            return false;
+  public:
+    WriteResult replace(const Field &expected, const QString &text, int caret,
+                 const WriteAuthorization &authorize) override {
+        if (!authorize || !sameTarget(expected, readExpected(expected)))
+            return {};
         auto e = validated_;
         ComPtr<IUIAutomationValuePattern> v;
         BOOL password = TRUE, focused = FALSE;
         if (!e || FAILED(e->get_CurrentIsPassword(&password)) || password ||
             FAILED(e->get_CurrentHasKeyboardFocus(&focused)) || !focused || !unlocked() ||
             FAILED(e->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&v))))
-            return false;
-        BSTR replacement =
-            SysAllocStringLen(reinterpret_cast<const OLECHAR *>(text.utf16()), UINT(text.size()));
-        if (!replacement)
-            return false;
-        HRESULT written = v->SetValue(replacement);
-        SysFreeString(replacement);
+            return {};
+        const auto authorizeFresh = [&] {
+            const QDeadlineTimer window(WriteAuthorizationBudgetMs, Qt::PreciseTimer);
+            return authorize() && !window.hasExpired();
+        };
+        if (!authorizeFresh() || !sameTarget(expected, readExpected(expected)))
+            return {};
+        std::unique_ptr<OLECHAR, decltype(&SysFreeString)> replacement(
+            SysAllocStringLen(reinterpret_cast<const OLECHAR *>(text.utf16()), UINT(text.size())),
+            &SysFreeString);
+        if (!replacement || !authorizeFresh())
+            return {};
+        HRESULT written = v->SetValue(replacement.get());
+        replacement.reset();
         if (FAILED(written))
-            return false;
+            return {};
         ComPtr<IUIAutomationTextPattern> p;
         ComPtr<IUIAutomationTextRange> r;
         HWND native = nullptr;
@@ -275,8 +298,7 @@ class WindowsAdapter final : public Adapter {
                                   text.left(caret).toUcs4().size(), &moved);
             r->Select();
         }
-        auto after = inspect(true);
-        return after.id == expected.id && after.text == text;
+        return {true, readExpected(expected)};
     }
     bool shortcuts(const QString &fix, const QString &undo, const QString &pause) override {
         if (!window_)

@@ -1,0 +1,39 @@
+{
+  "scope": "recorded-cached-recipe-source-and-staged-payload",
+  "run": 39399260940,
+  "sourceRevision": "db871ebe7e572a0790d45a8b19fb62854b785c14",
+  "releaseReady": false,
+  "recipe": {
+    "0005-autotools-subdirs.patch": {
+      "sha256": "e895be57477eb849f60b959f58aca76d74c425e456607702733ecba7c680fc3a",
+      "matchesSpdx": true
+    },
+    "portfile.cmake": {
+      "sha256": "6535e6e5eb8676e689a4f81af986527e267e9ce973c89042037f4833d44db17e",
+      "matchesSpdx": true
+    },
+    "vcpkg.json": {
+      "sha256": "c31c881cf88102b2fb430fa85c0029919a950af714607b3851d90367438bcdc3",
+      "matchesSpdx": true
+    }
+  },
+  "archiveSha512": "0d9e81e432bd41ca7c751a2d2fa5d285816f3ffd128196fd53e4e72a4777720fe6e4b092483e39fe9a44a66b0afabbefa49446b2d38bf2e154421a64b8f363e4",
+  "archiveMatchesSpdx": true,
+  "stagedBinary": {
+    "name": "hunspell-1.7-0.dll",
+    "sha256": "0cf42ef457b86347439ec3be6969828dd860c22007dad1952a56e8ec93fd5302",
+    "matchesSpdx": true
+  },
+  "abiRecordMatchesPackageId": true,
+  "auditSha256": "92b4edaa58c8a87b017668ffa75569a511092fb9f0ac045c3dd6e5b4a266fae6",
+  "sourceArchiveSha256": "833ee0cb129f7b933def265ea907f9ba4d0cfc5b52d838678eafceeec1adaa53",
+  "recipeCheckoutCommit": "e456309491fd875487bf02b8a0dca76c1b1b00cc",
+  "abiRecordSha256": "bf302167eb635a1ad2df8ba9bb7a773bcf042cc9a32156c1c7817456f9851de1",
+  "metadataFilesVerified": 158,
+  "metadataBytesVerified": 186979,
+  "limitations": [
+    "Matches the retained cached-package records; not an independent reproducible build.",
+    "Qt third-party, graphics and VC runtime source/notice closure remains open.",
+    "This does not establish product release readiness."
+  ]
+}

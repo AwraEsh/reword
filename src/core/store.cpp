@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QUuid>
+#include <algorithm>
 #include <stdexcept>
 namespace reword {
 static void checked(QSqlQuery &q) {
@@ -19,7 +20,7 @@ void Store::exec(const QString &sql) {
     q.prepare(sql);
     checked(q);
 }
-Store::Store(const QString &directory) {
+Store::Store(const QString &directory, int busyTimeoutMs) {
     validateStorageLocation(directory);
     if (QFileInfo(directory).isSymLink())
         throw std::runtime_error("Unsafe data directory.");
@@ -46,7 +47,7 @@ Store::Store(const QString &directory) {
         if (!db_.open())
             throw std::runtime_error("Cannot open local database.");
         restrictStoragePath(path, false);
-        exec("PRAGMA busy_timeout=1000");
+        exec(QString("PRAGMA busy_timeout=%1").arg(std::clamp(busyTimeoutMs, 0, 1000)));
         exec("PRAGMA secure_delete=ON");
         exec("CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
         exec("CREATE TABLE IF NOT EXISTS applications(id TEXT PRIMARY KEY,name TEXT NOT "
@@ -120,6 +121,24 @@ bool Store::restoreShortcuts(const QStringList &expected, qint64 revision,
     }
 }
 Options Store::options() const {
+    QHash<QString, QVariant> settings;
+    QSqlQuery q(db_);
+    q.prepare("SELECT key,value FROM settings WHERE key IN ("
+              "'english','persian','spelling','abbreviations','capitalization',"
+              "'normalizePersian','halfSpace','periods','commas','spacing',"
+              "'paragraphPeriods','introductoryCommas','questionMarks','exclamationMarks',"
+              "'semicolons','colons','history','statistics','notifications','browsers',"
+              "'sensitivity','historyCount','historyMiB','historyDays','maxCharacters')");
+    checked(q);
+    while (q.next()) {
+        const auto array = QJsonDocument::fromJson(q.value(1).toByteArray()).array();
+        if (!array.isEmpty())
+            settings.insert(q.value(0).toString(), array.first().toVariant());
+    }
+    // Fresh on every call: policy changes from other connections remain visible.
+    const auto value = [&settings](const QString &key, const QVariant &fallback) {
+        return settings.value(key, fallback);
+    };
     Options o;
 #define BOOL(k) o.k = value(#k, o.k).toBool()
     BOOL(english);
@@ -162,21 +181,58 @@ void Store::discover(const QString &id, const QString &name, bool restricted) {
     checked(q);
 }
 void Store::decide(const QString &id, const QString &decision, QDate today) {
-    if (decision != "allow" && decision != "deny" && decision != "later")
+    if (decision != "allow" && decision != "shortcut" && decision != "deny" && decision != "later")
         return;
+    const auto remind = decision == "later" ? today.addDays(1).toString(Qt::ISODate) : QString("");
     QSqlQuery q(db_);
-    q.prepare("UPDATE applications SET decision=?,remind=? WHERE id=?");
+    q.prepare("UPDATE applications SET decision=?,remind=? WHERE id=? "
+              "AND (decision<>? OR COALESCE(remind,'')<>?)");
     q.addBindValue(decision);
-    q.addBindValue(decision == "later" ? today.addDays(1).toString(Qt::ISODate) : QString(""));
+    q.addBindValue(remind);
     q.addBindValue(id);
-    checked(q);
+    q.addBindValue(decision);
+    q.addBindValue(remind);
+    changeApplicationPolicy(q);
 }
-bool Store::allowed(const QString &id) const {
+void Store::removeApplication(const QString &id) {
+    QSqlQuery q(db_);
+    q.prepare("DELETE FROM applications WHERE id=?");
+    q.addBindValue(id);
+    changeApplicationPolicy(q);
+}
+void Store::changeApplicationPolicy(QSqlQuery &q) {
+    if (!db_.transaction())
+        throw std::runtime_error("Cannot begin application policy transaction.");
+    try {
+        checked(q);
+        if (q.numRowsAffected() > 0)
+            setValue("configRevision", value("configRevision", 0).toLongLong() + 1);
+        if (!db_.commit())
+            throw std::runtime_error("Cannot commit application policy transaction.");
+    } catch (...) {
+        db_.rollback();
+        throw;
+    }
+}
+ApplicationMode Store::applicationMode(const QString &id) const {
     QSqlQuery q(db_);
     q.prepare("SELECT decision FROM applications WHERE id=?");
     q.addBindValue(id);
     checked(q);
-    return q.next() && q.value(0) == "allow";
+    if (!q.next())
+        return ApplicationMode::Disabled;
+    const auto decision = q.value(0).toString();
+    if (decision == "allow")
+        return ApplicationMode::Automatic;
+    if (decision == "shortcut")
+        return ApplicationMode::ShortcutOnly;
+    return ApplicationMode::Disabled;
+}
+bool Store::allowed(const QString &id) const {
+    return applicationMode(id) == ApplicationMode::Automatic;
+}
+bool Store::selectionAllowed(const QString &id) const {
+    return applicationMode(id) != ApplicationMode::Disabled;
 }
 bool Store::shouldAsk(const QString &id, QDate today) const {
     QSqlQuery q(db_);

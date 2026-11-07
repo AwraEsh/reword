@@ -1,0 +1,67 @@
+# Try Reword Preview
+
+Reword Preview lets you try the writing workspace and correction in supported
+apps. Keep a copy of important text when testing direct correction.
+
+## Windows
+
+Open the [integration build runs](https://github.com/AwraEsh/reword/actions/workflows/build.yml?query=branch%3Acodex%2Fusable-build-integration).
+From a successful run, download **Reword-Windows**, extract the archive and
+run `Reword-Setup-0.1.0.exe`. GitHub may require sign-in and CI downloads expire.
+The automated Windows checks cover installation, launch, uninstall and standard
+editing controls. Ordinary Windows 10/11 desktop use still needs broader testing.
+
+## Debian-based Linux
+
+Development packages are built into `dist`. The bundled GUI requires x86-64
+and glibc 2.39 or newer. To launch the AppImage without FUSE:
+
+```sh
+chmod +x Reword-0.1.0-x86_64.AppImage
+./Reword-0.1.0-x86_64.AppImage --appimage-extract-and-run
+```
+
+If you already have the per-user preview launcher, open **Reword Preview**
+from the application menu. The Debian package has passed extraction and
+launch checks. A system-wide upgrade has yet to be verified.
+Wayland typing integration additionally requires the Fcitx5 addon and host setup;
+the AppImage alone does not install an input-method addon.
+
+## First use
+
+Paste a short passage into the workspace and choose **Correct text**. Language
+and rule switches are in Settings. To allow direct correction in a supported
+application, choose **Yes** when asked; **Not now** and **No** leave it disabled.
+Use **Pause** before sensitive work. Unsupported fields are skipped.
+
+On X11, Reword requests desktop accessibility when it starts so that applications
+can be discovered. This does not enable the screen reader or allow applications
+automatically. If activation fails, the platform status explains that discovery
+is unavailable. The internal writing workspace remains available.
+An application can be detected while its fields remain unsupported. Reword
+corrects only fields it can safely read and replace.
+
+Consent uses system notifications without bringing Reword to
+the front. GNOME notifications offer **Yes**, **Not now** and **No**. Requests
+you ignore stay pending in Reword and are reminded after 15 minutes. Returning
+to Reword shows the pending choice. Notifications request seven seconds of
+display time; the desktop controls dismissal and fading.
+
+Default shortcuts are Ctrl+Alt+R for selected text, Ctrl+Alt+Z for guarded Undo,
+and Ctrl+Alt+Shift+P for Pause. You can change them in Settings. Copy the latest
+original from session recovery if Undo is unavailable.
+
+## Choose what Reword does in each app
+
+In builds with correction modes, open **Applications** and choose **Automatic**
+to allow live corrections,
+**Shortcut only** to correct selected text on request, or **Disabled** to turn
+off both. **Remove rule** forgets the saved permission. If Reword detects the
+app again, it needs permission before correcting text there.
+
+## What has been checked
+
+See the [compatibility notes](COMPATIBILITY.md) for the specific fields and
+platforms checked so far. GNOME displayed all three action buttons in a desktop
+notification preview. Real correction in Telegram and Chrome, broader
+Wayland use, and extended stability testing remain open.

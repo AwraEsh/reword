@@ -24,22 +24,46 @@ well as spelling corrections.
 
 `src/platform/adapter.h` is the native inspection/replacement/shortcut boundary.
 The service first requests metadata and applies the access policy before it
-requests text. Adapters recheck the expected target and text before writing.
-Desktop APIs cannot provide a universal cross-process atomic edit, so support
-must be tested per application.
+requests text. Adapters recheck the expected target and text, then ask the
+service to confirm the app's current mode, pause state, configuration revision
+and cancellation before submitting an edit. Selected-text edits also check the
+operation deadline. An authorization check lasting 50 ms or longer is rejected.
+The adapter returns the provider's acknowledgement and the state it observed
+immediately after the write. The service uses the confirmed text, caret and
+selection from that observation to record Undo and history. Undo still takes a
+fresh snapshot and checks the current policy before submitting a write.
+Desktop APIs cannot provide a universal cross-process atomic edit. An edit
+already sent to a provider can still complete during a policy or target change.
 
 On X11, AT-SPI runs in `reword-native-helper`. Bounded JSON frames pass over its
 parent-owned stdin/stdout pipes. This keeps its GLib event loop separate from the
 Qt Quick GUI. Only plain single-line editable fields are currently supported.
+The helper asks for authorization after validating the field and again after
+refreshing the lock and field state. Each policy reply has a short deadline.
+Provider queries have their own time limits. Focus and target change events
+observed during either check invalidate the edit. A broken handshake closes
+the connection.
 
 Windows uses UI Automation, with bounded Win32 snapshots for standard Edit
-controls. Hotkeys use a message-only native window. Elevated applications remain
-subject to Windows access restrictions.
+controls. It refreshes the expected field after the first authorization check
+and verifies policy again before calling SetValue. Hotkeys use a message-only
+native window. Elevated applications remain subject to Windows access restrictions.
 
 Wayland live correction belongs to the Fcitx5 addon, using its input context and
 surrounding text. It is disabled on X11 to avoid two correction cycles. Pending
 edits are observed before counts/history are saved. The addon shares the GUI's
 local store and passage-operation lock. Host input-method setup is required.
+The core's `wordBeforeBoundary` is for an input method that sees the delimiter
+before the application inserts it. It uses the same token and protected-span
+rules as live observation after insertion. It takes a UTF-16 caret offset.
+
+The X11 native helper can also report a metadata-only witness for a focused
+multiline text widget. It verifies the active window and provider process
+before and after refreshing the field's eligibility. The witness is separate
+from the adapter's single-line read and write capabilities. A future IBus
+client must bind that witness to the current input context and read the text
+from IBus. Do not query an application's accessibility provider synchronously
+from the IBus key callback. The application can be waiting on that callback.
 
 ## Threads and storage
 

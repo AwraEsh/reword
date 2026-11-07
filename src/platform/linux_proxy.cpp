@@ -8,7 +8,7 @@ class LinuxProxy final : public Adapter {
     QProcess child_;
     QByteArray pending_;
     bool healthy_ = false;
-    QJsonObject request(QJsonObject input) {
+    QJsonObject request(QJsonObject input, const WriteAuthorization &authorize = {}) {
         if (!healthy_)
             return {};
         auto bytes = QJsonDocument(input).toJson(QJsonDocument::Compact) + '\n';
@@ -23,7 +23,8 @@ class LinuxProxy final : public Adapter {
         }
         QElapsedTimer time;
         time.start();
-        while (time.elapsed() < 2000) {
+        int challenges = 0;
+        while (time.elapsed() < NativeRequestTimeoutMs) {
             pending_ += child_.readAllStandardOutput();
             if (pending_.size() > 1024 * 1024)
                 break;
@@ -33,9 +34,26 @@ class LinuxProxy final : public Adapter {
                 pending_.remove(0, end + 1);
                 QJsonParseError error;
                 auto doc = QJsonDocument::fromJson(frame, &error);
-                if (error.error == QJsonParseError::NoError && doc.isObject())
-                    return doc.object();
-                break;
+                if (error.error != QJsonParseError::NoError || !doc.isObject())
+                    break;
+                const auto response = doc.object();
+                if (!response.contains("authorize"))
+                    return response;
+                if (!authorize || challenges == NativeWriteChecks || !response["authorize"].toBool())
+                    break;
+                ++challenges;
+                bool allowed = false;
+                try {
+                    allowed = authorize();
+                } catch (...) {
+                    // Storage failure must deny the pending write.
+                }
+                if (time.elapsed() >= NativeRequestTimeoutMs)
+                    break;
+                const char reply = allowed ? '1' : '0';
+                if (child_.write(&reply, 1) != 1)
+                    break;
+                continue;
             }
             if (child_.state() != QProcess::Running)
                 break;
@@ -66,17 +84,43 @@ class LinuxProxy final : public Adapter {
         }
     }
     Field inspect(bool text) override {
-        return decodeField(request({{"operation", "inspect"}, {"read", text}})["field"].toObject());
+        auto metadata = decodeField(request({{"operation", "inspect"}})["field"].toObject());
+        return text ? readExpected(metadata) : metadata;
+    }
+    Field readExpected(const Field &expected) override {
+        if (expected.app.isEmpty() || expected.id.isEmpty())
+            return {};
+        return decodeField(request({{"operation", "read"},
+                                    {"app", expected.app},
+                                    {"id", expected.id}})["field"].toObject());
     }
     bool changed() override {
         return request({{"operation", "changed"}})["changed"].toBool();
     }
-    bool replace(const Field &expected, const QString &text, int caret) override {
-        return request({{"operation", "replace"},
-                        {"expected", encodeField(expected)},
-                        {"text", text},
-                        {"caret", caret}})["ok"]
-            .toBool();
+    InputMethodTarget inputMethodTarget() override {
+        const auto target = request({{"operation", "input-method-target"}});
+        return {target["app"].toString(), target["field"].toString(),
+                quint32(target["window"].toInteger())};
+    }
+    WriteResult replace(const Field &expected, const QString &text, int caret,
+                        const WriteAuthorization &authorize) override {
+        if (!authorize)
+            return {};
+        int grants = 0;
+        const auto recheck = [&] {
+            if (!authorize())
+                return false;
+            ++grants;
+            return true;
+        };
+        const auto response = request({{"operation", "replace-observed"},
+                                       {"expected", encodeField(expected)},
+                                       {"text", text},
+                                       {"caret", caret}},
+                                      recheck);
+        if (grants != NativeWriteChecks || !response["accepted"].toBool())
+            return {};
+        return {true, decodeField(response["after"].toObject())};
     }
     QString description() const override {
         auto description = healthy_ ? const_cast<LinuxProxy *>(this)

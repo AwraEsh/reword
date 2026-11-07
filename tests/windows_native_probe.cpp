@@ -52,7 +52,15 @@ int main(int argc, char **argv) {
         return finish("FAIL: native fixture did not receive focus on this desktop.", 1);
     if (!field.text.isEmpty())
         return finish("FAIL: metadata inspection contained text.", 1);
-    field = adapter->inspect(true);
+    auto otherTarget = field;
+    otherTarget.id += "-different-target";
+    if (!adapter->readExpected(otherTarget).text.isEmpty())
+        return finish("FAIL: expected-target read accepted a different field.", 1);
+    otherTarget = field;
+    otherTarget.app += "-different-application";
+    if (!adapter->readExpected(otherTarget).text.isEmpty())
+        return finish("FAIL: expected-target read accepted a different application.", 1);
+    field = adapter->readExpected(field);
     if (!field.known || field.locked || !field.editable || field.text != "teh ") {
         std::cerr << "known=" << field.known << " locked=" << field.locked
                   << " editable=" << field.editable << " plain=" << field.plain
@@ -61,9 +69,32 @@ int main(int argc, char **argv) {
     }
     auto stale = field;
     stale.text = "stale";
-    if (adapter->replace(stale, "WRONG", 5))
+    const auto allow = [] { return true; };
+    if (adapter->replace(stale, "WRONG", 5, allow))
         return finish("FAIL: stale replacement accepted.", 1);
-    if (!adapter->replace(field, "the ", 4))
+    bool asked = false;
+    if (adapter->replace(field, "WRONG", 5, [&] { asked = true; return false; }) ||
+        !asked || !reword::sameTarget(field, adapter->readExpected(field)))
+        return finish("FAIL: native authorization denial did not preserve the field.", 1);
+    if (adapter->replace(field, "WRONG", 5, [] {
+            QThread::msleep(2 * reword::WriteAuthorizationBudgetMs);
+            return true;
+        }) || !reword::sameTarget(field, adapter->readExpected(field)))
+        return finish("FAIL: late authorization did not preserve the field.", 1);
+    bool newerTextObserved = false;
+    if (adapter->replace(field, "WRONG", 5, [&] {
+            fixture.write("text:newer\nsync\n");
+            newerTextObserved = fixture.waitForReadyRead(300) &&
+                                fixture.readLine().trimmed() == "READY";
+            return newerTextObserved;
+        }) || !newerTextObserved)
+        return finish("FAIL: a change during authorization did not stop the edit.", 1);
+    field = adapter->readExpected(field);
+    if (field.text != "newer")
+        return finish("FAIL: a change during authorization was overwritten.", 1);
+    const auto replacement = adapter->replace(field, "the ", 4, allow);
+    if (!replacement || replacement.after.id != field.id || replacement.after.text != "the " ||
+        replacement.after.caret != 4)
         return finish("FAIL: native replacement was not confirmed.", 1);
     auto command = [&](const QString &text) {
         fixture.write((text + '\n').toUtf8());

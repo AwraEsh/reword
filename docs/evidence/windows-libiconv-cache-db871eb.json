@@ -1,0 +1,50 @@
+{
+  "scope": "cached-libiconv-recipe-resource-and-dependency-records",
+  "run": 39399260940,
+  "sourceRevision": "db871ebe7e572a0790d45a8b19fb62854b785c14",
+  "recipeCheckoutCommit": "e456309491fd875487bf02b8a0dca76c1b1b00cc",
+  "recipe": {
+    "0002-Config-for-MSVC.patch": {
+      "sha256": "f0efb5af1ca500aab48a6463cef3b2f30eb9c8c91dc7392ee8932473044ff779",
+      "matchesSpdx": true
+    },
+    "0003-Add-export.patch": {
+      "sha256": "e920b915952a0fb574a10538ac117e2d668465ea5353586296a923cb3319159d",
+      "matchesSpdx": true
+    },
+    "0004-ModuleFileName.patch": {
+      "sha256": "514a0cd2ce138fb2c6d927d3f41d24c13c37023fcd88ce63dbf5760a6b9813b7",
+      "matchesSpdx": true
+    },
+    "portfile.cmake": {
+      "sha256": "72635c362667b537065941a7b52f808d5f3fe269cbfce8b6b1d9f14fa0290d0c",
+      "matchesSpdx": true
+    },
+    "usage": {
+      "sha256": "51a8197a7188b1d034284d676ee515982bb216c03ae10e5bb9618d734ef6b1ea",
+      "matchesSpdx": true
+    },
+    "vcpkg-cmake-wrapper.cmake": {
+      "sha256": "6c0da7d5d4dcefb2105e66e20ef429001e8ece5646349c2e02f2dc71b9b91a7d",
+      "matchesSpdx": true
+    },
+    "vcpkg.json": {
+      "sha256": "390755bfdeb5e06de9e4ee2d2be1209c042f74fd10b94cac0cae00e2f6a1d71c",
+      "matchesSpdx": true
+    }
+  },
+  "archive": {
+    "name": "libiconv-1.19.tar.gz",
+    "sha256": "88dd96a8c0464eca144fc791ae60cd31cd8ee78321e67397e25fc095c4a19aa6",
+    "sha512": "1e8150f9bca907579330cd9c44ebbee46a260271fbe8f50d5ee24a39ef29c8d254505e85c3409324f7440596da711a8bd49e89f848a6be0cb3238a58c24aaecd",
+    "matchesSpdxResource": true
+  },
+  "abiRecordSha256": "2ff09f3c1204d1beb747aaa78b26f5b6fbd0f996f5b43b9b8a0855e1ff9b015e",
+  "abiRecordMatchesPackageId": true,
+  "hunspellDependencyMatchesPackageId": true,
+  "releaseReady": false,
+  "limitations": [
+    "Corresponds to retained package records; not an independent reproducible build or upstream signature verification.",
+    "This does not prove libiconv code is present in the staged Hunspell DLL or close runtime/source/notice distribution requirements."
+  ]
+}

@@ -1,4 +1,719 @@
-# Current handoff — 2026-10-18
+# Current handoff — 2026-11-07
+
+The user tried the installed Preview in YukiGram 7.1.5.0, GNOME Text Editor
+48.3 and Helium 0.12.4.1. None corrected live, and shortcuts reported
+unavailable. The user asked to prioritize live editing. Confirmed the
+installation receipt for `eda761b` against the AppImage checksum, an active
+X11 helper, an unlocked session and Automatic rules for all three apps.
+GNOME Text Editor exposes a multiline editable field. Helium reproduced the
+failure in an isolated X11 session with a temporary profile. The Chrome
+control exposed a focused entry with renderer accessibility forced, but it
+had no EditableText interface. A first private Fcitx-on-X11 Helium diagnostic
+also did not correct the test word. Receipts are
+`.deps/real-helium-x11-meta-0/report.json`,
+`.deps/real-helium-x11-meta-1/report.json`,
+`.deps/real-chrome-x11-meta-1/report.json` and
+`.deps/real-helium-x11-fcitx/report.json`. Production support still requires
+range editing in the real applications. The host uses IBus. The private
+experiments did not change its input method or install a new Preview.
+The private GNOME Text Editor input-method experiment reached an active
+window but did not verify input reached the document, so it cannot establish
+whether that route corrects text. Keep the user's normal desktop reproduction
+as the acceptance case. Receipt: `.deps/real-gnome-editor-x11-fcitx-save/report.json`.
+
+A private IBus 1.5.32 experiment then corrected the fixed typo in GNOME Text
+Editor and saved the reference text intact. A GTK 4 multiline control also
+passed. Helium did not supply surrounding text but accepted correction in
+an IBus preedit composition. The password control remained unchanged.
+The browser did not report its field purpose. This is a transport test with
+a fixed word and a known synthetic field, not production support. Receipts:
+`.deps/real-ibus-x11-gnome-editor-cairo/report.json` and
+`.deps/real-ibus-x11-gtk4-preedit-2/report.json`.
+The checked-in `--ibus-output` probe then passed all four checks (GTK entry,
+GNOME Text Editor saved result, Helium plain input, Helium password input).
+Receipt: `.deps/ibus-x11-checked-in-final/report.json`.
+
+The X11 native helper now provides an independent multiline target witness.
+It reads only role, state, process and window identity. The private real-app
+probe found the focused GNOME Text Editor field and excluded the GTK
+single-line and password controls. Native AT-SPI editing remains single-line.
+Receipt: `.deps/ibus-target-real-1/report.json`. The token lookup used before
+committing a delimiter is now shared with the Fcitx path.
+
+For a production IBus path, start with eligible multiline editor fields so
+the X11 accessibility adapter keeps sole ownership of single-line writes.
+Bind each input context to the focused application and verified field before
+requesting text or writing. Reuse the existing dictionary, policy and retry
+rules. For browser composition without surrounding text, require a trusted
+field signal or a browser integration before handling the user's keys. Keep
+ordinary typing, focus changes, password/PIN, and existing input sources in
+the acceptance tests. YukiGram's actual message composer remains unverified.
+
+The optional C++ `reword-ibus` development target now uses the real Store,
+dictionary and RetryCycle in GNOME Text Editor. It samples the X11 witness
+off the key callback, checks that the witness is newer than IBus focus, and
+rechecks app policy and foreground window before an edit. In the private
+real-app probe, first/second/third, Pause, and per-app denial all passed.
+Receipt: `.deps/ibus-engine-final/report.json`. The build option defaults
+off and there is no installer or automatic input-source switch. Before
+packaging, move dictionary work off the key callback, test the desktop
+input-source setup, and cover Persian input, Undo, longer runs, and rapid
+focus changes. Browser editing still needs its own verified route.
+
+The user confirmed after the host restart that reliable correction and Undo in
+allowed applications are the product priority. See [REQUIREMENTS.md](REQUIREMENTS.md).
+Track skipped edits in ordinary supported fields as functional failures. The
+public repository is inspectable. A formal open-source license remains a
+separate decision because the current project license reserves those rights.
+
+The development build now checks app permission again at the native write
+boundary. The regression reproduced writes after rule removal in live correction,
+selected correction and Undo before the fix. X11 also rejects changes to text,
+selection, focus or field eligibility observed during authorization. GTK can
+switch an entry to password mode without a usable event, so the adapter
+refreshes role and state without reading text before submitting the edit.
+Three controlled X11 cycles passed, including successful ordinary edits and
+Undo after denied or stale attempts. Local receipts:
+`.deps/native-write-policy-red.log`, `.deps/native-write-field-events-red.log`,
+and `.deps/native-write-sensitive-native.log`. The draft installers below
+were built before this change.
+
+The repeated X11 workload then exposed an ordinary selection edit that was
+rejected when the lock and field refresh outlasted the short policy reply
+deadline. The two now have separate bounds. The helper asks for final
+permission again after the refresh, so a revocation during the provider calls
+still prevents the write. Three private X11 probe cycles passed on the Debian
+host with a deliberately delayed lock reply, final permission denial, live
+and selected correction, Undo, and password exclusion. Diagnostic receipts:
+`.deps/native-write-selected-trace-2/report.json` and
+`.deps/x11-provider-final-native.log`.
+
+The next workload completed the 100-record history cap exercise and reached
+113 selected edits before a live Undo timed out. A focused service test
+reproduced losing Undo when the native shortcut began during an accessibility
+read. The service now checks for the pending shortcut before clearing Undo.
+The same test passes, along with the password, lock, pause and per-app
+boundaries for pending shortcuts. Receipts: `.deps/x11-provider-active-120/report.json`,
+`.deps/x11-late-grab-red.log`, and `.deps/x11-late-grab-green.log`.
+
+The follow-up run is not stability-accepted. It reached 122 selected edits,
+13 successful live Undos and 12 complete cycles. Live p95 was 39.7 ms across
+28 samples. It then timed out at live Undo again, this time with trace reason
+14 immediately before 15: the service's post-write text read failed even
+though a metadata-only probe still saw the same permitted, focused field.
+Unlike the earlier reason-5 case, Undo was never recorded for this write.
+Investigate returning the adapter's verified post-write snapshot (including
+the caret) with the write result, then revalidate on Undo and discard it at
+real focus or policy boundaries. Avoid treating an unverified write as a
+successful retry. The app also exceeded the 10% CPU target (12.45% in the
+measured active window), so the diagnostic continued without a resource pass.
+Receipt: `.deps/x11-late-grab-active-120/report.json`. Do not use this run as
+release or installation acceptance.
+
+The native adapter now returns the provider's immediate post-write observation
+to the service. This removes the second text read before recording live or
+passage Undo. Text, caret, selection and policy must match, and invoking Undo
+still reads and validates the current target. The targeted service regression
+failed before this change and passed afterward with the same test input.
+The focused run also passed newer-edit and protected-target cases.
+Receipts: `.deps/write-snapshot-red.log` and `.deps/write-snapshot-focused.log`.
+The owned X11 follow-up reached 26 live Undos, 25 selected Undos and 135
+selected edits before one selected Undo timed out. Word latency p95 was
+38.6 ms across 52 samples. Active app CPU was 13.59% against the 10% gate.
+This run did not pass stability acceptance. Receipt:
+`.deps/write-snapshot-active-120/report.json`. The Undo path now emits
+content-free reason codes to distinguish shortcut delivery, write refusal
+and failed verification in the next run.
+
+The local Preview now runs source `eda761b`. The per-user AppImage was replaced
+at the existing launcher path, with settings and history preserved. The old
+process was allowed to exit normally. The next running binary matched the new
+build by SHA256. Rollback: `.deps/preview-before-eda761b.AppImage`.
+
+The previous build, `091714f`, added native consent. The user confirmed that a GNOME demo
+notification appeared with action buttons. The demo buttons had no effect on
+saved permissions. Windows notification appearance and real Telegram/Chrome
+correction still need desktop testing.
+
+This build adds per-app modes, **Remove rule**, and the sidebar credit
+**Built by AwraEsh for AwraEsh**. Removing a rule invalidates pending consent and revokes access.
+An app can be rediscovered later without permission. The Windows setup EXE,
+Linux AppImage and Debian package are the requested release assets. Publish
+after the runtime acceptance and binary/source pairing checks for those assets.
+
+The serial build and all 17 CTest targets passed in 98.55 s for this source
+change. The UI test clicks Remove rule and checks that only the selected app
+loses its rule. Core, service and Fcitx tests cover persisted shortcut mode,
+no live read in that mode, explicit correction and Undo. Consent actions
+from an earlier prompt are rejected after the next request is queued.
+Receipts: `.deps/application-modes-verified-build.log` and
+`.deps/application-modes-verified-tests.log`.
+
+The [hosted run](https://github.com/AwraEsh/reword/actions/runs/42354120585)
+passed on both Windows and Linux for `eda761b`. The Windows runner verified
+install, clean-PATH launch, uninstall and native Win32 controls. The AppImage
+and extracted Debian package passed isolated launch checks on the Debian host.
+An Applications screenshot from the packaged AppImage confirms the credit,
+three modes and Remove rule controls with synthetic app data.
+Receipts: `.deps/application-modes-package-smoke.log` and
+`.deps/application-modes-preview.png`.
+
+The draft `v0.1.0-preview.1` in [GitHub Releases](https://github.com/AwraEsh/reword/releases)
+targets exact source `eda761b` and contains the Windows installer, AppImage,
+Debian package and SHA256SUMS. GitHub reported each file uploaded, with size
+and SHA256 matching the local asset. Receipt:
+`.deps/release-eda761b-windows/release-receipt.json`.
+
+The final Debian runtime manifest needs four source versions beyond the
+archived set: brotli `1.1.0-2+deb13u1`, curl `8.14.1-2+deb13u7`, expat
+`2.9.0-1~deb13u1` and libxres `2:1.2.1-1`. The manifest SHA256 is
+`7a448d3077b430f5e75ad60d03cfea6d1a25a63138e615acada894339bcc22bf`.
+Windows notice and source pairing is also open. Changing a
+rule invalidates pending computations, but a native setter that has already
+been dispatched can finish during revocation. See COMPATIBILITY.md.
+
+## Foreground discovery and notification work — 2026-11-06
+
+**ACTIVE — explicitly resumed on 2026-11-06.** User reports no detection in
+Telegram/Chrome on the real desktop. The accessibility bus/socket is healthy
+now (no service restart performed). A new metadata-only X11 foreground fallback
+discovers executable identity without a text provider; it never marks a field
+known/editable or authorizes text access. Real desktop initially still failed:
+_NET_WM_PID advertised namespace PID2. XRes server host-PID resolution fixes
+that metadata-only check (application detected, no text returned). The owned
+foreground probe disables AT-SPI and advertises PID2 to cover both gaps.
+Matching-app metadata is preserved across passive-grab transient focus loss;
+an initial regression and independent review caught lost Undo before this fix.
+Private UI/activation/accessibility sessions now isolate XDG_RUNTIME_DIR before
+D-Bus startup as well as GSettings. Full build passes; all 17 CTest targets
+pass in 113.47 s and the host accessibility socket inode remains unchanged.
+Native X11 probes pass with NO_AT_BRIDGE and namespace PID2, plus consent,
+live cycle/Undo, selection/history/Undo, password exclusion and shortcut guards.
+Receipts: .deps/foreground-full-tests.log and .deps/foreground-xres-native.log.
+The actual desktop metadata-only check now detects the executable and returns
+no text; previously the same check returned no application. libXRes is linked
+dynamically and CI includes its development package. Source b30b88c is pushed;
+GitHub runs 42231443751 and 42231432264 are active at last check, not accepted.
+Fresh Linux packaging/audit and self-contained AppImage smoke pass. Installed
+Preview was atomically replaced at its existing path with SHA256
+323ef5f5ca2303384b9eb9f37d43f94181a2aa3f8f75121b9325c87025718565.
+Settings/consents were preserved; no browser/Telegram consent entries existed
+before launching. Rollback binary .deps/preview-before-20261106.AppImage;
+receipt ~/.local/opt/reword/installation.json. The new app is running as a
+transient user unit reword-preview-20261106 (768 MiB, no swap, CPU quota80%,
+output discarded; no login autostart). User CONFIRMS the new consent dialog
+appears in real use. Actual Telegram/Chrome correction is not yet verified.
+New priority: native system consent notifications without raising/activating
+Reword, 7000 ms requested timeout, pending in-app fallback when intentionally
+returning to Reword, and later cooldown reminders. REQUIREMENTS.md records it.
+Notification implementation now removes automatic showWindow, gates QML
+consent on an active window and handles activation changes. GNOME receives
+native Yes/Not now/No actions with generation tokens; Windows uses the native
+tray message with explicit-click opening. Both request 7000 ms OS expiry and
+retain pending consent; ignored requests retry at 15-minute cooldown. Initial
+NoFocus regression fails (count1 vs0), then passes. Review also exposed Apps
+No being overridden by old notification Yes; settings-deny regression fails
+before routing a matching Settings decision through consent/invalidation.
+All 17 CTest targets now pass in 101.71 s, including four native D-Bus cases,
+stale tokens with reused IDs, reminders and zero unsolicited activation.
+Receipts .deps/notification-focus-red.log, .deps/notification-settings-red.log,
+.deps/notification-full-tests.log. Independent review finds no blocker after
+fixes. Host GNOME reports actions capability; a harmless three-button native
+preview was posted, awaiting visual feedback. Source 1bddf7c is pushed; GitHub
+runs 42235787487 and 42235797225 succeed for it. Native Windows notification
+appearance is not proved by CI. Packaging and clean-environment AppImage smoke
+pass; notification artifact SHA256
+aef4f094221288d29a0ba827eb1432e8cfd782c1a71df96505e9d2ee7920338c.
+Final UI hardening: resolving consent via a native notification/settings must
+also close an already-open in-app dialog. New regression initially exposed
+the stale visible dialog, then passes after the QML updated handler closes it
+when pendingName is empty. Full 17-target suite passes again in 99.72 s;
+receipts .deps/notification-dialog-red-object.log,
+.deps/notification-dialog-green.log, .deps/notification-dialog-full-tests.log.
+Source 091714f adds this final fix and is pushed. Fresh packaging and isolated
+AppImage smoke pass, SHA256
+14e7ddea088eddc2a89de2798420c00e9f6489bb1d1daf56c5a3d53f118be592.
+Frozen deployment artifact .deps/notification-091714f-ready.AppImage; receipt
+.deps/notification-final-package-receipt.json. It supersedes the aef4f0 build.
+Source `091714f` was installed at the existing user AppImage path on 2026-11-07
+after the previous process had closed. The local rollback is
+`.deps/preview-before-notifications-20261107.AppImage`.
+Per-app modes and mandatory GNOME buttons are specified in REQUIREMENTS.md.
+Implementation plan: docs/superpowers/plans/2026-11-06-application-modes.md.
+Do not equate foreground detection with safe editable-field support.
+Legacy retry/Undo/CPU and upgrade acceptance gates remain open.
+
+At the previous pause, local commits were 107f5fe (post-write deletion/retry diagnostics) and
+9d892e8 (X11 accessibility activation, isolated UI tests, consent regression).
+They are not pushed; remote remains 6c67a8e. Preview WAS replaced atomically at
+the existing user launcher path with artifact SHA256
+48000cf808b8a89dc36c7599f14b492958d1a069c7d36256d221588958b47429.
+Account database metadata remained unchanged. Installation receipt:
+~/.local/opt/reword/installation.json; old binary rollback copy:
+.deps/installed-preview-backup-20261029.AppImage. No duplicate launcher or
+autostart was added. No stable release was published.
+
+**Unresolved real-desktop blocker:** the metadata/status-only helper check
+enabled org.a11y.Status.IsEnabled on the actual session and preserved
+ScreenReaderEnabled=false, but returned Accessibility bus unavailable. The
+host org.a11y.Bus.GetAddress returns /run/user/1000/at-spi/bus_0, whose socket
+is absent (directory exists and is empty). The systemd user
+at-spi-dbus-bus.service is active, launcher PID1914, bus PID1922, registry2055
+at observation; revalidate PIDs before any action. Do not claim Telegram/browser
+discovery works on the actual desktop. Investigate/recover the stale endpoint
+on resume. No service restart has been attempted. Private-bus UI/activation
+tests isolate GSettings and DISPLAY, but still need a unique XDG_RUNTIME_DIR
+before launching their buses: shared runtime socket cleanup is a plausible
+test interference mechanism, not proven. Native harness already supplies a
+private runtime and UpdateActivationEnvironment. Prevent further shared-runtime
+tests before host-service recovery. All local test/build/probe/package processes
+have finished; the last metadata-only helper was closed normally. The GUI was
+not left running. New upgrade requirements remain in REQUIREMENTS.md.
+
+Previous activity: the user explicitly resumed on 2026-10-29. The previous pause on
+2026-10-23 interrupted the owned write-outcome diagnostic with SIGINT for normal cleanup.
+Uncommitted changes remain in codex/usable-build-integration; last pushed commit
+is 6c67a8e. Latest full build/16-target CTest passes (134.21 s) before the final
+reason-16/17 instrumentation; final instrumented app build and Python suites
+(2 parser, 4 budget, 18 workload tests) pass. No new package was installed.
+The native post-write deletion change is NOT stability-accepted: its workload
+still fails live-2 after 48.293 s, with two correct decisions and no reset event
+between them. Investigate rollback after native replace returns false despite
+an observed edit; reason 16 now traces policy rejection, 17 replace rejection.
+The bool replacement contract may need explicit applied/unconfirmed/confirmed
+outcomes; do not simply advance retry on a genuinely rejected write. Preserve
+the rejected-write regression. Diagnostics and current partial deletion fix
+are documented in RETRY_DIAGNOSTICS.md. The stopped diagnostic receipt is
+.deps/write-outcome-diagnostic-180/report.json. Do not claim a duration pass.
+
+Current priority is the user's real-desktop report that Telegram/browser typing
+never triggers app consent. Host X11 reports toolkit-accessibility=false and
+org.a11y.Status.IsEnabled=false. The owned native harness enabled IsEnabled
+before probes, masking this startup prerequisite. A new private-bus helper
+probe fails before the change and passes after (0.55 s): X11 helper startup
+requests IsEnabled, verifies success, preserves ScreenReaderEnabled and retains
+per-app consent/read guards. Failure is explicit in platform status; Wayland
+keeps its Fcitx path. Tests now isolate GSettings in memory before private bus
+activation; UI/activation tests also have no host DISPLAY. Host settings were
+checked after initial probes and remained false. Full build and all 17 CTest
+targets pass (131.64 s). Owned X11 GTK probes pass, including unknown-app
+discovery/consent, unchanged synthetic text and empty history/statistics before
+allowance, shortcut guards, correction, Undo and protected fields. The fixture
+uses an independent copied executable identity; its old reword_fixture name
+was correctly denied by the self-application policy. Preview AppImage clean-env
+launch passes; SHA256
+48000cf808b8a89dc36c7599f14b492958d1a069c7d36256d221588958b47429.
+User-level replacement is pending. Upgrade replacement/data-preservation and
+obsolete-owned-file cleanup requirements are recorded in REQUIREMENTS.md;
+cross-platform upgrade safety is a new acceptance gate, not yet implemented.
+
+The user explicitly resumed work on 2026-10-21. The full product goal is active.
+After two unexplained host freezes, local C++/Qt work has resumed only as serial,
+resource-bounded jobs using existing dependencies. This is evidence for the tested
+source, not general host-stability acceptance. Requirements remain in
+[REQUIREMENTS.md](REQUIREMENTS.md); the repository is intentionally public. No
+production release has been accepted; the user later authorized Preview use.
+
+## Current resumed work
+
+- **Confirmation safety coverage completed:** the split-read regression now
+  verifies the third attempt too. New password/unknown/changed-target cases
+  switch metadata during the first snapshot, assert no second text read or
+  additional write, no history entry and no retained transient text. Serial
+  bounded rebuild succeeds; all 15 CTest targets pass in 124.18 s, including
+  Fcitx. This does not erase the previous timer witness failure. Hosted Linux
+  CI for 86705b1 succeeds; Windows result is being checked. Undo's separate
+  post-write verification failure and active-workload CPU budget remain open.
+- **Retry reset isolated, 2026-10-23:** owned numeric tracing reproduces live-2
+  mismatch at 95.006 s. First correction 3218239 ms, same-text caret reset
+  3218299 ms, unexpected first correction 3218510 ms. A deterministic split-read
+  deletion regression fails before the fix (`the ` instead of `teh `). Service
+  now confirms a caret-only observation through the same target/privacy guards
+  before resetting; a persistent caret move still resets. Build passes and
+  Service passes including both new controls. Full CTest: 14/15 pass, 115.90 s;
+  fcitx_state timerCancelsPendingJobAfterPolicyChange(paused) fails witnessTicks
+  >= 2 (observed 0 after 211 ms). Focused private-D-Bus timer control then passes
+  all 5 cases, but the initial failure remains recorded. Do not call the whole
+  suite green. Independent review finds no actionable safety/correctness defect;
+  native split-read causality remains a modeled hypothesis, not proven atomic
+  GTK evidence. Post-fix owned workload completes 12 first/second/third/Undo
+  sequences and 121 selected corrections without text mismatch, then stops at
+  resource-budget after 68.993 s (app CPU 10.070% across 32.17 s baseline,
+  helper 5.197%, zero swap, private growth 340 KiB, clean shutdown). Receipt:
+  .deps/retry-confirm-active-120/report.json. This is not a 120-second pass.
+  See RETRY_DIAGNOSTICS.md for fixed numeric event codes and prior separate
+  post-write/Undo failure. Installed Preview remains unchanged.
+- **Important live retry reproduction:** hidden-history workload terminates at
+  50.803 s with native-text-mismatch in live-2, not CPU budget. Second-attempt
+  observation is corrected (five change records) instead of original. Five full
+  cycles; live-first 7, second/third/Undo 6; 115 selected corrections. This
+  reproduces the earlier long-run second-attempt failure with bounded synthetic
+  diagnostics. App CPU 12.75% across only 16.08 s baseline (not comparable to a
+  completed 30 s CPU gate); zero swap, private growth -76 KiB, word p95 upper
+  bound 39.7 ms/13 samples. No forced cleanup or FUSE exception.
+  Report .deps/usable-local-active-120-hidden-history/report.json.
+  Do not replace the installed Preview or claim stability acceptance from this
+  run. Prioritize tracing Service retry reset boundaries (same-text caret
+  changes, invalid fields and post-write verification) using fixed reason codes
+  and metadata only; no text capture or assertion weakening. UI optimization
+  changes no native typing logic, so causality is not established.
+- **Hidden History regression in progress:** the real QML test observes four
+  history getter calls per update while Overview is shown (expected zero).
+  A plain var binding still retains Qt's reference-backed sequence and causes
+  five reads per one update on the open History page; do not accept that fix.
+  Working revision uses explicit loadHistory() returning a value list, refreshes
+  it on page changes/updates only while History is selected, and shares it among
+  the four bindings. Test checks hidden reads, fresh insert visibility and
+  per-update counts. Focused regression passes (3 cases incl setup/cleanup,
+  zero failures/skips, 812 ms) and the complete UI CTest target passes.
+  Full application relink succeeds and all 14 CTest targets pass in 92.25 s at
+  2f8a780. Follow-up independent review is running. Identical bounded 120-second
+  workload is active against .deps/hidden-history-AppDir with rebuilt binaries
+  and unchanged audited runtime. App SHA256
+  f1abc493441b41dbd1721c791b1077c11763e5ebfa729e1c7d5010839dc4fcc0;
+  receipt .deps/usable-local-active-120-hidden-history. Installed Preview is
+  unchanged until the new workload result is known.
+- **Settings workload result:** the 120-second comparison stops at 65.933 s on
+  the same unchanged resource budget. App CPU 14.007%, helper 6.336%, zero swap;
+  nine full cycles, 11 live first/second/third/Undo sequences, 120 selected
+  corrections/history inserts. Word p95 upper bound 34.2 ms across 22 samples.
+  Work completed faster than the preceding six-cycle partial run, but whole-app
+  CPU did not meet the 10% target. No broad CPU reduction or full stability pass
+  is claimed. Outer cleanup now completes without the previous FUSE exception.
+  Next investigate repeated hidden-page list bindings (four History reads per
+  generic updated signal) before another package/workload run. Host session is
+  confirmed X11; Fcitx is installed, but ordinary Wayland acceptance is separate.
+- **Settings-read CPU optimization, 2026-10-23:** profiling 1000 Store::options
+  calls with synthetic settings took 775.477 ms CPU before and 77.196 ms after
+  replacing 25 separate queries with one fixed-key SELECT per call. No cache
+  survives a call; other-connection policy edits are immediately visible.
+  Added a cross-connection regression for language changes and numeric ceilings;
+  complete core suite passes in 0.91 s. --settings-read-profile is available on
+  reword_performance_probe for repeatable comparisons. This is a roughly 90%
+  reduction for that isolated path, not a measured 90% whole-app reduction.
+  Full relink succeeds; all 14 CTest targets pass in 101.55 s at 3e5193c.
+  Independent static review finds no actionable defect and confirms behavior
+  preservation and fresh cross-connection reads. An identical 120-second active
+  workload is running against a private clone of the audited AppDir with only
+  the rebuilt app/helper installed; runtime dependencies are unchanged. New app
+  SHA256 2057c227d11f5eef5d4135a1ef7d953d353f18697bb7ebfbabdc6b629bb3c5a0;
+  helper remains fb267a24a439c1782328b8c33232b55c9a9c61101740e6322d36efe55f908b97.
+  Receipt directory .deps/usable-local-active-120-settings-snapshot. Final
+  package refresh remains pending. Installed Preview is the previous binary.
+- **Test cleanup fix, 2026-10-23:** test-only owned_mounts.py reads bounded
+  /proc/self/mountinfo rather than stat/ismount, so a disconnected private FUSE
+  endpoint is still recognized. Only runtime/doc and runtime/gvfs beneath the
+  caller-owned test directory may be detached. Shared by X11/Wayland harnesses.
+  Six unit tests pass (mount escaping, exact scope, unavailable tool, malformed
+  or oversized inventory); all 18 existing active-stability unit tests pass.
+  Actual controlled-font private-X11 fixture preflight exits 0 with the fix.
+  The old disconnected mount was no longer present for direct reproduction;
+  the ENOTCONN path is covered with a simulated kernel inventory. This changes
+  no installed application code and does not resolve the app CPU budget failure.
+- **Preview delivery accepted, 2026-10-22:** user asked to accept the current
+  result and reach a usable outcome quickly. Installed the tested AppImage for
+  this account at /home/debian/.local/opt/reword/reword-0.1.0-preview.AppImage,
+  SHA256 e2e364a545fe00bf9b234441c6e1c99a622a543bb98bd304dd711a043a43d434.
+  Reword Preview desktop launcher validates and uses extract-and-run. No
+  autostart or system-wide package changes. Installed binary launches on the
+  host display with temporary data/private D-Bus and exits 0 for --smoke-test.
+  Windows installer artifact 12415994422 from integrated CI 39757127469 is linked
+  in docs/TRY_REWORD.md; no stable release is claimed.
+  Local packaged active test reached 73.685 s, then failed resource-budget:
+  app CPU 14.18%, helper 4.11%, zero swap; eight live first/second/third/Undo
+  sequences, 117 selected corrections/history inserts, six full cycles.
+  Word p95 upper bound 33.2 ms, 16 samples. No forced process cleanup in the
+  workload, but outer temporary-directory cleanup hit a stale portal FUSE mount
+  (ENOTCONN). Both CPU and outer cleanup remain follow-up work; no thresholds
+  were relaxed. Report: .deps/usable-local-active-120-font-control/report.json.
+- **Usable-build integration, 2026-10-22:** the user resumed after pausing and
+  asked to prioritize a usable, stable build for Windows and this Debian host.
+  Current branch codex/usable-build-integration contains PR29 plus the separately
+  verified populated-list UI branch (PR22) and workload diagnostics (PR24), merged
+  without conflicts. Complete serial bounded build succeeds; all 13 CTest
+  targets pass in 119.78 seconds at 672650b. Local .deb/AppImage staging succeeds
+  with runtime provenance and host-addon dependency auditing. The initial
+  dpkg-deb compression exceeded the job memory cap; DPKG_DEB_THREADS_MAX=1
+  succeeds within the same bounds. Artifacts are about 40/50 MiB. AppDir,
+  extracted .deb and AppImage extract-and-run each exit 0 for --smoke-test with
+  empty inherited environment, temporary data and private D-Bus/software rendering.
+  This is not dpkg installation, physical Tray or ordinary field acceptance.
+  SHA256 .deb: 5d27530277db758ca03d8f58816a24b8b584a78a541bd09aa1418e1890e8182e;
+  AppImage: e2e364a545fe00bf9b234441c6e1c99a622a543bb98bd304dd711a043a43d434.
+  Draft PR30 contains this integration; integrated CI 39757127469 at de6ac2e
+  is confirmed successful on Linux and Windows. No fresh build-tool download
+  was needed. The bounded local 120-second owned-X11 attempt did not reach the
+  workload. Initial startup lacked rootless tool PATH; adding it exposed missing
+  Openbox resource lookup. Adding native-x11/root/usr/share to XDG_DATA_DIRS
+  starts the desktop, but fixture_timing_probe fails its existing 10-second
+  synthetic watchdog (child alive, one stream). Logs also show private-session
+  GNOME screensaver activation/JIT failures under the address-space cap.
+  Root cause of fixture startup remains unproven; do not count this as packaged
+  typing acceptance or relax the fixture assertion. Receipt:
+  .deps/usable-local-active-120-datadir.log. No user application was targeted.
+  Follow-up: removing only RLIMIT_AS (retaining aggregate 1200 MiB/no-swap/CPU
+  caps) removes the private-session JIT error but fixture watchdog still fails.
+  Therefore virtual-address exhaustion does not explain the fixture timeout.
+  A connect/poll/futex-only strace reproduces it and shows the owned GTK fixture
+  in repeated 25 ms main-loop polls until the probe terminates it, not simply
+  blocked in process startup. Build fixture strings include lifetime/timing
+  options. Next inspect its synthetic stdin/timer dispatch before changing any
+  watchdog duration. Ignored receipts: usable-fixture-no-address-cap.log and
+  usable-fixture-startup.trace under .deps.
+  Stack-unwound trace then locates the fixture at Pango font-map initialization
+  during GTK control construction (main+0x188), before watchdog installation;
+  the earlier poll-only inference of normal main-loop entry was too broad.
+  A test-only FONTCONFIG_FILE restricting fonts to system DejaVu makes the same
+  timing probe pass, including watchdog, two records and quiet mode. Host font
+  configuration is unchanged. The exact reason the default font scan exceeds
+  the bound is not yet established. A bounded 120-second packaged workload now
+  runs with this controlled font configuration; report directory:
+  .deps/usable-local-active-120-font-control. No production source change.
+  PR29 CI 39752523899 at 6a6e11c is confirmed successful on both OS: Windows
+  installer creation, install/launch/uninstall and native probe all pass; Linux
+  CTest, UI and controlled GTK probes pass. No binary release/install is claimed.
+  Next: verify integrated tests, produce and audit local Debian/AppDir artifacts,
+  run owned package/native checks, and reconcile the remaining long-run and
+  distribution acceptance gates before a stable release. Avoid opening unrelated
+  feature work while these delivery gates are outstanding.
+- **Fcitx operation UI:** current storage-access branch is
+  codex/fcitx-operation-ui, stacked on PR28 at 512c0d4. Initial lifecycle/Cancel
+  implementation fd31520 passed 12 CTest targets but independent review found
+  two cancellation races. Real socket REDs reproduce coalesced cancellation
+  loss, premature restart, and later-read cancellation after a complete ACK.
+  Revised f72ee2f requests server closure after ACK and waits for ordered DONE
+  before authorizing native writes; pending cancellation is processed first.
+  Restart also waits for closure, so an old Cancel cannot target the next job.
+  Recovery/Fcitx/UI pass in 36.52 s; follow-up review reports no remaining
+  Important or Critical findings. Final full build succeeds and all 12 CTest
+  targets pass in 88.47 s at the same production source. Windows CI remains
+  pending. See the operation UI plan for exact regression evidence.
+- **PR26, operation deadline:** storage-access now holds
+  codex/fcitx-operation-deadline based on verified PR25 checkpoint 55aed4f.
+  Test-only c4cc5cb accepts the real shortcut/field/operation lock, then delays
+  controlled worker-result delivery. An immediate result must commit once; a
+  result delivered after 10.1 seconds must leave the original intact. Hosted
+  RED 39542141953 fails only the late-commit assertion. Fix 635932e carries
+  one precise monotonic deadline from acceptance through setup, worker and
+  guarded native commit. Full push/PR runs 39542671464/39542677136 pass Linux
+  and Windows; downloaded Fcitx JUnit has 13 cases and no failures/errors/skips.
+  Independent static review found no important issue. Scoped deadline work is
+  complete; UI Cancel and ordinary Wayland acceptance remain separate.
+- **Current work mode:** the user explicitly resumed full implementation and
+  requested local tests where practical to reduce downloads. One-job bounded
+  local builds are being reintroduced using existing dependencies (1 GiB per
+  process, CPU/time limits, nice 19); no parallel build or desktop workload.
+  The complete source build and all 12 registered CTest targets passed locally
+  in a 1200 MiB aggregate cgroup with no permitted swap, CPUQuota 80%, software
+  rendering and serial execution. CTest took 178.04 seconds. Prior host freezes
+  remain unexplained; this is not general host-stability acceptance.
+- **Fcitx recovery work:** storage-access now holds codex/fcitx-original-recovery
+  based on ae6ecd7. Test-only real-acceptance regressions require original
+  delivery before native commit, no write after disconnect/revocation/selection
+  change/expiry, and history only after confirmation. Local RED 9c05958 fails
+  all six new cases (2.901 s). Implementation now waits for authenticated local
+  delivery ACK while retaining the operation lock/deadline, rejects older ACK
+  overlap, and rechecks selection/policy before write. Local core/recovery/Fcitx
+  suites pass in 22.69 s; Fcitx JUnit has 22 cases and zero failures/errors/skips,
+  including added Cancel/password/older-ACK controls. The complete serial build
+  and all 12 CTest targets pass at 611be89; the full test run took 178.04 s.
+  Independent static review found no important finding. Draft PR28 is stacked
+  on PR27. Push/PR run 39575913891 at 6b76ae4 passes Linux and Windows in
+  3m20s: Windows build/tests, dependency metadata, installer build,
+  install/launch/uninstall and native field/shortcut probe all pass; Linux
+  build/CTest, UI, foreign-server rejection and controlled GTK probes pass.
+  Ordinary Wayland acceptance and GUI IPC Cancel remain pending and separate.
+- **PR27, native operation UI:** storage-access holds codex/native-operation-ui.
+  Tested source a6c2471 passes full Linux/Windows push/PR runs
+  39544490522/39544493641. Downloaded UI JUnit on each OS: 26 cases, zero
+  failures/errors/skips. Real apply/Cancel/unchanged paths pass, including
+  visible workspace Cancel, no write/history after cancellation, and terminal
+  busy cleanup. Independent reviews found no important issues. Initial e905973
+  RED reproduced missing busy on both OS. The first fix then exposed an
+  ambiguous test lookup of dialog Cancel buttons; unique workspace selection
+  resolved it. No local C++/Qt workload ran.
+- **Operation UI acceptance:** PR27 closes the X11/Windows Service path.
+  Fcitx lifecycle/Cancel implementation is now under final verification above;
+  ordinary Wayland desktop acceptance remains separate. PR28 addresses original
+  delivery before native writes while preserving confirmed-write-only history.
+- **PR25, Fcitx:** real six-case RED at d1e70c7/run 39538586697 confirms retained
+  owner job text on unsafe observation. Scoped reset 7ad9a99 passes the complete
+  Linux/Windows run 39539160624 and independent static review. Worker/future and
+  operation-lock lifetime are preserved; cancellation remains cooperative.
+  Timer-only policy fix and corrected fixture at cc13055 pass full Linux/Windows
+  push/PR runs 39540890991/39540896152. Actual Fcitx JUnit: 11/11 passing cases.
+  Negative proof 93326bf/run 39541257155 removes only the timer guard and fails
+  exactly Pause/denial/lock cancellation with the same valid loop controls.
+  Do not merge codex/fcitx-timer-red-proof. The periodic witness proves timer
+  policy behavior, not a production 160 ms bound; native accuracy stays 250 ms.
+  Reviews found no important issue. Deadline/UI-cancel coordination and ordinary
+  Wayland acceptance remain open. See the Fcitx plan for exact evidence/limits.
+  Branch codex/fcitx-transient-guards is pushed and stacked on PR23; its managed
+  worktree has been reused for PR26.
+- **PR24, workload diagnostics:** 2aa59d3 passes full push/PR Linux/Windows runs
+  39538716534/39538809182 and independent static review. Two small diagnostic
+  tests and 18 existing active-stability tests pass locally under 256 MiB/10 CPU
+  seconds; no local C++/Qt workload ran. Manual run 39539196812 at that source
+  started a same-AppDir preflight before the instrumented two-hour workload.
+  Inspect its existing handle rather than relaunching on an observation timeout.
+  Keyboard-review holds codex/active-workload-diagnostics; it is stacked on PR20.
+  Final run 39539196812 FAILED after 4,206.262 seconds (about 70 minutes),
+  stage selected-history, failure test-infrastructure; 1,471 full cycles.
+  The last live first/second/third/Undo counters are all 1,473 and the last
+  third-attempt state is corrected. This does not reproduce the prior second
+  retry mismatch, nor establish its root cause or two-hour acceptance.
+  Helper cleanup required escalation; cleanupFailed is false. App CPU 4.26%,
+  helper 1.45%, zero swap, p95 upper bound 22.6 ms across 2,946 samples.
+  Binary SHA256 b7683b398b33ef6e26ff03be93679be907ce4293357d8683b6d64eedafe10e70.
+  Actual report: .deps/hosted-active-2aa59d3/active-workload/report.json.
+  The initial detailed log fetch timed out at TLS. A later bounded direct job-log
+  fetch succeeded: the workload prints no exception subtype/traceback, only
+  exit code 1. Therefore the infrastructure cause remains undetermined.
+  Artifact 12320759229, archive SHA256
+  8bc06d40d2bfa490446401af979ea7d9408d76f5e687695891764833053b7d2f.
+  Local ignored log: .deps/hosted-active-2aa59d3/linux-job.log. No blind rerun
+  or guessed production fix; investigate after the reduced-work mode.
+  Short source audit: active_stability.py catches WorkloadFailure separately
+  from generic Exception. selected-history waits through HistoryCheck, whose
+  read-only SQLite connection uses a 0.5-second timeout. A normal wait expiry
+  is classified operation-timeout by stability_evidence.wait_until, so the
+  generic report does not establish a selection wait timeout. SQLite/read,
+  sampling or report-writing exceptions remain possible; none is confirmed.
+  Next diagnostic should record only a fixed exception category, without
+  exception messages, commands, paths or passage text. No runtime code changed.
+- The earlier long-run mismatch is still unexplained. No production correction
+  logic, typing delays, resource budgets or pass assertions changed in PR24.
+  Prior 632-cycle partial evidence is not two-hour acceptance. PR20's GitHub
+  description now records the failure. No release, installation or shutdown.
+- **PR23:** matching Mesa and D3DCompiler SDK archives are verified against
+  official Qt SHA256 metadata. Each sole DLL matches the actual staged bytes
+  from run 39399260940. Receipts through 1c423bf contain no host paths; neither
+  DLL was loaded/executed. The archives contain no notice text. Source/notice
+  closure and Microsoft signature/redistribution material are still open.
+  Documentation-only parent receipts are now merged into this guard branch;
+  application/test source remains identical to tested cc13055.
+
+The pause record and older checkpoint below are historical and superseded by
+this resumed status. Main develop remains 15e8ad5; PR20–27 remain unmerged.
+
+## Pause checkpoint — 2026-10-20
+
+- Main develop is unchanged at 15e8ad5. PRs #20–#23 remain unmerged drafts.
+- PR22 code cba5167 passed full Linux/Windows run 39400869152. Its actual
+  long-data captures were inspected; documentation fb1020d is pushed.
+- PR23 metadata code db871eb passed full runs 39399260940/39399290932;
+  documentation/source-correspondence receipts through 1605c0c are pushed.
+- The two-hour run 39394646024 at 0fd1f2e FAILED after 1,819.969 seconds,
+  during the live retry sequence: native-text-mismatch, 632 complete cycles.
+  Its first/second/third counters are 634/633/633. No duration-complete event.
+  Helper cleanup required escalation; app CPU 5.86%, helper 2.11%, no swap.
+  Word p95 upper bound 23.6 ms is partial-run evidence only. Binary SHA256
+  037a68b4e5f9173f39325d1d7ff1002d99b78f0b208215e765d52ff92621c131.
+  Actual reports are ignored under .deps/hosted-active-2h-0fd1f2e. Do not claim
+  two-hour acceptance or blindly rerun: first add content-free attempt/timing
+  diagnostics and determine why the expected second attempt did not match.
+- Storage-access holds codex/fcitx-transient-guards at f478026 before this
+  checkpoint. It is pushed, with a plan and a real Fcitx/Store/recovery fixture.
+  Production behavior is unchanged; only friend access was added for inspection.
+  First CI 39482104028 failed to compile the test's capability-flag expression;
+  f478026 fixes that fixture expression. No behavioral RED or fix is accepted.
+  Inspect its latest hosted outcome before editing the addon after resume.
+- Keyboard-review holds clean local codex/active-workload-diagnostics at ef5db74,
+  with no diagnostic implementation yet. PR22 remains on its pushed branch.
+- Local C++/Qt/heavy workloads remain suspended after the two hard freezes.
+  No installation, release, PR merge or shutdown was performed at this checkpoint.
+
+The next checkpoint section predates this pause; its pending two-hour statement
+is superseded by the failed result above.
+
+## Read this checkpoint first
+
+- **Host safety:** two hard freezes required hardware resets. Cause remains
+  unknown. Local C++ builds, GUI workloads and heavy tests stay suspended; use
+  hosted CI. Do not infer host safety from a passing cloud run.
+- **PR20 — workload and CPU:** branch `codex/hosted-active-workload` at ef5db74
+  (documentation after code candidate 0fd1f2e). Full hosted run 39393887050 passes
+  Linux/Windows and the packaged 120-second workload. App CPU 3.44% of one core,
+  main thread 1.86%, helper 1.22%; word p95 upper bound 22.4 ms. Two-hour run
+  39394646024 at 0fd1f2e passed its same-package preflight and started its long
+  workload at 08:42:48 UTC. Its final outcome is pending. Keep earlier failed
+  CPU/cleanup evidence. No budgets were relaxed.
+- **PR21 — guarded native state:** full run 39396472858 passes Linux/Windows at
+  4cc4090: reset/Undo boundaries, post-write authorization and recovery,
+  expected-target native reads, unsafe native-job cancellation and queue-inclusive
+  ten-second deadlines. Each defect had an observed hosted RED regression.
+  Independent static reviews found no important remaining introduced issues.
+  Combined-source push run 39397165863 and PR run 39397184524 both pass
+  at merge 41939dc. Documentation-only updates follow that tested code.
+  Final package/desktop acceptance remains separate.
+- **PR22 — populated UI:** branch `codex/populated-list-review`, code cba5167,
+  reuses the keyboard-review worktree. Full Linux/Windows run 39400869152 passes
+  after observed overflow/contrast failures. Actual regenerated captures confirm
+  the sampled long list values and Practice question fit; see its UI_REVIEW.md.
+- **Build metadata:** branch `codex/windows-build-metadata` follows PR21. Four
+  observed Python RED cases now pass with eight existing controls. Exact vendor
+  metadata retention is limited to 1 MiB/file and 8 MiB total. Full hosted
+  runs 39399260940/39399290932 pass at db871eb; documentation revision 4e73a33
+  also passes 39400501572/39400507867. Actual retained metadata: 158 files,
+  186,979 bytes, all matching reported sizes/hashes. Hunspell and libiconv
+  source/recipe/ABI receipts are under docs/evidence. These match cache records;
+  no independent reproducible build or complete source/notice closure is claimed.
+- **Worktrees:** storage-access now holds the build-metadata branch based on PR21;
+  keyboard-review holds PR22. The main
+  checkout remains `develop` at 15e8ad5. Check status before changing branches.
+  Keep ignored `.deps` evidence and dependencies out of commits/uploads.
+- **Next:** audit the separate Fcitx cancellation/buffer path, finish the pending
+  two-hour report, and maintain the source/run/hash
+  distinctions. The workload will need repeating on the final integrated package.
+
+## Remaining product acceptance
+
+Ordinary Windows 10/11 desktop/tray/scaling and broad GNOME Wayland/Fcitx use;
+populated UI and remaining keyboard/screen-reader checks; final current-host
+latency and packaged active stability; exact final runtime/source/notices binding;
+clean reproducible AppImage/.deb/.exe installation and ordinary-user documentation.
+Release and local installation happen only after these gates pass. The user's
+shutdown instruction is conditional on finishing the work; that condition has
+not been met. Do not shut down merely because CI is green.
+
+Cancellation is cooperative. No secure QString erasure or preemptive interruption
+of a native provider is claimed. Expired results are refused before application;
+a blocked worker/provider can delay the refusal. User history/session recovery
+remain explicit, bounded and separate from transient live observation. The Service
+regressions do not establish universal password or application support.
+
+The sections below are an append-only evidence trail; their older pending/paused
+statements describe those revisions, not the current checkpoint above.
+
+## Historical handoff — 2026-10-18
+
+## UI branch checkpoint — 2026-10-20
+
+PR #22, codex/populated-list-review, is stacked on PR #20. At cba5167 the
+complete Linux/Windows run 39400869152 passes, including 29 Linux UI cases,
+installer and controlled native checks. Actual downloaded captures confirm the
+sampled long list values and Practice question wrap without covering actions;
+dark ComboBox indicator contrast also passes. See docs/UI_REVIEW.md and the
+2026-10-20 populated-list plan for observed RED cases and final inspection.
+Physical desktop/scaling/tray and full product acceptance remain open. Local
+compilation and Qt workloads remain suspended after the two host freezes.
+The older narrative below is historical evidence, not current release approval.
+
+## Workload investigation checkpoint — 2026-10-21
+
+The user resumed work. PR20's two-hour run 39394646024 FAILED after 1,819.969
+seconds at the second live retry attempt (634/633/633 first/second/third counts),
+after 632 sustained cycles. Helper shutdown needed escalation. The preflight
+passed; long duration acceptance remains open. Reports are preserved in ignored
+.deps/hosted-active-2h-0fd1f2e. Do not transfer partial latency/resource results
+into a two-hour success claim.
+
+Keyboard-review now holds codex/active-workload-diagnostics based on ef5db74,
+with bounded content-free attempt diagnostics and two tiny tests. All 18 existing
+active-stability fixtures and both new cases pass under resource limits. Hosted
+verification and an instrumented rerun are pending. Production correction logic,
+delays, assertions and budgets are unchanged. Main develop remains 15e8ad5;
+PR20–23 remain drafts. Local C++/Qt/heavy workloads remain suspended.
 
 The approved scope is in [REQUIREMENTS.md](REQUIREMENTS.md). The repository is
 intentionally public at the user's later request. Do not change visibility back
@@ -656,3 +1371,242 @@ PostgreSQL/Mimer Qt SQL plugins. Store explicitly opens QSQLITE. The follow-up
 retains qsqlite.dll and removes other SQL driver DLLs, leaving graphics intact.
 Installed smoke acceptance now requires the synthetic SQLite database/header
 after native clean-PATH launch. This follow-up needs fresh Windows CI.
+
+PR #19 merged as 15e8ad5c3ebbaa5348bde098d58363e3b23da7ab after both hosted
+runs 39315937141 and 39315944368 passed at 7284138. Linux: 10 CTest suites plus
+three native cycles. Windows: 6 CTest suites, 25 PE tests, installer/native clean
+PATH launch, SQLite header, uninstall and native field/shortcut tests pass.
+The downloaded audit has 93 PE files, 89 candidate names, 16 separate API-set
+contracts, no missing/ambiguous ordinary imports and only qsqlite.dll as a SQL
+driver. Its SHA256 is 5cc59ae4ed660092f34f082290a0a226afe2ec29beac56bb95ac30061f612d49;
+artifact 12218965126. Product release readiness remains false. No local install.
+
+## Hosted packaged workload — 2026-10-19
+
+PR #20 adds an explicitly selected manual workload duration to the existing CI;
+normal push/PR runs do not start it. Runs39315576445 and 39316211634 refused
+staging before the active workload. The retained scanner JSON identifies a
+QtQml directory without module metadata, while CI installed WorkerScript but
+not QtQml/Models. The official Ubuntu module archive owns the missing metadata
+and plugin. Added QtQml, Models and Shapes packages; run 39316879658 at 56138e6
+is pending. Keep the path/formal-module validation intact. Do not count failed
+staging as an active soak. Ubuntu CI evidence cannot establish current-host
+Debian latency or final-package acceptance.
+
+Source audit follow-up before release: Service clears RetryCycle on unsafe
+boundaries but leaves retryPrefix_/retryWord_ QString references, and exception
+paths do not uniformly clear Undo/retry payloads. Review temporary-buffer reset
+ownership and add meaningful regression coverage; this is an identified open
+privacy requirement, not a claim that password text was observed or persisted.
+All local builds/GUI/heavy tests remain suspended after the hard freezes.
+
+The actual packaged run 39316879658 at 56138e6 fails the resource budget after
+65.418 s, not the requested 120 s: sustained app CPU 15.90% of one core after
+30.13 s, helper 2.51%, zero swap, app max RSS 116424 KiB and private growth 176 KiB.
+Normal cleanup completed without forced shutdown. Word 23 samples: p50 upper
+bound 16.1 ms, p95 upper bound 22.3 ms, max 25.261 ms. It completed 110 initial
+history insertions and 10 full cycles, but never reached final selection-limit
+checks. This is failed evidence, not an accepted short run or soak.
+Binary SHA256 0e24b92b94ab149355d256dcae7a88d9c972a33739ae55cb7b0a714be6604206;
+helper 0fac4152b1dae0ab03a1bab1e96a38ce035b094fceb1f090afb6877362ed58bd.
+Report: .deps/hosted-active-56138e6/active-workload/report.json.
+
+Service constructs and destroys a Hunspell-backed Engine on every selected-text
+job. Before changing production code, explicit performance-probe mode compares
+ten fresh-engine passages with ten passages on one engine, collecting CPU/wall
+totals and exact synthetic correctness. Hosted run 39318112831 at 019591a is
+pending. Treat initialization cost as a hypothesis until its measurements arrive;
+keep the CPU and latency budgets unchanged. No long soak started.
+
+Run 39319638562 at 31ab2cd passes Linux and Windows plus the full 120-second
+staged workload. App SHA256
+0c3aaade2fca52d92712efee130a1064e6002630bb6f8e9e2a8a7e810dcaf22c;
+helper unchanged 0fac4152b1dae0ab03a1bab1e96a38ce035b094fceb1f090afb6877362ed58bd.
+44 full cycles, 155 selected fixes/history inserts, both 50k control/refusal
+checks, all Pause/password/Undo checks and normal cleanup pass. Word 90 samples:
+p95 bound 21.8 ms/max 22.505 ms; sustained CPU app 6.64%/helper 1.06%, swap zero,
+private growth 1316/1224 KiB. Report:
+.deps/hosted-active-31ab2cd/active-workload/report.json.
+Independent review found no important issues in isolated passage-engine reuse
+and deterministic harness cleanup; 18 tiny harness tests pass. Full hosted runs
+39320326333/39320337032 at afa301b also pass the added C++ cancellation recovery
+regression. The manual 7200-second mode now first runs a 120-second preflight on
+the same staged AppDir and advances only on success. Both reports are retained.
+
+Do not claim the earlier shutdown-forced baseline's root cause fixed from one
+normal exit. Keep product release, source/notices, privacy-buffer audit,
+current-host latency/final-binary soak and ordinary Windows/Wayland gates open.
+
+
+## Transient privacy reset — 2026-10-20
+
+Stacked branch codex/transient-observation-reset in the storage-access worktree:
+99f91d3/run39321745068 reproduced seven retained-text boundaries and stale Undo
+after inspection failure. d27d3f8 centralizes retry/observation cleanup and passes
+Linux. Windows' failure was silent until Service JUnit output was added in
+633e9ed. Diagnostic run39391142137 proves its only failure is the exception
+retention row: safe polling can legitimately refill previous_ after the reset.
+The test now quiesces its synthetic adapter in the throwing callback. Fresh
+Linux/Windows verification remains pending. Static independent review found no
+important production reset regression; post-write read identity/authorization
+and native-job cancellation audits are still separate open privacy gates.
+No local build, GUI workload, product release or installation occurred.
+
+## Privacy checkpoint — 2026-10-20
+
+Task1 reset/exception regression passes full Linux/Windows run39391695577 at
+2d88084 after quiescing the exception fixture before safe polling resumes.
+Partial Task2 post-write authorization/recovery passes full run39393054682 at
+58959a8 (13 new regressions). Independent review found an introduced recovery
+signal cancellation gap: five hosted RED cases at4853ba6/run39393873509 each
+write after policy revocation. Recheck immediately after recovery signal and
+before the write; fresh hosted GREEN pending. Session recovery is explicit,
+bounded and independent of persisted history; availability does not assert a
+confirmed edit. Adapter metadata-to-read identity enforcement and cancellation
+of stale native worker captures remain open in the transient-observation plan.
+No local C++ build, GUI workload, release or installation was performed.
+
+HostedRED39394490601 atc326c84 reproduces four metadata-to-read changes:
+application,field,password and unknown each request text once when zero reads
+are required (67 other Service cases pass). Linux log retained as
+.deps/expected-read-red-c326c84.log. The new readExpected default refuses;
+owned native probes require both a valid guarded read and rejection of wrong
+app/field identity. Native probe GREEN remains pending.
+
+Service now passes the authorized metadata to readExpected. Linux sends only
+app/ID over its private helper pipe; inspect requests are metadata-only and the
+separate read operation requires identity. Linux snapshots pin one referenced
+AT-SPI object through metadata/text, compare app/ID before text interfaces,
+and retain that same validated object through the write. Windows compares
+expected identity on its pinned UI Automation element before any text read.
+Native pre/post-write reads also use expected identity. All existing native
+password/unknown/lock/plain/editable/size checks remain. Hosted full tests and
+independent review are required; queued native worker cancellation stays open.
+
+Cancellation-gap fix a2f9ba2 passes full Linux/Windows run39394352890.
+Independent follow-up review confirms its P2 finding resolved; static review
+is distinct from native desktop acceptance.
+
+## Native job cancellation checkpoint
+
+Full Linux/Windows run 39395053416 passes at f495be3, including guarded native
+reads and controlled platform probes. Independent static review found no
+important introduced issue in the expected-target implementation.
+
+Hosted RED run 39395433922 at b8a5171 reproduces all eight stale native-job
+cases: no cancellation is requested after unsafe metadata, denied permission,
+Pause, changed identity or a metadata exception. The workspace control passes
+and 72 other Service cases pass. Saved log:
+.deps/native-job-red-b8a5171.log.
+
+Track only the active native job's app/field identifiers. While it is pending,
+metadata must still match that target before reading text; unsafe transitions
+and integration exceptions request cooperative cancellation. Pending shortcut
+focus grace remains allowed only for the same safe target. Workspace jobs do
+not inherit this external-focus cancellation. Clear job metadata at completion,
+stop and failed startup. Full hosted GREEN and review remain pending.
+
+Cancellation does not promise secure memory zeroization or instant removal of
+QString copies held by an already running worker. Worker queue time and the
+operation deadline still require a separate regression audit.
+
+## Queue-inclusive operation deadline
+
+Hosted run 39395969290 at f1984bf reproduces the queue deadline defect: after
+10.1 seconds waiting for a worker, the operation still succeeds. All 80 other
+Service cases pass on Linux, including native cancellation and its workspace
+control; Windows Service also fails. Retained failure log:
+.deps/queue-deadline-red-f1984bf.log.
+
+Use one monotonic QDeadlineTimer starting when an operation is accepted. Check
+expiry before worker initialization, pass only its remaining budget to Engine,
+and refuse an expired result on completion or immediately before a native write.
+A cancelled generation is also rejected before initializing the passage engine,
+even if a later prepare() clears the shared cancellation boolean. No partial or
+late correction may be delivered. Full hosted verification remains pending.
+
+The ten-second budget bounds acceptance of a result; an unresponsive provider
+or a saturated external worker pool can still delay delivery of the refusal.
+Cancellation remains cooperative and no secure memory-erasure claim is made.
+
+## Resume checkpoint — 2026-10-20
+
+The user explicitly resumed. Local builds/GUI/heavy tests remain suspended.
+Manual run 39321497233 at 8570675 failed its short preflight on app CPU 14.11%
+after 30.13 sustained seconds, with word p95 bound 24.8 ms, zero swap and normal
+cleanup. Its two-hour step did not run. Retain this failed evidence beside the
+passing 31ab2cd baseline; engine reuse alone does not close the CPU gate.
+Report: .deps/hosted-active-8570675/active-preflight/report.json.
+
+Main-thread CPU diagnostics now collect only numeric counters from the pinned
+owned processes, separately from aggregate app/helper CPU. The same post-burst
+baseline applies and both burst counters are retained. Five tiny diagnostic
+tests pass in 0.004 s and 18 harness tests in 0.383 s under 256 MiB/10 CPU seconds.
+No production optimization or acceptance limit was changed. Hosted attribution
+and the full suite remain pending.
+
+The stacked privacy branch codex/transient-observation-reset lives in the
+storage-access worktree. Hosted RED 39321745068 at 99f91d3 reproduced seven
+retained-text boundaries plus stale Undo after an inspection error. Reset fix
+d27d3f8 passes Linux; Windows Service failed without Qt stdout. Commit 633e9ed
+adds Service JUnit artifacts to identify the actual failure before another fix.
+Independent static review found no important production reset regression, but
+identified a test timing race in the exception row (safe polling can repopulate
+observation). Whether this caused the Windows failure awaits its XML. Post-write
+authorization/read identity and native-job cancellation audits remain open.
+
+## Shared-settings workload checkpoint — 2026-10-20
+
+Hosted39391593030 at7df1da1 attributes10.65% main-thread CPU out of13.50%
+aggregate app CPU. A real QML regression at859b133/run39392713956 reproduces
+37 full settings reads per notification; each read issues roughly25 SQLite
+queries. Main.qml now takes one reactive settings snapshot and passes it to
+all20 SettingRows. The test follows the Switch's direct parent relationship
+instead of inspecting nested style internals; unchanged <=2-read assertion
+and false/true language reactivity both pass on Linux and Windows.
+
+Full manual run39393887050 at0fd1f2e passes both platforms and the complete
+120-second packaged workload. Report .deps/hosted-active-0fd1f2e/active-workload/report.json:
+149.133s including setup/cleanup,43 full cycles,154 selected fixes/history
+insertions,history pruning,50k control/refusal,Pause/password/Undo and normal
+cleanup (forcedProcesses=[]). Word88 samples p95 conservative upper bound
+22.4ms,max25.286ms. Sustained appCPU3.439%,mainthread1.863%,helper1.223%;
+zero swap,private growth3040/1308KiB. App SHA256
+bd86aee2d0a1267c089096ccb94ded0599cd680833f79a18a173b17228822d0d;
+helper0fac4152b1dae0ab03a1bab1e96a38ce035b094fceb1f090afb6877362ed58bd.
+Independent review of the snapshot and numeric sampler found no important
+issues. No budgets were relaxed. Two-hour run39394646024 was dispatched at
+the unchanged0fd1f2e revision, with its own120-second same-AppDir preflight.
+Its outcome is pending. This is hosted Ubuntu evidence; final merged-source,
+current-host,ordinary Windows/Wayland,distribution and release gates remain.
+
+## Combined Service and workload verification
+
+Merge 41939dc preserves both parent evidence trails and combines PR20's
+single-snapshot UI/metrics with PR21's native guards and deadline. Full Linux
+and Windows push run 39397165863 and PR run 39397184524 pass, including controlled
+native probes and installer smoke checks. Independent reviews of each behavioral
+change found no important outstanding issue. These are hosted development checks,
+not ordinary desktop or final-package soak acceptance.
+
+## Windows metadata retention checkpoint
+
+The existing audit retained notice contents but only hashes of Qt/vcpkg build
+metadata. Four observed RED fixtures preceded bounded exact retention under
+build-metadata. All 12 targeted Python fixtures pass in 0.186 seconds under the
+local 256 MiB/10 CPU-second limit. No local C++/GUI work ran. Source/ABI binding
+still requires inspecting actual hosted contents; releaseReady stays false.
+PR21 documentation head 8a105c4 passes full push/PR runs 39398173948/39398182802.
+The populated-list layout passes at baf6773; its long-Practice/indicator follow-up
+at ef9d446 is currently under failure inspection and not accepted.
+
+## Actual Windows metadata evidence
+
+PR23 code db871eb passes full Linux/Windows push/PR runs 39399260940/39399290932.
+Downloaded materials under .deps/windows-metadata-db871eb contain 158 retained
+metadata files (186,979 bytes), all verified against the audit hashes. Hunspell
+staged DLL, frozen recipe/patch, source archive and ABI package ID match its
+retained SPDX/ABI records; see docs/evidence/windows-hunspell-cache-db871eb.json.
+This is recorded cache correspondence, not an independent reproducible build.
+Qt/graphics/VC runtime and declared libiconv dependency material remain open.
+Independent static review found no important implementation issue.

@@ -4,6 +4,8 @@
 - Hunspell: LGPL / GPL / MPL tri-license. https://github.com/hunspell/hunspell
 - SQLite (through Qt SQL): public domain. https://sqlite.org/copyright.html
 - AT-SPI2: LGPL-2.1-or-later. https://gitlab.gnome.org/GNOME/at-spi2-core
+- libXRes: XFree86/MIT-style license; dynamically linked on Linux for X11
+  client identity. Original copyright notices accompany the bundled runtime.
 - Fcitx5: LGPL-2.1-or-later / component-specific. https://github.com/fcitx/fcitx5
 
 Dictionary source and original license files must accompany every distribution.

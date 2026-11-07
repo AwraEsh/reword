@@ -3,8 +3,11 @@
 namespace reword {
 bool browserApp(const QString &id) {
     auto n = QFileInfo(id).fileName().toLower();
+    if (n.startsWith("fcitx:"))
+        n.remove(0, 6);
     return n.contains("firefox") || n.contains("chrome") || n.contains("chromium") ||
-           n.contains("brave") || n.contains("msedge") || n.contains("vivaldi");
+           n.contains("brave") || n.contains("msedge") || n.contains("vivaldi") ||
+           n == "helium" || n == "helium.exe";
 }
 bool restrictedApp(const QString &id) {
     auto n = QFileInfo(id).fileName().toLower();

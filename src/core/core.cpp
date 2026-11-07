@@ -154,6 +154,21 @@ QVector<CompletedWord> completedWords(const Field &before, const Field &after) {
     }
     return words;
 }
+std::optional<CompletedWord> wordBeforeBoundary(const QString &text, int caret, QChar boundary) {
+    if (caret <= 0 || caret > text.size() ||
+        (caret < text.size() && text[caret].isLowSurrogate() && text[caret - 1].isHighSurrogate()))
+        return std::nullopt;
+    Field before;
+    before.text = text;
+    before.caret = caret;
+    auto after = before;
+    after.text.insert(caret, boundary);
+    ++after.caret;
+    const auto words = completedWords(before, after);
+    if (!words.isEmpty() && words.back().start + words.back().token.size() == caret)
+        return words.back();
+    return std::nullopt;
+}
 static int distance(const QString &a, const QString &b) {
     QVector<int> prev(b.size() + 1), curr(b.size() + 1), before;
     for (int j = 0; j <= b.size(); ++j)

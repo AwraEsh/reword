@@ -1,4 +1,5 @@
 """Functional fixtures for Windows deployment evidence; no PE execution."""
+import hashlib
 import json
 import os
 from unittest.mock import patch
@@ -39,6 +40,56 @@ class WindowsAuditTest(unittest.TestCase):
         self.assertEqual((self.out / 'notices/qt/LICENSES/LGPL-3.0.txt').read_text(), 'Synthetic vendor terms')
         self.assertFalse(report['releaseReady'])
         self.assertNotIn(str(self.base), json.dumps(report))
+
+    def test_preserves_exact_whitelisted_build_metadata(self):
+        metadata = self.vendor / 'share/hunspell/vcpkg.spdx.json'
+        metadata.parent.mkdir(parents=True)
+        payload = b'{"SPDXID":"SPDXRef-synthetic-fixture","source":"fixture-only"}\n'
+        metadata.write_bytes(payload)
+        report = self.audit()
+        label = 'qt/share/hunspell/vcpkg.spdx.json'
+        retained = self.out / 'build-metadata' / label
+        self.assertTrue(retained.is_file(), 'Build metadata must be inspectable, not hash-only')
+        self.assertEqual(retained.read_bytes(), payload)
+        self.assertEqual(report['vendorBuildMetadata'][label],
+                         {'bytes': len(payload), 'sha256': hashlib.sha256(payload).hexdigest()})
+        self.assertNotIn(str(self.base), json.dumps(report))
+        self.assertFalse(report['releaseReady'])
+
+    def test_oversized_build_metadata_leaves_no_audit(self):
+        (self.vendor / 'vcpkg.spdx.json').write_bytes(b'x' * (1024 * 1024 + 1))
+        with self.assertRaises(ValueError):
+            self.audit()
+        self.assertFalse(self.out.exists())
+
+    def test_build_metadata_total_is_bounded_independently(self):
+        modules = self.vendor / 'mkspecs/modules'
+        modules.mkdir(parents=True)
+        payload = b'x' * (1024 * 1024)
+        for index in range(9):
+            (modules / f'qt_lib_fixture_{index}.pri').write_bytes(payload)
+        with self.assertRaises(ValueError):
+            self.audit()
+        self.assertFalse(self.out.exists())
+
+    def test_changed_build_metadata_cannot_leave_successful_output(self):
+        import package_windows_audit
+        metadata = self.vendor / 'vcpkg.spdx.json'
+        metadata.write_bytes(b'original synthetic metadata')
+        real_inventory = package_windows_audit.inventory
+        changed = False
+        def observe(path, limit=package_windows_audit.MAX_FILE_BYTES):
+            nonlocal changed
+            recorded = real_inventory(path, limit)
+            if Path(path) == metadata and not changed:
+                changed = True
+                metadata.write_bytes(b'changed synthetic metadata')
+            return recorded
+        with patch('package_windows_audit.inventory', side_effect=observe):
+            with self.assertRaises(ValueError):
+                self.audit()
+        self.assertTrue(changed)
+        self.assertFalse(self.out.exists())
 
     def test_same_name_different_bytes_is_unmatched(self):
         (self.vendor / 'bin/Qt6Core.dll').write_bytes(b'original')

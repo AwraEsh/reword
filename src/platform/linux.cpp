@@ -4,21 +4,37 @@
 #include <QGuiApplication>
 #include <QKeySequence>
 #include <QDBusInterface>
+#include <QDBusMessage>
 #include <QDBusReply>
+#include <QDBusVariant>
+#include <QDeadlineTimer>
 #include <QElapsedTimer>
 #include <QQueue>
 #undef signals
 #include <atspi/atspi.h>
 #include <X11/Xlib.h>
+#include <X11/Xatom.h>
+#include <X11/extensions/XRes.h>
 #include <X11/XKBlib.h>
 #include <X11/keysym.h>
 #include <unistd.h>
 namespace reword {
 template <class T> using GRef = std::unique_ptr<T, decltype(&g_object_unref)>;
 class LinuxAdapter final : public Adapter {
+    static constexpr int LockQueryTimeoutMs = 100;
+    // AT-SPI and D-Bus are separate providers. Give their verification a
+    // bounded window of its own without accepting a late policy decision.
+    static constexpr int WriteRecheckBudgetMs = 250;
     bool available_ = false;
+    QString unavailableReason_ = "Accessibility bus unavailable · writing workspace only";
     AtspiAccessible *focus_ = nullptr;
+    GRef<AtspiAccessible> validated_{nullptr, g_object_unref};
     AtspiEventListener *listener_ = nullptr;
+    static constexpr const char *fieldEventTypes_[] = {
+        "object:state-changed:focused", "object:text-changed", "object:text-caret-moved",
+        "object:text-selection-changed", "object:property-change:accessible-role",
+        "object:state-changed:editable", "object:state-changed:sensitive",
+        "object:state-changed:single-line"};
     static inline Display *trapped_ = nullptr;
     static inline int trapError_ = 0;
     static inline XErrorHandler previousHandler_ = nullptr;
@@ -30,6 +46,7 @@ class LinuxAdapter final : public Adapter {
         return previousHandler_ ? previousHandler_(d, e) : 0;
     }
     bool dirty_ = true;
+    quint64 fieldEvents_ = 0;
     QElapsedTimer lastPoll_, lastScan_;
     int scanApplication_ = 0;
     Display *display_ = nullptr;
@@ -42,15 +59,76 @@ class LinuxAdapter final : public Adapter {
     };
     QQueue<Shortcut> pendingShortcuts_;
     bool wayland_ = false;
+    QString foregroundApplication(Window *activeWindow = nullptr, unsigned long *process = nullptr) {
+        if (!display_)
+            return {};
+        XSync(display_, False);
+        trapped_ = display_;
+        trapError_ = 0;
+        previousHandler_ = XSetErrorHandler(errorHandler);
+        auto property = [&](Window window, const char *name, Atom expected) -> unsigned long {
+            Atom type = None;
+            int format = 0;
+            unsigned long count = 0, remaining = 0;
+            unsigned char *data = nullptr;
+            const auto atom = XInternAtom(display_, name, True);
+            if (atom == None)
+                return 0;
+            const int result = XGetWindowProperty(display_, window, atom, 0, 1, False,
+                                                  expected, &type, &format, &count, &remaining, &data);
+            unsigned long value = 0;
+            if (result == Success && type == expected && format == 32 && count == 1 && data)
+                value = *reinterpret_cast<unsigned long *>(data);
+            if (data)
+                XFree(data);
+            return value;
+        };
+        const auto window = property(DefaultRootWindow(display_), "_NET_ACTIVE_WINDOW", XA_WINDOW);
+        unsigned long pid = 0;
+        if (window) {
+            XResClientIdSpec specification{window, XRES_CLIENT_ID_PID_MASK};
+            long count = 0;
+            XResClientIdValue *identities = nullptr;
+            XResQueryClientIds(display_, 1, &specification, &count, &identities);
+            if (identities) {
+                for (long i = 0; i < count && i < 8; ++i) {
+                    const auto candidate = XResGetClientPid(&identities[i]);
+                    if (candidate > 0)
+                        pid = static_cast<unsigned long>(candidate);
+                }
+                XResClientIdsDestroy(count, identities);
+            }
+            if (!pid)
+                pid = property(window, "_NET_WM_PID", XA_CARDINAL);
+        }
+        XSync(display_, False);
+        const bool valid = trapError_ == 0;
+        XSetErrorHandler(previousHandler_);
+        trapped_ = nullptr;
+        if (!valid || !pid || pid == unsigned(getpid()) || pid == unsigned(getppid()))
+            return {};
+        if (activeWindow)
+            *activeWindow = window;
+        if (process)
+            *process = pid;
+        return QFileInfo(QString("/proc/%1/exe").arg(pid)).symLinkTarget();
+    }
     static void event(AtspiEvent *e, void *data) {
         auto self = static_cast<LinuxAdapter *>(data);
         self->dirty_ = true;
-        if (QString::fromUtf8(e->type).startsWith("object:state-changed:focused") && e->detail1) {
+        const bool focusChanged = QString::fromUtf8(e->type).startsWith("object:state-changed:focused");
+        if (focusChanged || e->source == self->validated_.get())
+            ++self->fieldEvents_;
+        if (focusChanged && e->detail1) {
             if (self->focus_)
                 g_object_unref(self->focus_);
             self->focus_ = ATSPI_ACCESSIBLE(g_object_ref(e->source));
         }
         g_boxed_free(ATSPI_TYPE_EVENT, e);
+    }
+    static void dispatchPendingEvents() {
+        for (int i = 0; i < 32 && g_main_context_pending(nullptr); ++i)
+            g_main_context_iteration(nullptr, false);
     }
     void discoverInitialFocus() {
         if (focus_ || (lastScan_.isValid() && lastScan_.elapsed() < 1000))
@@ -103,22 +181,42 @@ class LinuxAdapter final : public Adapter {
     }
     bool unlocked() {
         // A missing lock service is uncertainty, not permission to read text.
-        QDBusInterface lock("org.gnome.ScreenSaver", "/org/gnome/ScreenSaver",
-                            "org.gnome.ScreenSaver", QDBusConnection::sessionBus());
-        lock.setTimeout(100);
-        QDBusReply<bool> r = lock.call("GetActive");
+        const auto bus = QDBusConnection::sessionBus();
+        const auto query = [&bus](const QString &service, const QString &path) {
+            auto request = QDBusMessage::createMethodCall(service, path, service, "GetActive");
+            return QDBusReply<bool>(bus.call(request, QDBus::Block, LockQueryTimeoutMs));
+        };
+        const auto r = query("org.gnome.ScreenSaver", "/org/gnome/ScreenSaver");
         if (r.isValid())
             return !r.value();
-        QDBusInterface other("org.freedesktop.ScreenSaver", "/ScreenSaver",
-                             "org.freedesktop.ScreenSaver", QDBusConnection::sessionBus());
-        other.setTimeout(100);
-        QDBusReply<bool> s = other.call("GetActive");
+        const auto s = query("org.freedesktop.ScreenSaver", "/ScreenSaver");
         return s.isValid() && !s.value();
     }
 
   public:
     LinuxAdapter() {
         wayland_ = qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland";
+        if (!wayland_) {
+            QDBusInterface status("org.a11y.Bus", "/org/a11y/bus",
+                                  "org.freedesktop.DBus.Properties",
+                                  QDBusConnection::sessionBus());
+            status.setTimeout(300);
+            QDBusReply<QDBusVariant> enabled =
+                status.call("Get", "org.a11y.Status", "IsEnabled");
+            if (!enabled.isValid()) {
+                unavailableReason_ = "Desktop accessibility status unavailable · writing workspace only";
+                return;
+            }
+            if (!enabled.value().variant().toBool()) {
+                status.call("Set", "org.a11y.Status", "IsEnabled",
+                            QVariant::fromValue(QDBusVariant(true)));
+                enabled = status.call("Get", "org.a11y.Status", "IsEnabled");
+                if (!enabled.isValid() || !enabled.value().variant().toBool()) {
+                    unavailableReason_ = "Desktop accessibility is disabled · enable it to detect applications";
+                    return;
+                }
+            }
+        }
         QDBusInterface a11y("org.a11y.Bus", "/org/a11y/bus", "org.a11y.Bus",
                             QDBusConnection::sessionBus());
         a11y.setTimeout(100);
@@ -135,8 +233,7 @@ class LinuxAdapter final : public Adapter {
         atspi_set_timeout(80, 100);
         available_ = true;
         listener_ = atspi_event_listener_new(event, this, nullptr);
-        for (auto event :
-             {"object:state-changed:focused", "object:text-changed", "object:text-caret-moved"})
+        for (auto event : fieldEventTypes_)
             atspi_event_listener_register(listener_, event, nullptr);
         lastPoll_.start();
         if (!wayland_)
@@ -144,8 +241,7 @@ class LinuxAdapter final : public Adapter {
     }
     ~LinuxAdapter() override {
         if (listener_) {
-            for (auto event :
-                 {"object:state-changed:focused", "object:text-changed", "object:text-caret-moved"})
+            for (auto event : fieldEventTypes_)
                 atspi_event_listener_deregister(listener_, event, nullptr);
             g_object_unref(listener_);
         }
@@ -153,20 +249,20 @@ class LinuxAdapter final : public Adapter {
             g_object_unref(focus_);
         if (display_)
             XCloseDisplay(display_);
+        validated_.reset();
         if (available_)
             atspi_exit();
     }
     QString description() const override {
         if (!available_)
-            return "Accessibility bus unavailable · writing workspace only";
+            return unavailableReason_;
         return wayland_ ? "Wayland · Fcitx5 integration required for live correction"
                         : "X11 · accessible plain text fields";
     }
     bool changed() override {
         if (!available_)
             return false;
-        for (int i = 0; i < 32 && g_main_context_pending(nullptr); ++i)
-            g_main_context_iteration(nullptr, false);
+        dispatchPendingEvents();
         if (lastPoll_.elapsed() > 1000) {
             dirty_ = true;
             lastPoll_.restart();
@@ -176,48 +272,110 @@ class LinuxAdapter final : public Adapter {
         return changed;
     }
     Field inspect(bool includeText) override {
+        auto field = snapshot(includeText, nullptr);
+        if (!includeText && !wayland_) {
+            const auto app = foregroundApplication();
+            if (!app.isEmpty() && field.app != app) {
+                // Application consent needs only executable identity. A window
+                // without a validated text provider never becomes editable.
+                field = {};
+                field.app = app;
+            }
+        }
+        return field;
+    }
+    Field readExpected(const Field &expected) override {
+        if (expected.app.isEmpty() || expected.id.isEmpty()) {
+            validated_.reset();
+            return {};
+        }
+        return snapshot(true, &expected);
+    }
+    InputMethodTarget inputMethodTarget() override {
+        Window before = 0, after = 0;
+        unsigned long foregroundPid = 0, finalPid = 0;
+        unsigned providerPid = 0;
+        bool multiline = false;
+        const auto app = foregroundApplication(&before, &foregroundPid);
+        if (app.isEmpty() || !before)
+            return {};
+        const auto field = snapshot(false, nullptr, &multiline, &providerPid);
+        if (!multiline || field.app != app || field.id.isEmpty() ||
+            providerPid != foregroundPid || !field.editable || !field.focused ||
+            field.password || field.locked)
+            return {};
+        if (foregroundApplication(&after, &finalPid) != app || before != after ||
+            foregroundPid != finalPid)
+            return {};
+        return {app, field.id, quint32(after)};
+    }
+  private:
+    static bool readEligibility(AtspiAccessible *target, Field &field, bool *multiline = nullptr) {
+        GError *error = nullptr;
+        const auto role = atspi_accessible_get_role(target, &error);
+        if (error) {
+            g_error_free(error);
+            return false;
+        }
+        field.password = role == ATSPI_ROLE_PASSWORD_TEXT;
+        GRef<AtspiStateSet> states(atspi_accessible_get_state_set(target), g_object_unref);
+        if (!states)
+            return false;
+        field.focused = atspi_state_set_contains(states.get(), ATSPI_STATE_FOCUSED);
+        field.editable = atspi_state_set_contains(states.get(), ATSPI_STATE_EDITABLE) &&
+                         atspi_state_set_contains(states.get(), ATSPI_STATE_SENSITIVE);
+        const bool singleLine = atspi_state_set_contains(states.get(), ATSPI_STATE_SINGLE_LINE);
+        if (multiline)
+            *multiline = role == ATSPI_ROLE_TEXT && !singleLine &&
+                         atspi_state_set_contains(states.get(), ATSPI_STATE_MULTI_LINE);
+        field.plain = role == ATSPI_ROLE_ENTRY || (role == ATSPI_ROLE_TEXT && singleLine);
+        field.known = field.plain || field.password;
+        return true;
+    }
+    Field snapshot(bool includeText, const Field *expected, bool *multiline = nullptr,
+                   unsigned *providerPid = nullptr) {
+        validated_.reset();
         if (!available_)
             return {};
-        for (int i = 0; i < 32 && g_main_context_pending(nullptr); ++i)
-            g_main_context_iteration(nullptr, false);
+        dispatchPendingEvents();
         discoverInitialFocus();
+        const auto fieldEvents = fieldEvents_;
         Field f;
         if (!focus_)
             return f;
+        // AT-SPI calls can dispatch focus events. Pin this object for the whole
+        // snapshot so metadata and text cannot follow different focus_ values.
+        GRef<AtspiAccessible> target(ATSPI_ACCESSIBLE(g_object_ref(focus_)), g_object_unref);
         GError *error = nullptr;
-        auto pid = atspi_accessible_get_process_id(focus_, &error);
+        auto pid = atspi_accessible_get_process_id(target.get(), &error);
         if (error) {
             g_error_free(error);
             return f;
         }
+        if (providerPid)
+            *providerPid = pid;
         f.app = QFileInfo(QString("/proc/%1/exe").arg(pid)).symLinkTarget();
         if (f.app.isEmpty() || (pid == getpid() || pid == getppid()))
             return Field{};
-        auto obj = ATSPI_OBJECT(focus_);
+        auto obj = ATSPI_OBJECT(target.get());
         f.id = QString::fromUtf8(obj->app->bus_name) + QString::fromUtf8(obj->path);
-        auto role = atspi_accessible_get_role(focus_, &error);
-        if (error) {
-            g_error_free(error);
+        if (expected && (f.id != expected->id || f.app != expected->app))
+            return {};
+        if (multiline)
+            atspi_accessible_clear_cache_single(target.get());
+        if (!readEligibility(target.get(), f, multiline))
             return f;
-        }
-        f.password = role == ATSPI_ROLE_PASSWORD_TEXT;
-        auto states = atspi_accessible_get_state_set(focus_);
-        if (!states)
-            return f;
-        f.focused = atspi_state_set_contains(states, ATSPI_STATE_FOCUSED);
-        f.editable = atspi_state_set_contains(states, ATSPI_STATE_EDITABLE);
-        bool sensitive = atspi_state_set_contains(states, ATSPI_STATE_SENSITIVE);
-        bool singleLine = atspi_state_set_contains(states, ATSPI_STATE_SINGLE_LINE);
-        g_object_unref(states);
-        f.plain = role == ATSPI_ROLE_ENTRY || (role == ATSPI_ROLE_TEXT && singleLine);
-        f.known = f.plain || f.password;
         // The Fcitx addon owns Wayland live edits; never double-correct via AT-SPI.
         f.locked = !unlocked();
-        if (!includeText || f.password || !f.known || !f.editable || !f.focused || f.locked ||
-            !sensitive)
+        if (multiline) {
+            dispatchPendingEvents();
+            if (focus_ != target.get() || fieldEvents_ != fieldEvents)
+                return {};
+        }
+        if (!includeText || f.password || !f.known || !f.editable || !f.focused || f.locked)
             return f;
-        GRef<AtspiText> text(atspi_accessible_get_text_iface(focus_), g_object_unref);
-        GRef<AtspiEditableText> editable(atspi_accessible_get_editable_text_iface(focus_),
+        GRef<AtspiText> text(atspi_accessible_get_text_iface(target.get()), g_object_unref);
+        GRef<AtspiEditableText> editable(atspi_accessible_get_editable_text_iface(target.get()),
                                          g_object_unref);
         if (!text || !editable) {
             f.known = false;
@@ -260,30 +418,66 @@ class LinuxAdapter final : public Adapter {
             f.known = false;
             f.text.clear();
         }
+        if (f.known)
+            validated_.reset(ATSPI_ACCESSIBLE(g_object_ref(target.get())));
         return f;
     }
-    bool replace(const Field &expected, const QString &newText, int caret) override {
-        auto current = inspect(true);
-        if (!sameTarget(expected, current))
-            return false;
-        GRef<AtspiEditableText> editable(atspi_accessible_get_editable_text_iface(focus_),
+  public:
+    WriteResult replace(const Field &expected, const QString &newText, int caret,
+                 const WriteAuthorization &authorize) override {
+        auto current = readExpected(expected);
+        if (!sameTarget(expected, current) || !validated_)
+            return {};
+        GRef<AtspiAccessible> target(ATSPI_ACCESSIBLE(g_object_ref(validated_.get())),
+                                     g_object_unref);
+        GRef<AtspiEditableText> editable(atspi_accessible_get_editable_text_iface(target.get()),
                                          g_object_unref);
-        GRef<AtspiText> text(atspi_accessible_get_text_iface(focus_), g_object_unref);
+        GRef<AtspiText> text(atspi_accessible_get_text_iface(target.get()), g_object_unref);
         if (!editable || !text)
-            return false;
+            return {};
+        const auto replacement = newText.toUtf8();
+        const auto fieldEvents = fieldEvents_;
+        const QDeadlineTimer authorizationWindow(WriteAuthorizationBudgetMs, Qt::PreciseTimer);
+        if (!authorize || !authorize() || authorizationWindow.hasExpired())
+            return {};
+        const QDeadlineTimer recheckWindow(WriteRecheckBudgetMs, Qt::PreciseTimer);
+        if (!unlocked())
+            return {};
+        // GTK can change the role of an existing entry without a text or
+        // focus event. Refresh the metadata without requesting field text.
+        atspi_accessible_clear_cache_single(target.get());
+        Field eligibility;
+        if (!readEligibility(target.get(), eligibility) || !eligibility.plain ||
+            eligibility.password || !eligibility.editable || !eligibility.focused)
+            return {};
+        dispatchPendingEvents();
+        if (recheckWindow.hasExpired() || fieldEvents_ != fieldEvents ||
+            g_main_context_pending(nullptr))
+            return {};
+        // The provider recheck may take longer than a policy reply. Require
+        // permission again after it, then check events before writing.
+        const QDeadlineTimer finalWindow(WriteAuthorizationBudgetMs, Qt::PreciseTimer);
+        if (!authorize() || finalWindow.hasExpired())
+            return {};
+        dispatchPendingEvents();
+        if (finalWindow.hasExpired() || fieldEvents_ != fieldEvents ||
+            g_main_context_pending(nullptr))
+            return {};
         GError *error = nullptr;
         bool ok = atspi_editable_text_set_text_contents(editable.get(),
-                                                        newText.toUtf8().constData(), &error);
+                                                        replacement.constData(), &error);
         if (error) {
             g_error_free(error);
-            return false;
+            return {};
         }
         if (!ok)
-            return false;
+            return {};
         atspi_text_set_caret_offset(text.get(), newText.left(caret).toUcs4().size(), nullptr);
         // A single set-contents call avoids delete/insert windows in supported plain fields.
-        auto after = inspect(true);
-        return after.id == expected.id && after.text == newText;
+        const auto foreground = foregroundApplication();
+        if (!foreground.isEmpty() && foreground != expected.app)
+            return {true, {}};
+        return {true, readExpected(expected)};
     }
     bool shortcuts(const QString &fix, const QString &undo, const QString &pause) override {
         if (!display_)

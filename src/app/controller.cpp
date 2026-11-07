@@ -31,9 +31,16 @@ void applyThemePalette(bool dark) {
 Controller::Controller(const QString &directory, QObject *parent, std::unique_ptr<Adapter> adapter)
     : QObject(parent), store_(directory) {
     applyThemePalette(dark());
+    initializeNotifications();
     recoveryServer_ = new RecoveryServer(this);
     connect(recoveryServer_, &RecoveryServer::passage, this,
             [this](QString original, QString corrected) { rememberPassage(original, corrected); });
+    connect(recoveryServer_, &RecoveryServer::operationActive, this, [this](bool active) {
+        fcitxBusy_ = active;
+        if (!active && notice_ == "Cancelling…")
+            notice_.clear();
+        emit updated();
+    });
     if (!recoveryServer_->listen(directory) &&
         qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland")
         notice_ =
@@ -42,6 +49,10 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
     service_->moveToThread(&worker_);
     connect(&worker_, &QThread::started, service_, &Service::start);
     connect(&worker_, &QThread::finished, service_, &QObject::deleteLater);
+    connect(service_, &Service::operationActive, this, [this](bool active) {
+        serviceBusy_ = active;
+        emit updated();
+    });
     connect(service_, &Service::state, this, [this](QString text, bool keys) {
         platform_ = text;
         shortcuts_ = keys;
@@ -70,12 +81,13 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
                                3000);
         emit updated();
     });
-    connect(service_, &Service::passageApplied, this,
+    connect(service_, &Service::passageRecoveryAvailable, this,
             [this](QString original, QString corrected) { rememberPassage(original, corrected); });
     connect(
         service_, &Service::result, this,
         [this](QString original, QString corrected, QString error, bool native) {
-            busy_ = false;
+            if (!native)
+                busy_ = false;
             if (!error.isEmpty())
                 notice_ = error;
             else if (native)
@@ -120,6 +132,9 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
                 }
             }
             nextApplication();
+            if (!pendingId_.isEmpty() && QDateTime::currentMSecsSinceEpoch() >= reminderAt_ &&
+                store_.shouldAsk(pendingId_) && !store_.paused())
+                notifyConsent();
             refreshTray();
             emit updated();
         });
@@ -127,6 +142,7 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
     refresh_.start(10000);
 }
 Controller::~Controller() {
+    closeConsentNotification();
     recoveryServer_->stop();
     service_->cancel();
     QMetaObject::invokeMethod(service_, &Service::stop, Qt::BlockingQueuedConnection);
@@ -217,8 +233,33 @@ void Controller::set(QString key, QVariant value) {
     });
 }
 void Controller::decide(QString id, QString decision) {
+    if (id.isEmpty() || (decision != "allow" && decision != "shortcut" &&
+                         decision != "deny" && decision != "later"))
+        return;
     guard([&] {
         store_.decide(id, decision);
+        clearPendingApplication(id);
+        emit updated();
+    });
+}
+void Controller::clearPendingApplication(const QString &id) {
+    for (qsizetype i = queue_.size(); i > 0; --i)
+        if (queue_[i - 1].toMap()["id"].toString() == id)
+            queue_.removeAt(i - 1);
+    if (id != pendingId_)
+        return;
+    closeConsentNotification();
+    pendingId_.clear();
+    pendingName_.clear();
+    nextApplication();
+}
+void Controller::removeApplication(QString id) {
+    if (id.isEmpty())
+        return;
+    guard([&] {
+        store_.removeApplication(id);
+        clearPendingApplication(id);
+        QMetaObject::invokeMethod(service_, "forgetApplication", Qt::QueuedConnection, Q_ARG(QString, id));
         emit updated();
     });
 }
@@ -232,30 +273,26 @@ void Controller::nextApplication() {
                 continue;
             pendingId_ = row["id"].toString();
             pendingName_ = row["name"].toString();
-            if (tray_)
-                tray_->showMessage("Allow Reword in " + pendingName_ + "?",
-                                   "Open Reword to choose Yes, Not now or No.",
-                                   QSystemTrayIcon::Information, 6000);
-            emit showWindow();
+            if (++consentGeneration_ == 0)
+                ++consentGeneration_;
+            notifyConsent();
             break;
         }
         emit updated();
     });
 }
-void Controller::consent(QString decision) {
-    guard([&] {
-        if (!pendingId_.isEmpty() && !decision.isEmpty())
-            store_.decide(pendingId_, decision);
-        pendingId_.clear();
-        pendingName_.clear();
-        nextApplication();
-        emit updated();
-    });
+void Controller::consent(uint request, QString decision) {
+    if (!request || request != consentRequest() ||
+        (decision != "allow" && decision != "later" && decision != "deny"))
+        return;
+    decide(pendingId_, decision);
 }
 void Controller::pause(int minutes) {
     guard([&] {
-        if (minutes != 0)
+        if (minutes != 0) {
             service_->cancel();
+            recoveryServer_->cancelOperations();
+        }
         store_.pause(minutes);
         refreshTray();
         emit updated();
@@ -268,7 +305,7 @@ void Controller::fix(QString text) {
             emit updated();
             return;
         }
-        if (busy_) {
+        if (busy()) {
             notice_ = "A correction is already running.";
             emit updated();
             return;
@@ -315,6 +352,7 @@ void Controller::recordApplied(QString original, QString corrected) {
 }
 void Controller::cancel() {
     service_->cancel();
+    recoveryServer_->cancelOperations();
     notice_ = "Cancelling…";
     emit updated();
 }

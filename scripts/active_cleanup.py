@@ -16,7 +16,11 @@ def stop_child(process, grace):
 
 
 def cleanup_owned(fixture, app, watches, desktop, grace=3):
-    result = {'forced': False, 'failed': False}
+    result = {'forced': False, 'failed': False, 'forcedProcesses': []}
+
+    def forced(role):
+        result['forced'] = True
+        result['forcedProcesses'].append(role)
 
     def attempt(action):
         try:
@@ -31,7 +35,7 @@ def cleanup_owned(fixture, app, watches, desktop, grace=3):
                 os.write(fixture.stdin.fileno(), b'quit\n')
                 fixture.wait(timeout=grace)
             except (OSError, subprocess.TimeoutExpired):
-                result['forced'] = True
+                forced('fixture')
                 stop_child(fixture, grace)
 
     def stop_app():
@@ -40,7 +44,7 @@ def cleanup_owned(fixture, app, watches, desktop, grace=3):
                 desktop.close_app(app.pid)
                 app.wait(timeout=grace)
             except Exception:
-                result['forced'] = True
+                forced('app')
                 stop_child(app, grace)
 
     if fixture is not None:
@@ -53,9 +57,10 @@ def cleanup_owned(fixture, app, watches, desktop, grace=3):
     if 'helper' in watches:
         def stop_helper():
             if watches['helper'].stop(grace):
-                result['forced'] = True
+                forced('helper')
         attempt(stop_helper)
     for watch in watches.values():
         attempt(watch.close)
     attempt(desktop.close)
+    result['forcedProcesses'].sort()
     return result

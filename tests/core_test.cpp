@@ -5,6 +5,65 @@ using namespace reword;
 class CoreTest : public QObject {
     Q_OBJECT
   private slots:
+    void inputMethodBoundarySharesTextProtections() {
+        const auto text = QString::fromUtf8("🙂 teh rest");
+        const auto english = wordBeforeBoundary(text, 6, u' ');
+        QVERIFY(english);
+        QCOMPARE(english->token, QString("teh"));
+        QCOMPARE(english->start, 3);
+        const auto persian = wordBeforeBoundary(QString::fromUtf8("سلام"), 4, u'،');
+        QVERIFY(persian);
+        QCOMPARE(persian->token, QString::fromUtf8("سلام"));
+        QVERIFY(!wordBeforeBoundary(text, 1, u' '));
+        QVERIFY(!wordBeforeBoundary(QString("https://example.com"), 19, u' '));
+        QVERIFY(!wordBeforeBoundary(QString("teh"), 3, u'x'));
+    }
+    void shortcutDecisionPersistsWithoutEnablingLegacyLiveAccess() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        writer.discover("/synthetic-app", "Synthetic app");
+        const auto before = reader.value("configRevision", 0).toLongLong();
+        writer.decide("/synthetic-app", "shortcut");
+        QCOMPARE(reader.applications().first().toMap()["decision"].toString(), QString("shortcut"));
+        QCOMPARE(reader.applicationMode("/synthetic-app"), ApplicationMode::ShortcutOnly);
+        QVERIFY(reader.selectionAllowed("/synthetic-app"));
+        QVERIFY(!reader.allowed("/synthetic-app"));
+        QVERIFY(!reader.shouldAsk("/synthetic-app"));
+        QVERIFY(reader.value("configRevision", 0).toLongLong() > before);
+        Store reopened(data.path());
+        QCOMPARE(reopened.applicationMode("/synthetic-app"), ApplicationMode::ShortcutOnly);
+        writer.decide("/synthetic-app", "deny");
+        QCOMPARE(reader.applicationMode("/synthetic-app"), ApplicationMode::Disabled);
+        QVERIFY(!reader.selectionAllowed("/synthetic-app"));
+        writer.decide("/synthetic-app", "allow");
+        QCOMPARE(reader.applicationMode("/synthetic-app"), ApplicationMode::Automatic);
+        const auto beforeRemove = reader.value("configRevision", 0).toLongLong();
+        writer.removeApplication("/synthetic-app");
+        QVERIFY(reader.applications().isEmpty());
+        QVERIFY(!reader.selectionAllowed("/synthetic-app"));
+        QCOMPARE(reader.value("configRevision", 0).toLongLong(), beforeRemove + 1);
+        reader.discover("/synthetic-app", "Synthetic app");
+        QVERIFY(reader.shouldAsk("/synthetic-app"));
+        QVERIFY(!reader.allowed("/synthetic-app"));
+    }
+    void optionsObserveOtherConnectionChangesWithoutCaching() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        QVERIFY(reader.options().english);
+        writer.setValue("english", false);
+        writer.setValue("persian", false);
+        writer.setValue("historyCount", 999999);
+        writer.setValue("maxCharacters", 999999);
+        auto options = reader.options();
+        QVERIFY(!options.english);
+        QVERIFY(!options.persian);
+        QCOMPARE(options.historyCount, 500);
+        QCOMPARE(options.maxCharacters, MaxPassageCharacters);
+        writer.setValue("english", true);
+        writer.setValue("historyCount", 0);
+        QVERIFY(reader.options().english);
+        QCOMPARE(reader.options().historyCount, 1);
+    }
     void oversizedOptionsDoNotBypassOperationCeiling() {
         Engine engine;
         Options options;

@@ -2,14 +2,18 @@
 #include "core.h"
 #include <QSqlDatabase>
 #include <QVariantList>
+class QSqlQuery;
 namespace reword {
+enum class ApplicationMode { Disabled, Automatic, ShortcutOnly };
+
 class Store {
     QSqlDatabase db_;
     QString connection_;
     void exec(const QString &sql);
+    void changeApplicationPolicy(QSqlQuery &query);
 
   public:
-    explicit Store(const QString &directory);
+    explicit Store(const QString &directory, int busyTimeoutMs = 1000);
     ~Store();
     QVariant value(const QString &, const QVariant &fallback = {}) const;
     void setValue(const QString &, const QVariant &);
@@ -19,7 +23,10 @@ class Store {
                           const QStringList &previous);
     void discover(const QString &id, const QString &name, bool restricted = false);
     void decide(const QString &id, const QString &decision, QDate today = QDate::currentDate());
-    bool allowed(const QString &) const;
+    void removeApplication(const QString &id);
+    ApplicationMode applicationMode(const QString &id) const;
+    bool allowed(const QString &id) const;
+    bool selectionAllowed(const QString &id) const;
     bool shouldAsk(const QString &, QDate today = QDate::currentDate()) const;
     QVariantList applications() const;
     void history(const QString &original, const QString &corrected, const Options &,
