@@ -65,6 +65,15 @@ client must bind that witness to the current input context and read the text
 from IBus. Do not query an application's accessibility provider synchronously
 from the IBus key callback. The application can be waiting on that callback.
 
+The optional X11 IBus engine prepares spelling edits on a worker with one
+replaceable request. An ordinary letter can predict the next surrounding
+snapshot so the worker has time to prepare before the delimiter arrives.
+An edit can use only a result whose complete text, caret, context generation,
+configuration revision, and delimiter match the actual IBus observation.
+Focus loss and blocked policy discard the result. A missing result leaves
+the key with the application. Dictionary changes and correction settings
+advance the revision in the same SQLite transaction as the change.
+
 ## Threads and storage
 
 The native service runs on a worker thread. Full-passage work uses asynchronous

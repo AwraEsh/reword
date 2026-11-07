@@ -10,13 +10,15 @@ class Store {
     QSqlDatabase db_;
     QString connection_;
     void exec(const QString &sql);
-    void changeApplicationPolicy(QSqlQuery &query);
+    void updateSetting(const QString &, const QVariant &, bool invalidateCorrection);
+    void changeCorrectionConfiguration(QSqlQuery &query);
 
   public:
     explicit Store(const QString &directory, int busyTimeoutMs = 1000);
     ~Store();
     QVariant value(const QString &, const QVariant &fallback = {}) const;
     void setValue(const QString &, const QVariant &);
+    void setCorrectionOption(const QString &, const QVariant &);
     Options options() const;
     QStringList shortcuts() const;
     bool restoreShortcuts(const QStringList &expected, qint64 revision,

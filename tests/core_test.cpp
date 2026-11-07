@@ -64,6 +64,32 @@ class CoreTest : public QObject {
         QVERIFY(reader.options().english);
         QCOMPARE(reader.options().historyCount, 1);
     }
+    void personalDictionaryChangesInvalidatePreparedCorrections() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        const auto revision = [&] { return reader.value("configRevision", 0).toLongLong(); };
+        const auto initial = revision();
+        writer.addWord("Teh");
+        QVERIFY(reader.words().contains("teh"));
+        QCOMPARE(revision(), initial + 1);
+        writer.addWord("teh");
+        QCOMPARE(revision(), initial + 1);
+        writer.removeWord("teh");
+        QCOMPARE(revision(), initial + 2);
+        writer.replacement("teh", "that");
+        QCOMPARE(reader.replacements().value("teh"), QString("that"));
+        QCOMPARE(revision(), initial + 3);
+        writer.replacement("teh", "that");
+        QCOMPARE(revision(), initial + 3);
+        writer.replacement("teh", "");
+        QVERIFY(!reader.replacements().contains("teh"));
+        QCOMPARE(revision(), initial + 4);
+        writer.setCorrectionOption("english", false);
+        QVERIFY(!reader.options().english);
+        QCOMPARE(revision(), initial + 5);
+        writer.setCorrectionOption("english", false);
+        QCOMPARE(revision(), initial + 5);
+    }
     void oversizedOptionsDoNotBypassOperationCeiling() {
         Engine engine;
         Options options;

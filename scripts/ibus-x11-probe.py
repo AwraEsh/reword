@@ -61,10 +61,10 @@ def click_editor(desktop, window):
     desktop.x.XSync(desktop.display, False)
 
 
-def type_typo(desktop):
+def type_typo(desktop, delay=.13):
     for key in ("t", "e", "h", "space"):
         desktop._keys([key])
-        time.sleep(.13)
+        time.sleep(delay)
 
 
 def browser_state():
@@ -79,6 +79,10 @@ def browser_state():
     return found[0] if found else ""
 
 def saved_correction(document, word="the"):
+    return saved_input(document, word + " ")
+
+
+def saved_input(document, typed):
     try:
         text = document.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -86,9 +90,8 @@ def saved_correction(document, word="the"):
     # The editor may treat the final newline as part of the file format and
     # place the cursor before it. Removing the inserted word must recover
     # the exact original document.
-    typed = word + " "
     return (text.count(typed) == 1 and text.replace(typed, "", 1) == "anchor!\n"
-            or text in (f"anchor!\n{word}\n", f"anchor!\n{typed}\n"))
+            or text in (f"anchor!\n{typed.rstrip()}\n", f"anchor!\n{typed}\n"))
 
 def input_method_target(helper):
     helper.stdin.write(b'{"operation":"input-method-target"}\n')
@@ -136,9 +139,33 @@ def run_probe(desktop, root, output, reword_engine):
                 child.kill()
                 child.wait(timeout=4)
 
-    def update_settings(statement, values):
+    def update_settings(statement, values, invalidate=False):
         with closing(sqlite3.connect(root / "reword/reword.sqlite", timeout=1)) as database, database:
             database.execute(statement, values)
+            if invalidate:
+                row = database.execute("SELECT value FROM settings WHERE key='configRevision'").fetchone()
+                revision = json.loads(row[0])[0] if row else 0
+                database.execute("INSERT OR REPLACE INTO settings VALUES(?,?)",
+                                 ("configRevision", json.dumps([revision + 1])))
+
+    def type_persian_typo():
+        desktop.check_alive()
+        subprocess.run(["setxkbmap", "-layout", "ir"], env=env, timeout=3, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            iranian = OwnedDesktop(root)
+            try:
+                time.sleep(.3)
+                for key in ("Arabic_seen", "Arabic_lam", "Arabic_alef", "Arabic_alef",
+                            "Arabic_meem", "space"):
+                    iranian._keys([key])
+                    time.sleep(.13)
+            finally:
+                iranian.close()
+        finally:
+            subprocess.run(["setxkbmap", "-layout", "us"], env=env, timeout=3, check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        desktop._keys(["Control_L", "s"], chord=True)
 
     try:
         helper = spawn([str(ROOT / "build/reword-native-helper")], "native-helper",
@@ -251,6 +278,23 @@ def run_probe(desktop, root, output, reword_engine):
                 result["editor_denied_preserved"] = wait_for(
                     lambda: saved_correction(document, "teh"), 5)
                 update_settings("UPDATE applications SET decision=? WHERE id=?", ("allow", editor_path))
+                type_typo(desktop, .025)
+                desktop._keys(["Control_L", "s"], chord=True)
+                result["editor_fast_input_intact"] = wait_for(
+                    lambda: saved_input(document, "teh the ") or
+                            saved_input(document, "teh teh "), 5)
+                result["editor_fast_word_corrected"] = saved_input(document, "teh the ")
+                prefix = "teh the " if result["editor_fast_word_corrected"] else "teh teh "
+                if result["editor_fast_input_intact"]:
+                    type_persian_typo()
+                    result["editor_persian_corrected"] = wait_for(
+                        lambda: saved_input(document, prefix + "سلام "), 5)
+                    if result["editor_persian_corrected"]:
+                        update_settings("INSERT OR REPLACE INTO settings VALUES(?,?)",
+                                        ("persian", "[false]"), invalidate=True)
+                        type_persian_typo()
+                        result["editor_persian_disabled"] = wait_for(
+                            lambda: saved_input(document, prefix + "سلام سلاام "), 5)
         stop(editor)
 
         result["stage"] = "helium"
@@ -305,7 +349,8 @@ setInterval(() => {
         passed = passed and all(result.get(key) for key in
                                ("browser_pass_through", "editor_second_preserved", "editor_third_corrected",
                                 "editor_pause_preserved", "editor_rule_change_observed",
-                                "editor_denied_preserved"))
+                                "editor_denied_preserved", "editor_fast_input_intact",
+                                "editor_persian_corrected", "editor_persian_disabled"))
     else:
         passed = passed and result.get("browser_preedit")
     return 0 if passed else 1

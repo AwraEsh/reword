@@ -1,5 +1,35 @@
 # Current handoff — 2026-11-07
 
+## Hold after the current IBus work
+
+The user asked to finish the work and checks already running, document the
+result, and hold further work. The worker and settings changes are recorded
+in a local checkpoint commit. The latest source is a development checkpoint,
+not an installation candidate.
+
+- The final build completed. The local core, UI and service suites all passed
+  in 72.46 seconds. Receipt: `.deps/ibus-worker-settings-tests.log`.
+- The earlier worker build passed the private GNOME Text Editor test,
+  including first/second/third, pause, denial and an English typo typed with
+  25 ms between keys. Receipt: `.deps/ibus-worker-real-fast/report.json`.
+- The final combined build did not correct the first word in GNOME Text Editor.
+  The separate witness probe saw the editor, but the engine rejected target
+  verification during the typing sequence (numeric event 5). This evidence
+  does not establish why the two observations differed. The Persian case
+  was conditional on a successful first edit and did not execute. Helium
+  plain and password controls received unchanged typing. Receipts:
+  `.deps/ibus-worker-settings-final/report.json` and
+  `.deps/ibus-worker-settings-final/engine.log`.
+- The per-user Preview remains installed at source `eda761b`. The installed
+  AppImage hash matched its receipt. Draft `v0.1.0-preview.1` still contains
+  the older AppImage, Debian package, Windows setup and checksums.
+  No new installer was generated, installed or published during this hold.
+
+Resume by tracing the final build's metadata witness at the first editor
+word, then repeat the private English and Persian scenarios. Normal desktop
+setup, Undo, sustained resource checks, and live support for Helium and
+YukiGram remain open. Keep these items on hold until the user resumes.
+
 The user tried the installed Preview in YukiGram 7.1.5.0, GNOME Text Editor
 48.3 and Helium 0.12.4.1. None corrected live, and shortcuts reported
 unavailable. The user asked to prioritize live editing. Confirmed the
@@ -55,10 +85,18 @@ off the key callback, checks that the witness is newer than IBus focus, and
 rechecks app policy and foreground window before an edit. In the private
 real-app probe, first/second/third, Pause, and per-app denial all passed.
 Receipt: `.deps/ibus-engine-final/report.json`. The build option defaults
-off and there is no installer or automatic input-source switch. Before
-packaging, move dictionary work off the key callback, test the desktop
-input-source setup, and cover Persian input, Undo, longer runs, and rapid
-focus changes. Browser editing still needs its own verified route.
+off and there is no installer or automatic input-source switch.
+
+The IBus engine now computes suggestions off the key callback. Its queue holds
+one current snapshot or typing prediction and rejects results after a field,
+text, caret, delimiter or settings change. The first private editor retest
+passed the alternating cycle, pause and denial. An added 25 ms key-spacing
+test corrected the word and preserved the full reference document.
+Receipts: `.deps/ibus-worker-real-1/report.json` and
+`.deps/ibus-worker-real-fast/report.json`. Personal dictionary and UI
+settings writes now publish their invalidation revision atomically. Normal
+desktop setup, Undo, longer runs and rapid focus changes remain packaging
+gates. Browser editing still needs its own verified route.
 
 The user confirmed after the host restart that reliable correction and Undo in
 allowed applications are the product priority. See [REQUIREMENTS.md](REQUIREMENTS.md).

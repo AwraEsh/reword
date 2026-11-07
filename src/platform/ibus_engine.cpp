@@ -3,8 +3,10 @@
 
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <QScopeGuard>
 #include <QStandardPaths>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -28,7 +30,7 @@ constexpr char engineName[] = "reword-x11";
 
 enum class Trace {
     Focused = 1, Blurred, Key, NoSurrounding, Unverified, Policy, Snapshot, NoSnapshot,
-    NoWord, NoCorrection, RetrySkipped, TimedOut, Write, Reset, NoFocus,
+    NoWord, NoCorrection, RetrySkipped, TimedOut, Write, Reset, NoFocus, NoPreparedEdit,
 };
 void trace(Trace reason) {
     static const bool enabled = qEnvironmentVariableIsSet("REWORD_IBUS_DIAGNOSTICS");
@@ -74,6 +76,116 @@ class TargetObserver {
 struct Observation {
     QString text;
     int caret = 0;
+    bool operator==(const Observation &) const = default;
+};
+
+constexpr char16_t wordBoundaries[] = u" .,!؟?،";
+
+struct SuggestionRequest {
+    quint64 generation = 0;
+    qint64 revision = 0;
+    Observation observed;
+    bool operator==(const SuggestionRequest &) const = default;
+};
+
+struct Suggestion {
+    reword::CompletedWord word;
+    QString corrected, boundaries;
+};
+
+class SuggestionWorker {
+    std::mutex mutex_;
+    std::condition_variable_any changed_;
+    std::optional<SuggestionRequest> request_;
+    std::optional<Suggestion> result_;
+    quint64 serial_ = 0;
+    std::jthread thread_;
+
+    void run(std::stop_token stop, const QString &directory) {
+        reword::Engine dictionary;
+        std::unique_ptr<reword::Store> store;
+        qint64 dictionaryRevision = -1;
+        quint64 processed = 0;
+        while (!stop.stop_requested()) {
+            std::unique_lock lock(mutex_);
+            if (!changed_.wait(lock, stop, [&] { return request_ && processed != serial_; }))
+                return;
+            const auto request = *request_;
+            processed = serial_;
+            lock.unlock();
+
+            std::optional<Suggestion> suggestion;
+            try {
+                if (!store)
+                    store = std::make_unique<reword::Store>(directory, 0);
+                if (store->value("configRevision", 0).toLongLong() == request.revision) {
+                    auto options = store->options();
+                    options.abbreviations = false;
+                    if (dictionaryRevision != request.revision) {
+                        dictionary.setPersonal(store->words(), store->replacements());
+                        dictionaryRevision = request.revision;
+                    }
+                    for (const auto mark : wordBoundaries) {
+                        if (!mark || stop.stop_requested())
+                            break;
+                        const auto word = reword::wordBeforeBoundary(
+                            request.observed.text, request.observed.caret, QChar{mark});
+                        if (!word)
+                            continue;
+                        if (!suggestion) {
+                            auto corrected = dictionary.word(word->token, options,
+                                request.observed.text.left(word->start).right(128));
+                            suggestion = Suggestion{*word, std::move(corrected), {}};
+                        }
+                        if (suggestion->word.start == word->start &&
+                            suggestion->word.token == word->token)
+                            suggestion->boundaries += QChar{mark};
+                    }
+                    if (store->value("configRevision", 0).toLongLong() != request.revision)
+                        suggestion.reset();
+                }
+            } catch (...) {
+                suggestion.reset();
+            }
+            lock.lock();
+            if (processed == serial_)
+                result_ = std::move(suggestion);
+        }
+    }
+
+  public:
+    explicit SuggestionWorker(const QString &directory)
+        : thread_([this, directory](std::stop_token stop) {
+              try {
+                  run(stop, directory);
+              } catch (...) {
+                  // An unavailable dictionary must leave native typing usable.
+              }
+          }) {}
+
+    void offer(SuggestionRequest request) {
+        std::lock_guard lock(mutex_);
+        if (request_ == request)
+            return;
+        request_ = std::move(request);
+        result_.reset();
+        ++serial_;
+        changed_.notify_one();
+    }
+    void cancel(quint64 generation) {
+        std::lock_guard lock(mutex_);
+        if (request_ && request_->generation == generation) {
+            request_.reset();
+            result_.reset();
+            ++serial_;
+        }
+    }
+    std::optional<Suggestion> ready(const SuggestionRequest &request, QChar boundary) {
+        std::lock_guard lock(mutex_);
+        if (request_ != request || !result_ || !result_->boundaries.contains(boundary))
+            return std::nullopt;
+        return result_;
+    }
 };
 
 struct PendingEdit {
@@ -84,6 +196,7 @@ struct PendingEdit {
 
 struct Context {
     Clock::time_point focused, deletionUntil;
+    quint64 generation = 0;
     guint capabilities = 0;
     reword::InputMethodTarget target;
     std::optional<Observation> surrounding;
@@ -118,10 +231,11 @@ class Runtime {
 
   public:
     reword::Store store;
-    reword::Engine dictionary;
-    qint64 dictionaryRevision = -1;
+    SuggestionWorker suggestions;
+    quint64 nextGeneration = 0;
+    IBusEngine *focusedEngine = nullptr;
 
-    explicit Runtime(const QString &directory) : store(directory, 0) {}
+    explicit Runtime(const QString &directory) : store(directory, 0), suggestions(directory) {}
 
     quint32 activeWindow() const {
         if (activeWindow_ == None)
@@ -143,7 +257,7 @@ class Runtime {
     reword::InputMethodTarget targetFor(IBusEngine *engine, const Context &context) {
         guint purpose = 0, hints = 0;
         ibus_engine_get_content_type(engine, &purpose, &hints);
-        if (context.focused == Clock::time_point::max()) {
+        if (focusedEngine != engine || context.focused == Clock::time_point::max()) {
             trace(Trace::NoFocus);
             return {};
         }
@@ -186,23 +300,53 @@ Context &state(IBusEngine *engine) {
     return *reinterpret_cast<RewordIBusEngine *>(engine)->context;
 }
 
+void clear(Context &context) {
+    runtime->suggestions.cancel(context.generation);
+    context.clear();
+    context.generation = ++runtime->nextGeneration;
+}
+
 void focusIn(IBusEngine *engine) {
     trace(Trace::Focused);
+    if (runtime->focusedEngine && runtime->focusedEngine != engine) {
+        auto &previous = state(runtime->focusedEngine);
+        clear(previous);
+        previous.focused = Clock::time_point::max();
+    }
+    runtime->focusedEngine = engine;
     auto &context = state(engine);
-    context.clear();
+    clear(context);
     context.focused = Clock::now();
 }
 void focusOut(IBusEngine *engine) {
     trace(Trace::Blurred);
+    if (runtime->focusedEngine == engine)
+        runtime->focusedEngine = nullptr;
     auto &context = state(engine);
-    context.clear();
+    clear(context);
     context.focused = Clock::time_point::max();
+}
+
+gboolean dropUnavailableObservation(gpointer data) {
+    auto &app = *static_cast<Runtime *>(data);
+    if (auto *engine = app.focusedEngine) {
+        auto &context = state(engine);
+        try {
+            if (context.target.window &&
+                (!app.allowed(context.target) || app.activeWindow() != context.target.window))
+                clear(context);
+        } catch (...) {
+            clear(context);
+        }
+    }
+    return G_SOURCE_CONTINUE;
 }
 
 void reset(IBusEngine *engine) {
     trace(Trace::Reset);
     auto &context = state(engine);
     context.surrounding.reset();
+    runtime->suggestions.cancel(context.generation);
     if (Clock::now() > context.deletionUntil)
         context.resetRetry();
     context.deletionUntil = {};
@@ -212,13 +356,13 @@ void capabilities(IBusEngine *engine, guint caps) {
     auto &context = state(engine);
     context.capabilities = caps;
     if (!(caps & IBUS_CAP_SURROUNDING_TEXT))
-        context.clear();
+        clear(context);
 }
 
 void contentType(IBusEngine *engine, guint purpose, guint hints) {
     if (purpose == IBUS_INPUT_PURPOSE_PASSWORD || purpose == IBUS_INPUT_PURPOSE_PIN ||
         (hints & IBUS_INPUT_HINT_PRIVATE))
-        state(engine).clear();
+        clear(state(engine));
 }
 
 void observe(IBusEngine *engine, IBusText *text, guint cursor, guint anchor) {
@@ -226,23 +370,23 @@ void observe(IBusEngine *engine, IBusText *text, guint cursor, guint anchor) {
     try {
         const auto target = runtime->targetFor(engine, context);
         if (!runtime->allowed(target) || cursor != anchor) {
-            context.clear();
+            clear(context);
             return;
         }
         if (!sameField(context.target, target)) {
-            context.clear();
+            clear(context);
             context.target = target;
         }
         const char *utf8 = ibus_text_get_text(text);
         const auto bytes = utf8 ? strnlen(utf8, surroundingByteLimit + 1) : 0;
         if (bytes > surroundingByteLimit) {
-            context.clear();
+            clear(context);
             return;
         }
         const auto value = QString::fromUtf8(utf8, bytes);
         const auto points = value.toUcs4();
         if (cursor > unsigned(points.size()) || points.size() > reword::MaxPassageCharacters) {
-            context.clear();
+            clear(context);
             return;
         }
         const auto caret = QString::fromUcs4(
@@ -261,9 +405,11 @@ void observe(IBusEngine *engine, IBusText *text, guint cursor, guint anchor) {
             (caret < context.retryStart || value.left(context.retryStart) != context.prefix))
             context.resetRetry();
         context.surrounding = Observation{value, int(caret)};
+        runtime->suggestions.offer({context.generation,
+            runtime->store.value("configRevision", 0).toLongLong(), *context.surrounding});
         trace(Trace::Snapshot);
     } catch (...) {
-        context.clear();
+        clear(context);
     }
 }
 
@@ -277,11 +423,11 @@ gboolean process(IBusEngine *engine, guint key, guint, guint modifiers) {
         const auto target = runtime->targetFor(engine, context);
         if (!runtime->allowed(target)) {
             trace(Trace::Policy);
-            context.clear();
+            clear(context);
             return FALSE;
         }
         if (!sameField(context.target, target)) {
-            context.clear();
+            clear(context);
             context.target = target;
         }
         // Only a verified, permitted field can request surrounding text.
@@ -298,46 +444,49 @@ gboolean process(IBusEngine *engine, guint key, guint, guint modifiers) {
             context.resetRetry();
             return FALSE;
         }
-        const bool boundary = code == ' ' || code == '.' || code == ',' || code == '!' ||
-                              code == '?' || code == 0x060c || code == 0x061f;
+        const QChar mark{char16_t(code)};
+        const bool boundary = code <= 0xffff && QStringView(wordBoundaries).contains(mark);
         if (!observed || modified) {
             if (boundary && !modified)
                 trace(Trace::NoSnapshot);
             return FALSE;
         }
+        const auto revision = runtime->store.value("configRevision", 0).toLongLong();
         if (!boundary) {
             if (code >= 0x20 && context.retryStart >= 0 &&
                 observed->caret > context.retryStart + context.lastToken.size())
                 context.resetRetry();
+            // Prepare the word while the next key is still in the future.
+            // The prediction is usable only if the toolkit confirms it.
+            if (QChar::isLetter(code) || QChar::isMark(code) || code == 0x200c) {
+                const char32_t typed = code;
+                const auto character = QString::fromUcs4(&typed, 1);
+                observed->text.insert(observed->caret, character);
+                observed->caret += character.size();
+                runtime->suggestions.offer({context.generation, revision, std::move(*observed)});
+            }
             return FALSE;
         }
-        const QChar mark{char16_t(code)};
-        const auto word = reword::wordBeforeBoundary(observed->text, observed->caret, mark);
-        if (!word) {
-            trace(Trace::NoWord);
+        const auto suggestion = runtime->suggestions.ready(
+            {context.generation, revision, *observed}, mark);
+        if (!suggestion) {
+            trace(Trace::NoPreparedEdit);
             return FALSE;
         }
-        const auto prefix = observed->text.left(word->start);
-        if (context.prefix != prefix || context.lastToken != word->token ||
-            context.retryStart != word->start)
+        const auto &word = suggestion->word;
+        const auto &corrected = suggestion->corrected;
+        const auto prefix = observed->text.left(word.start);
+        if (context.prefix != prefix || context.lastToken != word.token ||
+            context.retryStart != word.start)
             context.resetRetry();
-
-        const auto revision = runtime->store.value("configRevision", 0).toLongLong();
-        auto options = runtime->store.options();
-        options.abbreviations = false;
-        if (revision != runtime->dictionaryRevision) {
-            runtime->dictionary.setPersonal(runtime->store.words(), runtime->store.replacements());
-            runtime->dictionaryRevision = revision;
-        }
-        const auto corrected = runtime->dictionary.word(word->token, options, prefix.right(128));
-        if (corrected == word->token) {
+        if (corrected == word.token) {
             trace(Trace::NoCorrection);
             return FALSE;
         }
 
         auto retry = context.retry;
         const auto now = QDateTime::currentMSecsSinceEpoch();
-        if (!retry.shouldCorrect(target.field, word->start, word->token, now)) {
+        if (!retry.shouldCorrect(target.field, word.start, word.token, now)) {
             context.retry = std::move(retry);
             trace(Trace::RetrySkipped);
             return FALSE;
@@ -346,24 +495,24 @@ gboolean process(IBusEngine *engine, guint key, guint, guint modifiers) {
             runtime->store.value("configRevision", 0).toLongLong() != revision ||
             Clock::now() - started > keyBudget) {
             trace(Trace::TimedOut);
-            context.clear();
+            clear(context);
             return FALSE;
         }
         const auto replacement = corrected + mark;
         const auto expected = prefix + replacement + observed->text.mid(observed->caret);
         context.prefix = prefix;
-        context.lastToken = word->token;
-        context.retryStart = word->start;
+        context.lastToken = word.token;
+        context.retryStart = word.start;
         context.pending = PendingEdit{{expected, int(prefix.size() + replacement.size())},
                                       std::move(retry), Clock::now() + 300ms};
-        const int length = word->token.toUcs4().size();
+        const int length = word.token.toUcs4().size();
         const auto encoded = replacement.toUtf8();
         ibus_engine_delete_surrounding_text(engine, -length, length);
         ibus_engine_commit_text(engine, ibus_text_new_from_string(encoded.constData()));
         trace(Trace::Write);
         return TRUE;
     } catch (...) {
-        context.clear();
+        clear(context);
         return FALSE;
     }
 }
@@ -383,7 +532,13 @@ void reword_ibus_engine_class_init(RewordIBusEngineClass *klass) {
     engine->set_surrounding_text = observe;
     engine->process_key_event = process;
     G_OBJECT_CLASS(klass)->finalize = [](GObject *object) {
-        delete reinterpret_cast<RewordIBusEngine *>(object)->context;
+        auto *context = reinterpret_cast<RewordIBusEngine *>(object)->context;
+        if (runtime) {
+            if (runtime->focusedEngine == IBUS_ENGINE(object))
+                runtime->focusedEngine = nullptr;
+            runtime->suggestions.cancel(context->generation);
+        }
+        delete context;
         G_OBJECT_CLASS(reword_ibus_engine_parent_class)->finalize(object);
     };
 }
@@ -403,6 +558,7 @@ int main(int argc, char **argv) {
                         "/reword";
         Runtime state(directory);
         runtime = &state;
+        const auto resetRuntime = qScopeGuard([] { runtime = nullptr; });
         ibus_init();
         std::unique_ptr<IBusBus, decltype(&g_object_unref)> bus(ibus_bus_new(), g_object_unref);
         if (!ibus_bus_is_connected(bus.get())) {
@@ -428,7 +584,9 @@ int main(int argc, char **argv) {
             return 1;
         }
         qInfo("Reword IBus engine registered.");
+        const auto sweep = g_timeout_add(125, dropUnavailableObservation, &state);
         g_main_loop_run(loop.get());
+        g_source_remove(sweep);
         g_signal_handlers_disconnect_by_data(bus.get(), loop.get());
         return 0;
     } catch (...) {

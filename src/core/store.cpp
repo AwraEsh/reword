@@ -84,13 +84,23 @@ QVariant Store::value(const QString &key, const QVariant &fallback) const {
     return a.isEmpty() ? fallback : a.first().toVariant();
 }
 void Store::setValue(const QString &key, const QVariant &value) {
+    updateSetting(key, value, false);
+}
+void Store::setCorrectionOption(const QString &key, const QVariant &value) {
+    updateSetting(key, value, true);
+}
+void Store::updateSetting(const QString &key, const QVariant &value, bool invalidateCorrection) {
     QSqlQuery q(db_);
     q.prepare(
-        "INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
+        "INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value "
+        "WHERE settings.value<>excluded.value");
     q.addBindValue(key);
     q.addBindValue(QString::fromUtf8(
         QJsonDocument(QJsonArray::fromVariantList({value})).toJson(QJsonDocument::Compact)));
-    checked(q);
+    if (invalidateCorrection)
+        changeCorrectionConfiguration(q);
+    else
+        checked(q);
 }
 QStringList Store::shortcuts() const {
     return {value("fixShortcut", "Ctrl+Alt+R").toString(),
@@ -192,23 +202,23 @@ void Store::decide(const QString &id, const QString &decision, QDate today) {
     q.addBindValue(id);
     q.addBindValue(decision);
     q.addBindValue(remind);
-    changeApplicationPolicy(q);
+    changeCorrectionConfiguration(q);
 }
 void Store::removeApplication(const QString &id) {
     QSqlQuery q(db_);
     q.prepare("DELETE FROM applications WHERE id=?");
     q.addBindValue(id);
-    changeApplicationPolicy(q);
+    changeCorrectionConfiguration(q);
 }
-void Store::changeApplicationPolicy(QSqlQuery &q) {
+void Store::changeCorrectionConfiguration(QSqlQuery &q) {
     if (!db_.transaction())
-        throw std::runtime_error("Cannot begin application policy transaction.");
+        throw std::runtime_error("Cannot begin correction configuration transaction.");
     try {
         checked(q);
         if (q.numRowsAffected() > 0)
             setValue("configRevision", value("configRevision", 0).toLongLong() + 1);
         if (!db_.commit())
-            throw std::runtime_error("Cannot commit application policy transaction.");
+            throw std::runtime_error("Cannot commit correction configuration transaction.");
     } catch (...) {
         db_.rollback();
         throw;
@@ -362,13 +372,13 @@ void Store::addWord(const QString &w) {
     QSqlQuery q(db_);
     q.prepare("INSERT OR IGNORE INTO words VALUES(?)");
     q.addBindValue(w.toLower());
-    checked(q);
+    changeCorrectionConfiguration(q);
 }
 void Store::removeWord(const QString &w) {
     QSqlQuery q(db_);
     q.prepare("DELETE FROM words WHERE word=?");
     q.addBindValue(w.toLower());
-    checked(q);
+    changeCorrectionConfiguration(q);
 }
 QSet<QString> Store::words() const {
     QSet<QString> result;
@@ -386,11 +396,11 @@ void Store::replacement(const QString &a, const QString &b) {
         q.addBindValue(a.toLower());
     } else {
         q.prepare("INSERT INTO replacements VALUES(?,?) ON CONFLICT(original) DO UPDATE SET "
-                  "corrected=excluded.corrected");
+                  "corrected=excluded.corrected WHERE replacements.corrected<>excluded.corrected");
         q.addBindValue(a.toLower());
         q.addBindValue(b);
     }
-    checked(q);
+    changeCorrectionConfiguration(q);
 }
 QHash<QString, QString> Store::replacements() const {
     QHash<QString, QString> r;

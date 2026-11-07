@@ -223,8 +223,7 @@ void Controller::set(QString key, QVariant value) {
                     return;
                 }
         }
-        store_.setValue(key, value);
-        store_.setValue("configRevision", store_.value("configRevision", 0).toLongLong() + 1);
+        store_.setCorrectionOption(key, value);
         service_->cancel();
         store_.prune(store_.options());
         emit updated();
