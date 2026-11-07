@@ -207,11 +207,13 @@ class FcitxAddonTest : public QObject {
     }
     void originalIsDeliveredBeforeNativeWrite_data() {
         QTest::addColumn<QString>("boundary");
-        for (const auto name : {"unchanged-field", "disconnect", "deny", "pause", "selection", "expired", "cancel", "password", "older-ack"})
+        for (const auto name : {"unchanged-field", "shortcut-only", "disconnect", "deny", "pause", "selection", "expired", "cancel", "password", "older-ack"})
             QTest::newRow(name) << QString(name);
     }
     void originalIsDeliveredBeforeNativeWrite() {
         QFETCH(QString, boundary);
+        const bool allowedWrite = boundary == "unchanged-field" || boundary == "older-ack" ||
+                                  boundary == "shortcut-only";
         QTemporaryDir data;
         QVERIFY(data.isValid());
         qputenv("REWORD_DATA_DIR", data.path().toUtf8());
@@ -232,9 +234,19 @@ class FcitxAddonTest : public QObject {
         context.focusIn();
         const QString id = "fcitx:reword-synthetic-fixture";
         addon.store_->discover(id, "Synthetic fixture");
-        addon.store_->decide(id, "allow");
+        addon.store_->decide(id, boundary == "shortcut-only" ? "shortcut" : "allow");
         QVERIFY(addon.permitted(&context, id));
         QVERIFY(addon.unlocked());
+        if (boundary == "shortcut-only") {
+            context.surroundingText().setText("teh", 3, 3);
+            fcitx::KeyEvent space(&context, fcitx::Key("space"));
+            addon.handle(space);
+            QVERIFY(!space.filtered());
+            QVERIFY(context.commits.isEmpty());
+            addon.observeRetry(&context);
+            QVERIFY(addon.observedHash_.isEmpty());
+            context.surroundingText().setText("teh", 3, 0);
+        }
         QString recoveredOriginal, recoveredResult;
         int deliveries = 0;
         bool copyableAtWrite = false, olderAckRefused = false, heldLockAtReceipt = false;
@@ -286,7 +298,7 @@ class FcitxAddonTest : public QObject {
         addon.future_ = result.get_future(); // Join the actual accepted worker.
         result.set_value({"teh", "the", true, {}});
         addon.completed();
-        if (boundary == "unchanged-field" || boundary == "older-ack") {
+        if (allowedWrite) {
             QTRY_COMPARE(context.commits, QStringList{"the"});
             QVERIFY2(copyableAtWrite, "Native write occurred before original recovery delivery.");
         } else {
@@ -299,7 +311,7 @@ class FcitxAddonTest : public QObject {
         QCOMPARE(recoveredOriginal, QString("teh"));
         QCOMPARE(recoveredResult, QString("the"));
         QVERIFY(addon.store_->histories().isEmpty());
-        if (boundary == "unchanged-field" || boundary == "older-ack") {
+        if (allowedWrite) {
             // The frontend intentionally never confirmed the write above.
             // Recovery must survive, but persistent history requires confirmation.
             context.surroundingText().setText("the", 3, 3);

@@ -415,7 +415,7 @@ class UiTest : public QObject {
                 const auto text = item->property("text").toString();
                 const bool button = item->property("checkable").isValid();
                 if (item->isVisible() &&
-                    ((surface == "applications" && item->property("displayText").toString() == "Allowed") ||
+                    ((surface == "applications" && item->property("displayText").toString() == "Automatic") ||
                      (button && surface == "personal" && text == longWord + "  ×") ||
                      (button && surface == "replacements" && text == "Remove") ||
                      (button && surface == "insights" && text == "Practice"))) {
@@ -483,6 +483,27 @@ class UiTest : public QObject {
                                 .arg(bounds.x()).arg(bounds.y()).arg(bounds.width()).arg(bounds.height());
         }
         QVERIFY2(failures.isEmpty(), qPrintable(failures.join("; ")));
+        if (surface == "applications") {
+            const QString id = "/synthetic/reword-ui/" + longName;
+            QQuickItem *remove = nullptr;
+            auto items = window->contentItem()->childItems();
+            while (!items.isEmpty() && !remove) {
+                auto item = items.takeLast();
+                if (item->isVisible() && item->property("checkable").isValid() &&
+                    item->property("text").toString() == "Remove rule") {
+                    for (auto sibling : item->parentItem()->childItems())
+                        if (sibling->property("displayText").toString() == "Automatic")
+                            remove = item;
+                }
+                items.append(item->childItems());
+            }
+            QVERIFY(remove);
+            const auto center = remove->mapToScene(remove->boundingRect().center()).toPoint();
+            QVERIFY(QRect(QPoint(), window->size()).contains(center));
+            QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, center);
+            QTRY_COMPARE(fixture.applications().size(), 2);
+            QVERIFY(!fixture.selectionAllowed(id));
+        }
     }
     void permissionIndicatorsStayVisibleInBothThemes() {
         QTemporaryDir data;
@@ -953,13 +974,23 @@ class UiTest : public QObject {
         QVERIFY(dialog);
         adapter->application("synthetic-note-app");
         QTRY_COMPARE(controller.pendingName(), QString("synthetic-note-app"));
+        const auto oldRequest = controller.consentRequest();
+        QVERIFY(dialog->setProperty("request", oldRequest));
+        QVERIFY(dialog->setProperty("applicationName", controller.pendingName()));
         QVERIFY(QMetaObject::invokeMethod(dialog, "open"));
         QTRY_VERIFY(dialog->property("opened").toBool());
         // Native notification actions and Applications settings resolve the
         // request without invoking the QML dialog's own button handler.
-        controller.consent("deny");
+        controller.consent(oldRequest, "deny");
         QTRY_VERIFY(controller.pendingName().isEmpty());
         QTRY_VERIFY(!dialog->property("visible").toBool());
+        adapter->application("second-note-app");
+        QTRY_COMPARE(controller.pendingName(), QString("second-note-app"));
+        QVERIFY(controller.consentRequest() != oldRequest);
+        controller.consent(oldRequest, "allow");
+        QCOMPARE(controller.pendingName(), QString("second-note-app"));
+        reword::Store observer(data.path());
+        QVERIFY(!observer.selectionAllowed("second-note-app"));
     }
     void discoveringApplicationDoesNotActivateWindow() {
         QTemporaryDir data;

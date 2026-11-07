@@ -233,12 +233,33 @@ void Controller::set(QString key, QVariant value) {
     });
 }
 void Controller::decide(QString id, QString decision) {
-    if (id == pendingId_) {
-        consent(decision);
+    if (id.isEmpty() || (decision != "allow" && decision != "shortcut" &&
+                         decision != "deny" && decision != "later"))
         return;
-    }
     guard([&] {
         store_.decide(id, decision);
+        clearPendingApplication(id);
+        emit updated();
+    });
+}
+void Controller::clearPendingApplication(const QString &id) {
+    for (qsizetype i = queue_.size(); i > 0; --i)
+        if (queue_[i - 1].toMap()["id"].toString() == id)
+            queue_.removeAt(i - 1);
+    if (id != pendingId_)
+        return;
+    closeConsentNotification();
+    pendingId_.clear();
+    pendingName_.clear();
+    nextApplication();
+}
+void Controller::removeApplication(QString id) {
+    if (id.isEmpty())
+        return;
+    guard([&] {
+        store_.removeApplication(id);
+        clearPendingApplication(id);
+        QMetaObject::invokeMethod(service_, "forgetApplication", Qt::QueuedConnection, Q_ARG(QString, id));
         emit updated();
     });
 }
@@ -252,24 +273,19 @@ void Controller::nextApplication() {
                 continue;
             pendingId_ = row["id"].toString();
             pendingName_ = row["name"].toString();
+            if (++consentGeneration_ == 0)
+                ++consentGeneration_;
             notifyConsent();
             break;
         }
         emit updated();
     });
 }
-void Controller::consent(QString decision) {
-    if (decision != "allow" && decision != "later" && decision != "deny")
+void Controller::consent(uint request, QString decision) {
+    if (!request || request != consentRequest() ||
+        (decision != "allow" && decision != "later" && decision != "deny"))
         return;
-    guard([&] {
-        closeConsentNotification();
-        if (!pendingId_.isEmpty() && !decision.isEmpty())
-            store_.decide(pendingId_, decision);
-        pendingId_.clear();
-        pendingName_.clear();
-        nextApplication();
-        emit updated();
-    });
+    decide(pendingId_, decision);
 }
 void Controller::pause(int minutes) {
     guard([&] {

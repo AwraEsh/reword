@@ -128,8 +128,14 @@ Acceptance requires real typing in Automatic, no edits while typing in
 Shortcut only, successful explicit shortcut correction where supported, and no
 text processing in Disabled, on both Linux and Windows. Include mode changes
 during active correction, restart persistence, consent migration and the retry
-alternation in automated/native checks. This requirement is recorded; current
-allow/deny application controls do not yet implement all three modes.
+alternation in automated/native checks.
+
+**Remove rule** revokes and deletes the saved decision for that executable and
+clears any pending permission prompt for it. The app can appear again when
+detected, without authorization. Removing a rule has no effect on history,
+personal words or other apps.
+
+The sidebar credit must read **Built by AwraEsh for AwraEsh**.
 
 ## Upgrade and replacement requirement — 2026-10-29
 
@@ -153,3 +159,8 @@ must each have documented ownership and obsolete-file cleanup rules. Remove
 only files owned by the previous Reword installation, never arbitrary files in
 the install directory. Local replacement is authorized once the new build is
 verified; do not present an unverified build as stable.
+
+After updating GitHub, publish the verified release with a Windows x64 setup
+`.exe`, Linux x86-64 AppImage and Debian package, plus checksums and installation
+instructions. Record platform-specific test results and distribution materials
+for the exact binaries before publishing.

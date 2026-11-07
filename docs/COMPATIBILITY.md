@@ -5,6 +5,7 @@ This table describes tested fixtures, not blanket support for applications.
 | Environment | Evidence | Limits |
 |---|---|---|
 | Debian 13 / GNOME X11 | Local GTK entry and end-to-end service probes have passed. | Plain single-line editable fields. Shared-desktop focus can be interrupted by other apps. Browser/editor matrix pending. |
+| GNOME Shell consent | The user saw a native demo banner with Yes, Not now and No. The app's action handling, reminder and stale-response checks run on a private D-Bus test session. | The demo did not alter permissions. Windows banner appearance still needs a desktop check. |
 | Controlled Linux Xvfb / Openbox | CI at 03069a1 passed build, four automated suites, GUI launch and three native GTK/service probe cycles. | Synthetic single-line fields; no physical lock-screen proof. |
 | Linux without accessibility bus | Helper reports unavailable; internal workspace remains usable. | No native correction. |
 | GNOME 48.7 Wayland / Fcitx 5.1.12 / Qt QLineEdit | Real keyboard input in a private compositor passed first/second/third, rejected-write retry, live Undo, code-span protection, pause, selected correction/history/Undo and password exclusion. | Synthetic field, explicit Qt Fcitx5 integration. Physical session and browser coverage pending. |
@@ -29,6 +30,11 @@ Native calls validate before writing, but desktop editing APIs do not offer a
 universal cross-process atomic compare-and-swap. Every supported application
 needs its own compatibility checks. No field can be assumed safe solely because
 its application was allowed.
+
+Changing an app rule stops new work and invalidates results that are still
+being computed. If a Windows or X11 replacement has already been dispatched
+to the native adapter, its provider call can still finish after the rule
+changes. This window needs further work before production acceptance.
 
 ## Reproduce the isolated probes
 

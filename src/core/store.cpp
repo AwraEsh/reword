@@ -180,21 +180,58 @@ void Store::discover(const QString &id, const QString &name, bool restricted) {
     checked(q);
 }
 void Store::decide(const QString &id, const QString &decision, QDate today) {
-    if (decision != "allow" && decision != "deny" && decision != "later")
+    if (decision != "allow" && decision != "shortcut" && decision != "deny" && decision != "later")
         return;
+    const auto remind = decision == "later" ? today.addDays(1).toString(Qt::ISODate) : QString("");
     QSqlQuery q(db_);
-    q.prepare("UPDATE applications SET decision=?,remind=? WHERE id=?");
+    q.prepare("UPDATE applications SET decision=?,remind=? WHERE id=? "
+              "AND (decision<>? OR COALESCE(remind,'')<>?)");
     q.addBindValue(decision);
-    q.addBindValue(decision == "later" ? today.addDays(1).toString(Qt::ISODate) : QString(""));
+    q.addBindValue(remind);
     q.addBindValue(id);
-    checked(q);
+    q.addBindValue(decision);
+    q.addBindValue(remind);
+    changeApplicationPolicy(q);
 }
-bool Store::allowed(const QString &id) const {
+void Store::removeApplication(const QString &id) {
+    QSqlQuery q(db_);
+    q.prepare("DELETE FROM applications WHERE id=?");
+    q.addBindValue(id);
+    changeApplicationPolicy(q);
+}
+void Store::changeApplicationPolicy(QSqlQuery &q) {
+    if (!db_.transaction())
+        throw std::runtime_error("Cannot begin application policy transaction.");
+    try {
+        checked(q);
+        if (q.numRowsAffected() > 0)
+            setValue("configRevision", value("configRevision", 0).toLongLong() + 1);
+        if (!db_.commit())
+            throw std::runtime_error("Cannot commit application policy transaction.");
+    } catch (...) {
+        db_.rollback();
+        throw;
+    }
+}
+ApplicationMode Store::applicationMode(const QString &id) const {
     QSqlQuery q(db_);
     q.prepare("SELECT decision FROM applications WHERE id=?");
     q.addBindValue(id);
     checked(q);
-    return q.next() && q.value(0) == "allow";
+    if (!q.next())
+        return ApplicationMode::Disabled;
+    const auto decision = q.value(0).toString();
+    if (decision == "allow")
+        return ApplicationMode::Automatic;
+    if (decision == "shortcut")
+        return ApplicationMode::ShortcutOnly;
+    return ApplicationMode::Disabled;
+}
+bool Store::allowed(const QString &id) const {
+    return applicationMode(id) == ApplicationMode::Automatic;
+}
+bool Store::selectionAllowed(const QString &id) const {
+    return applicationMode(id) != ApplicationMode::Disabled;
 }
 bool Store::shouldAsk(const QString &id, QDate today) const {
     QSqlQuery q(db_);

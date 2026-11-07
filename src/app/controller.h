@@ -21,6 +21,7 @@ class Controller : public QObject {
     Q_PROPERTY(QString recoveryCorrected READ recoveryCorrected NOTIFY updated)
     Q_PROPERTY(bool recoveryAvailable READ recoveryAvailable NOTIFY updated)
     Q_PROPERTY(QString pendingName READ pendingName NOTIFY updated)
+    Q_PROPERTY(uint consentRequest READ consentRequest NOTIFY updated)
     Q_PROPERTY(bool busy READ busy NOTIFY updated)
     Q_PROPERTY(bool dark READ dark NOTIFY updated)
     Q_PROPERTY(bool paused READ paused NOTIFY updated)
@@ -31,6 +32,7 @@ class Controller : public QObject {
     Service *service_ = nullptr;
     QSystemTrayIcon *tray_ = nullptr;
     QString platform_ = "Checking desktop integration…", notice_, pendingId_, pendingName_;
+    uint consentGeneration_ = 0;
     QVariantList queue_;
     QString recoveryOriginal_, recoveryCorrected_;
     bool busy_ = false, serviceBusy_ = false, fcitxBusy_ = false, shortcuts_ = false;
@@ -59,6 +61,7 @@ class Controller : public QObject {
     QTimer refresh_;
     void refreshTray();
     void nextApplication();
+    void clearPendingApplication(const QString &id);
     void initializeNotifications();
     void notifyConsent();
     void closeConsentNotification();
@@ -117,6 +120,9 @@ class Controller : public QObject {
     QString pendingName() const {
         return pendingName_;
     }
+    uint consentRequest() const {
+        return pendingId_.isEmpty() ? 0 : consentGeneration_;
+    }
     bool busy() const {
         return busy_ || serviceBusy_ || fcitxBusy_;
     }
@@ -141,7 +147,8 @@ class Controller : public QObject {
     }
     Q_INVOKABLE void set(QString key, QVariant value);
     Q_INVOKABLE void decide(QString id, QString decision);
-    Q_INVOKABLE void consent(QString decision);
+    Q_INVOKABLE void removeApplication(QString id);
+    Q_INVOKABLE void consent(uint request, QString decision);
     Q_INVOKABLE void pause(int minutes);
     Q_INVOKABLE void fix(QString text);
     Q_INVOKABLE void cancel();

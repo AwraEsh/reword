@@ -44,8 +44,11 @@ class Service : public QObject {
     void resetObservation(int reason = 3);
     void runText(QString input, bool native, Field field = {});
     void tick();
-    Field permitted(const Field *expected = nullptr);
-    bool policyCurrent(const Field &field, qint64 revision, quint64 cancellation);
+    enum class ReadPurpose { Explicit, Live };
+    Field permitted(const Field *expected = nullptr, ReadPurpose purpose = ReadPurpose::Explicit,
+                    bool *metadataOnly = nullptr);
+    bool policyCurrent(const Field &field, qint64 revision, quint64 cancellation,
+                       ReadPurpose purpose = ReadPurpose::Explicit);
     void fixSelection();
     void undo();
 
@@ -60,6 +63,10 @@ class Service : public QObject {
         cancel_.store(false);
     }
   public slots:
+    void forgetApplication(const QString &id) {
+        if (lastAsk_ == id)
+            lastAsk_.clear();
+    }
     void start();
     void stop();
     void processText(QString input);

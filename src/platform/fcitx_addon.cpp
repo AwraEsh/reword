@@ -68,6 +68,18 @@ class RewordAddon final : public fcitx::AddonInstance {
         retryStart_ = -1;
         prefix_.clear();
     }
+    void clearLiveObservation() {
+        resetRetry();
+        context_.clear();
+        observedContext_.clear();
+        observedHash_.clear();
+        observedCursor_ = observedAnchor_ = 0;
+        deletionKey_ = false;
+        deletionDeadline_ = 0;
+        deletionContext_ = {};
+        if (!pending_.passage)
+            pending_ = {};
+    }
     void resetObservation() {
         cancel_.store(true);
         resetRetry();
@@ -101,6 +113,11 @@ class RewordAddon final : public fcitx::AddonInstance {
         const auto app = ic ? QString::fromStdString(ic->program()) : QString{};
         if (app.isEmpty() || !permitted(ic, "fcitx:" + app) || !unlocked()) {
             resetObservation();
+            return;
+        }
+        if (!store_->allowed("fcitx:" + app)) {
+            clearLiveObservation();
+            observe(ic); // A selected-text write may still need confirmation.
             return;
         }
         const auto &st = ic->surroundingText();
@@ -155,7 +172,7 @@ class RewordAddon final : public fcitx::AddonInstance {
             flags.test(fcitx::CapabilityFlag::Sensitive) ||
             !flags.test(fcitx::CapabilityFlag::SurroundingText))
             return false;
-        return recovery_ && recovery_->active() && !store_->paused() && store_->allowed(id) &&
+        return recovery_ && recovery_->active() && !store_->paused() && store_->selectionAllowed(id) &&
                (!reword::browserApp(id.mid(6)) || store_->options().browsers);
     }
     bool hotkey(const fcitx::Key &key, QString setting, QString fallback) {
@@ -176,6 +193,12 @@ class RewordAddon final : public fcitx::AddonInstance {
             pending_ = {};
             return;
         }
+        if (!pending_.passage && !store_->allowed(pending_.app)) {
+            clearLiveObservation();
+            return;
+        }
+        if (pending_.confirmed)
+            return;
         if (st.isValid() && QString::fromStdString(st.text()) == pending_.after &&
             st.cursor() == pending_.cursor && st.anchor() == pending_.cursor) {
             if (!pending_.confirmed) {
@@ -311,6 +334,11 @@ class RewordAddon final : public fcitx::AddonInstance {
             }
             bool selection = hotkey(e.key(), "fixShortcut", "Ctrl+Alt+R"),
                  undo = hotkey(e.key(), "undoShortcut", "Ctrl+Alt+Z");
+            if (!store_->allowed(id)) {
+                clearLiveObservation();
+                if (!selection && !undo)
+                    return;
+            }
             auto code = fcitx::Key::keySymToUnicode(e.key().sym());
             const auto &st = ic->surroundingText();
             if (!st.isValid() || st.text().size() > 400000) {
@@ -468,7 +496,8 @@ class RewordAddon final : public fcitx::AddonInstance {
                 points.size() - cursorBefore);
             // Dictionary work and lock inspection may outlive a policy change.
             // Validate again before issuing either part of the native edit.
-            if (!unlocked() || !permitted(ic, id) || QString::fromStdString(ic->program()) != app ||
+            if (!unlocked() || !permitted(ic, id) || !store_->allowed(id) ||
+                QString::fromStdString(ic->program()) != app ||
                 revision != store_->value("configRevision", 0).toLongLong()) {
                 resetObservation();
                 return;

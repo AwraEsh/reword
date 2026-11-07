@@ -5,6 +5,34 @@ using namespace reword;
 class CoreTest : public QObject {
     Q_OBJECT
   private slots:
+    void shortcutDecisionPersistsWithoutEnablingLegacyLiveAccess() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        writer.discover("/synthetic-app", "Synthetic app");
+        const auto before = reader.value("configRevision", 0).toLongLong();
+        writer.decide("/synthetic-app", "shortcut");
+        QCOMPARE(reader.applications().first().toMap()["decision"].toString(), QString("shortcut"));
+        QCOMPARE(reader.applicationMode("/synthetic-app"), ApplicationMode::ShortcutOnly);
+        QVERIFY(reader.selectionAllowed("/synthetic-app"));
+        QVERIFY(!reader.allowed("/synthetic-app"));
+        QVERIFY(!reader.shouldAsk("/synthetic-app"));
+        QVERIFY(reader.value("configRevision", 0).toLongLong() > before);
+        Store reopened(data.path());
+        QCOMPARE(reopened.applicationMode("/synthetic-app"), ApplicationMode::ShortcutOnly);
+        writer.decide("/synthetic-app", "deny");
+        QCOMPARE(reader.applicationMode("/synthetic-app"), ApplicationMode::Disabled);
+        QVERIFY(!reader.selectionAllowed("/synthetic-app"));
+        writer.decide("/synthetic-app", "allow");
+        QCOMPARE(reader.applicationMode("/synthetic-app"), ApplicationMode::Automatic);
+        const auto beforeRemove = reader.value("configRevision", 0).toLongLong();
+        writer.removeApplication("/synthetic-app");
+        QVERIFY(reader.applications().isEmpty());
+        QVERIFY(!reader.selectionAllowed("/synthetic-app"));
+        QCOMPARE(reader.value("configRevision", 0).toLongLong(), beforeRemove + 1);
+        reader.discover("/synthetic-app", "Synthetic app");
+        QVERIFY(reader.shouldAsk("/synthetic-app"));
+        QVERIFY(!reader.allowed("/synthetic-app"));
+    }
     void optionsObserveOtherConnectionChangesWithoutCaching() {
         QTemporaryDir data;
         Store reader(data.path()), writer(data.path());

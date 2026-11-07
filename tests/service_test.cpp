@@ -176,6 +176,25 @@ struct BlockedWorkerPool {
 class ServiceTest : public QObject {
     Q_OBJECT
   private slots:
+    void shortcutOnlyLeavesTypingUnreadButAllowsSelectionAndUndo() {
+        Harness h;
+        h.store.decide(h.adapter->field.app, "shortcut");
+        h.adapter->type("teh ");
+        QTRY_VERIFY(h.adapter->inspections > 1);
+        QCOMPARE(h.adapter->reads, 0);
+        QCOMPARE(h.adapter->field.text, QString("teh "));
+        h.adapter->field.selectionStart = 0;
+        h.adapter->field.selectionEnd = 3;
+        h.service.action("fix");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        const auto reads = h.adapter->reads;
+        const auto inspections = h.adapter->inspections;
+        QTRY_VERIFY(h.adapter->inspections > inspections + 2);
+        QCOMPARE(h.adapter->reads, reads);
+        h.service.action("undo");
+        QCOMPARE(h.adapter->field.text, QString("teh "));
+        QCOMPARE(h.adapter->writes, 2);
+    }
     void postWriteReadStaysOnThePermittedTarget_data() {
         QTest::addColumn<QString>("operation");
         QTest::addColumn<QString>("transition");

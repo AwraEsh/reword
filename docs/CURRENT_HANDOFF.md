@@ -1,4 +1,34 @@
-# Current handoff — 2026-11-06
+# Current handoff — 2026-11-07
+
+The local Preview installer receipt records source `091714f`. That build
+detects apps and delivers native consent. The user confirmed that a GNOME demo
+notification appeared with action buttons. The demo buttons had no effect on
+saved permissions. Windows notification appearance and real Telegram/Chrome
+correction still need desktop testing.
+
+The integration branch adds per-app modes, **Remove rule**, and the sidebar
+credit **Built by AwraEsh for AwraEsh**. The previous AppImage does not contain
+these changes. Removing a rule invalidates pending consent and revokes access.
+An app can be rediscovered later without permission. The Windows setup EXE,
+Linux AppImage and Debian package are the requested release assets. Publish
+after the runtime acceptance and binary/source pairing checks for those assets.
+
+The serial build and all 17 CTest targets passed in 98.55 s for this source
+change. The UI test clicks Remove rule and checks that only the selected app
+loses its rule. Core, service and Fcitx tests cover persisted shortcut mode,
+no live read in that mode, explicit correction and Undo. Consent actions
+from an earlier prompt are rejected after the next request is queued.
+Receipts: `.deps/application-modes-verified-build.log` and
+`.deps/application-modes-verified-tests.log`.
+
+The previous Debian runtime manifest needs four source versions beyond the
+archived set: brotli `1.1.0-2+deb13u1`, curl `8.14.1-2+deb13u7`, expat
+`2.9.0-1~deb13u1` and libxres `2:1.2.1-1`. Compare the final manifest again
+before release. Windows notice and source pairing is also open. Changing a
+rule invalidates pending computations, but a native setter that has already
+been dispatched can finish during revocation. See COMPATIBILITY.md.
+
+## Foreground discovery and notification work — 2026-11-06
 
 **ACTIVE — explicitly resumed on 2026-11-06.** User reports no detection in
 Telegram/Chrome on the real desktop. The accessibility bus/socket is healthy
@@ -50,9 +80,6 @@ runs 42235787487 and 42235797225 succeed for it. Native Windows notification
 appearance is not proved by CI. Packaging and clean-environment AppImage smoke
 pass; notification artifact SHA256
 aef4f094221288d29a0ba827eb1432e8cfd782c1a71df96505e9d2ee7920338c.
-Notification build not deployed yet; installed/running source remains b30b88c.
-User was asked whether the running Reword editor contains unsaved text before
-closing it for replacement; do not close it without resolving that question.
 Final UI hardening: resolving consent via a native notification/settings must
 also close an already-open in-app dialog. New regression initially exposed
 the stale visible dialog, then passes after the QML updated handler closes it
@@ -64,12 +91,10 @@ AppImage smoke pass, SHA256
 14e7ddea088eddc2a89de2798420c00e9f6489bb1d1daf56c5a3d53f118be592.
 Frozen deployment artifact .deps/notification-091714f-ready.AppImage; receipt
 .deps/notification-final-package-receipt.json. It supersedes the aef4f0 build.
-Running user version remains b30b88c. Do not stop it before resolving the
-pending unsaved-editor-text question; installer replacement is authorized but
-losing an unknown workspace draft is not. No other test/build jobs remain.
-Per-app Automatic/Shortcut only/Disabled
-modes and mandatory GNOME buttons are recorded in REQUIREMENTS.md; modes are
-not yet implemented. Preserve all global safety/consent guards when adding them.
+Source `091714f` was installed at the existing user AppImage path on 2026-11-07
+after the previous process had closed. The local rollback is
+`.deps/preview-before-notifications-20261107.AppImage`.
+Per-app modes and mandatory GNOME buttons are specified in REQUIREMENTS.md.
 Implementation plan: docs/superpowers/plans/2026-11-06-application-modes.md.
 Do not equate foreground detection with safe editable-field support.
 Legacy retry/Undo/CPU and upgrade acceptance gates remain open.

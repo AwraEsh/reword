@@ -90,7 +90,7 @@ void Controller::notificationAction(uint id, const QString &action) {
     }
     for (const auto &decision : {QString("allow"), QString("later"), QString("deny")})
         if (action == decision + ':' + QString::number(notificationGeneration_)) {
-            consent(decision);
+            consent(consentRequest(), decision);
             return;
         }
 }

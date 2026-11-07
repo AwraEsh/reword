@@ -94,7 +94,7 @@ void Service::stop() {
     if (wasRunning)
         emit operationActive(false);
 }
-Field Service::permitted(const Field *expected) {
+Field Service::permitted(const Field *expected, ReadPurpose purpose, bool *metadataOnly) {
     auto f = adapter_->inspect(false);
     if (f.app.isEmpty())
         return {};
@@ -106,17 +106,28 @@ Field Service::permitted(const Field *expected) {
         askDate_ = QDate::currentDate();
         emit application(f.app, QFileInfo(f.app).fileName());
     }
-    Access access{store_->allowed(f.app), browserApp(f.app), store_->paused()};
+    const auto mode = store_->applicationMode(f.app);
+    Access access{mode != ApplicationMode::Disabled, browserApp(f.app), store_->paused()};
     if (!safe(f, access, store_->options()))
         return {};
+    if (purpose == ReadPurpose::Live && (mode == ApplicationMode::ShortcutOnly || wayland_)) {
+        if (!metadataOnly)
+            return {};
+        *metadataOnly = true;
+        return f;
+    }
     auto read = adapter_->readExpected(f);
-    access = {store_->allowed(f.app), browserApp(f.app), store_->paused()};
+    access = {purpose == ReadPurpose::Live ? store_->allowed(f.app) : store_->selectionAllowed(f.app),
+              browserApp(f.app), store_->paused()};
     if (read.id != f.id || read.app != f.app || !safe(read, access, store_->options()))
         return {};
     return read;
 }
-bool Service::policyCurrent(const Field &field, qint64 revision, quint64 cancellation) {
-    const Access access{store_->allowed(field.app), browserApp(field.app), store_->paused()};
+bool Service::policyCurrent(const Field &field, qint64 revision, quint64 cancellation,
+                            ReadPurpose purpose) {
+    const Access access{purpose == ReadPurpose::Live ? store_->allowed(field.app)
+                                                     : store_->selectionAllowed(field.app),
+                        browserApp(field.app), store_->paused()};
     return safe(field, access, store_->options()) &&
            revision == store_->value("configRevision", 0).toLongLong() &&
            cancellation == cancellationRevision_.load();
@@ -181,13 +192,14 @@ void Service::tick() {
             // state. Preserve Undo across that interval, but never read text.
             // All other policy/identity boundaries still erase observation.
             field.focused = true;
-            const Access access{store_->allowed(field.app), browserApp(field.app), store_->paused()};
+            const Access access{store_->selectionAllowed(field.app), browserApp(field.app), store_->paused()};
             if (jobRunning_ && nativeJob_ &&
                 (!safe(field, access, store_->options()) || field.app != nativeJobApp_ ||
                  field.id != nativeJobField_))
                 cancelNativeJob();
-            if (!safe(field, access, store_->options()) || field.id != previous_.id ||
-                field.app != previous_.app) {
+            const auto &anchor = previous_.id.isEmpty() ? undoAfter_ : previous_;
+            if (!safe(field, access, store_->options()) || field.id != anchor.id ||
+                field.app != anchor.app) {
                 resetObservation(4);
             }
             return;
@@ -201,13 +213,24 @@ void Service::tick() {
         Field jobTarget;
         jobTarget.app = nativeJobApp_;
         jobTarget.id = nativeJobField_;
-        auto f = permitted(jobRunning_ && nativeJob_ ? &jobTarget : nullptr);
+        bool metadataOnly = false;
+        auto f = permitted(jobRunning_ && nativeJob_ ? &jobTarget : nullptr,
+                           ReadPurpose::Live, &metadataOnly);
         if (f.id.isEmpty()) {
             cancelNativeJob();
             resetObservation(5);
             return;
         }
-        if (f.id != previous_.id) {
+        if (metadataOnly) {
+            if (!undoPassage_ || f.id != undoAfter_.id || f.app != undoAfter_.app)
+                resetObservation(6);
+            else {
+                previous_ = {};
+                resetRetry();
+            }
+            return;
+        }
+        if (f.id != previous_.id || f.app != previous_.app) {
             resetObservation(6);
             previous_ = f;
             return;
@@ -216,7 +239,7 @@ void Service::tick() {
             // Native APIs read text and caret separately. Confirm a caret-only
             // change before erasing retry state: deletion may have completed
             // between those reads. Reapply field and privacy guards as usual.
-            f = permitted(&f);
+            f = permitted(&f, ReadPurpose::Live);
             if (f.id.isEmpty()) {
                 cancelNativeJob();
                 resetObservation(5);
@@ -277,7 +300,7 @@ void Service::tick() {
             QString updated = f.text;
             updated.replace(start, token.size(), correct);
             int caret = f.caret + correct.size() - token.size();
-            if (!policyCurrent(f, operationRevision, cancellation)) {
+            if (!policyCurrent(f, operationRevision, cancellation, ReadPurpose::Live)) {
                 traceRetry(16);
                 retry_ = savedRetry;
                 break;
@@ -287,11 +310,11 @@ void Service::tick() {
                 retry_ = savedRetry;
                 break;
             }
-            auto after = permitted(&f);
+            auto after = permitted(&f, ReadPurpose::Live);
             if (after.id == f.id && after.app == f.app && after.selectionStart < 0 &&
                 after.selectionEnd < 0 && after.caret >= start && after.caret < caret &&
                 after.text == updated.left(after.caret) + updated.mid(caret) &&
-                policyCurrent(after, operationRevision, cancellation)) {
+                policyCurrent(after, operationRevision, cancellation, ReadPurpose::Live)) {
                 // The verified write was followed by deletion at this word.
                 // Keep the retry decision, but never retain stale Undo or
                 // overwrite the user's newer text to finish confirmation.
@@ -499,7 +522,8 @@ void Service::fixSelection() {
 void Service::undo() {
     const auto cancellation = cancellationRevision_.load();
     const auto revision = store_->value("configRevision", 0).toLongLong();
-    auto f = permitted(&undoAfter_);
+    const auto purpose = undoPassage_ ? ReadPurpose::Explicit : ReadPurpose::Live;
+    auto f = undoBefore_.isEmpty() ? Field{} : permitted(&undoAfter_, purpose);
     if (undoBefore_.isEmpty() || !sameTarget(undoAfter_, f)) {
         traceRetry(undoBefore_.isEmpty() ? 15 : observationFailureReason(undoAfter_,
             f.id != undoAfter_.id || f.app != undoAfter_.app ? 10
@@ -509,12 +533,12 @@ void Service::undo() {
                                   : "Undo is no longer safe. Nothing was replaced.");
         return;
     }
-    if (!policyCurrent(f, revision, cancellation)) {
+    if (!policyCurrent(f, revision, cancellation, purpose)) {
         emit message("Cancelled or settings changed. Nothing was replaced.");
         return;
     }
     if (adapter_->replace(f, undoBefore_, undoCaret_)) {
-        auto after = permitted(&f);
+        auto after = permitted(&f, purpose);
         if (after.id != f.id || after.app != f.app || after.text != undoBefore_ ||
             after.caret != undoCaret_) {
             resetObservation();

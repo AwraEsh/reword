@@ -56,6 +56,8 @@ ApplicationWindow {
             if (dialog.visible)
                 return;
         }
+        consentDialog.request = Backend.consentRequest;
+        consentDialog.applicationName = Backend.pendingName;
         consentDialog.open();
     }
     onActiveChanged: if (active) Qt.callLater(root.presentPendingConsent)
@@ -114,10 +116,11 @@ ApplicationWindow {
             }
         }
         function onUpdated() {
-            if (Backend.pendingName.length === 0 && consentDialog.visible)
-                consentDialog.close();
             root.refreshHistory();
-            root.presentPendingConsent();
+            if (consentDialog.visible && consentDialog.request !== Backend.consentRequest)
+                consentDialog.close();
+            else
+                root.presentPendingConsent();
         }
     }
 
@@ -193,15 +196,10 @@ ApplicationWindow {
                 }
                 Label {
                     textFormat: Text.PlainText
-                    text: "ON THIS DEVICE"
-                    color: root.muted
-                    font.pixelSize: 10
-                    font.letterSpacing: 1.4
+                    text: "Built by AwraEsh for AwraEsh"
+                    Layout.fillWidth: true
                     Layout.topMargin: 10
-                }
-                Label {
-                    textFormat: Text.PlainText
-                    text: "Offline processing"
+                    wrapMode: Text.WordWrap
                     font.pixelSize: 13
                 }
                 Label {
@@ -844,11 +842,16 @@ ApplicationWindow {
                                 }
                                 ComboBox {
                                     Layout.minimumWidth: 170
-                                    model: ["Allowed", "Disabled", "Ask tomorrow"]
+                                    model: ["Automatic", "Shortcut only", "Disabled"]
                                     displayText: currentIndex < 0 ? "Not decided" : model[currentIndex]
-                                    currentIndex: modelData.decision === "allow" ? 0 : modelData.decision === "deny" ? 1 : modelData.decision === "later" ? 2 : -1
-                                    Accessible.name: "Permission for " + modelData.name
-                                    onActivated: Backend.decide(modelData.id, currentIndex === 0 ? "allow" : currentIndex === 2 ? "later" : "deny")
+                                    currentIndex: modelData.decision === "allow" ? 0 : modelData.decision === "shortcut" ? 1 : modelData.decision === "deny" ? 2 : -1
+                                    Accessible.name: "Correction mode for " + modelData.name
+                                    onActivated: Backend.decide(modelData.id, ["allow", "shortcut", "deny"][currentIndex])
+                                }
+                                Button {
+                                    text: "Remove rule"
+                                    Accessible.name: "Remove rule for " + modelData.name
+                                    onClicked: Backend.removeApplication(modelData.id)
                                 }
                             }
                         }
@@ -1171,10 +1174,12 @@ ApplicationWindow {
 
     AppDialog {
         id: consentDialog
+        property double request: 0
+        property string applicationName: ""
         anchors.centerIn: parent
         width: 480
         modal: false
-        title: "Allow Reword in " + Backend.pendingName + "?"
+        title: "Allow Reword in " + applicationName + "?"
         header: Label {
             color: root.ink
             textFormat: Text.PlainText
@@ -1190,24 +1195,18 @@ ApplicationWindow {
             Label {
                 color: root.ink
                 textFormat: Text.PlainText
-                text: "Reword will only correct recognized, non-sensitive text fields. You can change this decision in Applications."
+                text: "Yes enables automatic correction in supported, non-sensitive fields. Choose Shortcut only or Disabled in Applications."
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }
             RowLayout {
                 Button {
                     text: "No"
-                    onClicked: {
-                        consentDialog.close();
-                        Backend.consent("deny");
-                    }
+                    onClicked: Backend.consent(consentDialog.request, "deny")
                 }
                 Button {
                     text: "Not now"
-                    onClicked: {
-                        consentDialog.close();
-                        Backend.consent("later");
-                    }
+                    onClicked: Backend.consent(consentDialog.request, "later")
                 }
                 Item {
                     Layout.fillWidth: true
@@ -1215,10 +1214,7 @@ ApplicationWindow {
                 Button {
                     text: "Yes"
                     highlighted: true
-                    onClicked: {
-                        consentDialog.close();
-                        Backend.consent("allow");
-                    }
+                    onClicked: Backend.consent(consentDialog.request, "allow")
                 }
             }
             Label {

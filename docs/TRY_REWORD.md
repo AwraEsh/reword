@@ -1,25 +1,29 @@
 # Try Reword Preview
 
-Reword Preview is available for testing. Keep a copy of important text while
-trying direct correction. This is not the final stable release.
+Reword Preview lets you try the writing workspace and correction in supported
+apps. Keep a copy of important text when testing direct correction.
 
 ## Windows
 
-[Download the Windows installer archive](https://github.com/AwraEsh/reword/actions/runs/39757127469/artifacts/12415994422),
-extract it, and run the included setup executable. GitHub may require sign-in;
-CI downloads expire. This build passed automated install, launch, uninstall and
-native field/shortcut checks on the Windows runner. Ordinary Windows 10/11
-desktop use still needs broader testing.
+Open the [integration build runs](https://github.com/AwraEsh/reword/actions/workflows/build.yml?query=branch%3Acodex%2Fusable-build-integration).
+From a successful run, download **Reword-Windows**, extract the archive and
+run `Reword-Setup-0.1.0.exe`. GitHub may require sign-in and CI downloads expire.
+The automated Windows checks cover installation, launch, uninstall and standard
+editing controls. Ordinary Windows 10/11 desktop use still needs broader testing.
 
-## This Debian computer
+## Debian-based Linux
 
-Open **Reword Preview** from the application menu. It is installed only for your
-account, at `~/.local/opt/reword/reword-0.1.0-preview.AppImage`. Startup on login
-is not enabled. The launcher uses extract-and-run, so FUSE is not required.
+Development packages are built into `dist`. The bundled GUI requires x86-64
+and glibc 2.39 or newer. To launch the AppImage without FUSE:
 
-The development packages are also in the build checkout's `dist` directory:
-`Reword-0.1.0-x86_64.AppImage` and `reword_0.1.0_amd64.deb`. The bundled GUI
-needs glibc 2.39 or newer. System-wide Debian installation has not been tested.
+```sh
+chmod +x Reword-0.1.0-x86_64.AppImage
+./Reword-0.1.0-x86_64.AppImage --appimage-extract-and-run
+```
+
+If you already have the per-user preview launcher, open **Reword Preview**
+from the application menu. The Debian package has passed extraction and
+launch checks. A system-wide upgrade has yet to be verified.
 Wayland typing integration additionally requires the Fcitx5 addon and host setup;
 the AppImage alone does not install an input-method addon.
 
@@ -37,7 +41,7 @@ is unavailable. The internal writing workspace remains available.
 An application can be detected while its fields remain unsupported. Reword
 corrects only fields it can safely read and replace.
 
-The next consent update uses system notifications without bringing Reword to
+Consent uses system notifications without bringing Reword to
 the front. GNOME notifications offer **Yes**, **Not now** and **No**. Requests
 you ignore stay pending in Reword and are reminded after 15 minutes. Returning
 to Reword shows the pending choice. Notifications request seven seconds of
@@ -47,13 +51,17 @@ Default shortcuts are Ctrl+Alt+R for selected text, Ctrl+Alt+Z for guarded Undo,
 and Ctrl+Alt+Shift+P for Pause. You can change them in Settings. Copy the latest
 original from session recovery if Undo is unavailable.
 
+## Choose what Reword does in each app
+
+In builds with correction modes, open **Applications** and choose **Automatic**
+to allow live corrections,
+**Shortcut only** to correct selected text on request, or **Disabled** to turn
+off both. **Remove rule** forgets the saved permission. If Reword detects the
+app again, it needs permission before correcting text there.
+
 ## What has been checked
 
-The integrated build passes all 13 local test targets and Linux/Windows CI.
-AppDir, extracted Debian package and AppImage pass clean-environment launch
-checks on this Debian host. The local active workload exercised eight live
-first/second/third correction and Undo sequences plus 117 selected corrections,
-but stopped on its CPU budget after 73.685 seconds: app CPU was 14.18% against
-a 10% test target. Word latency p95 was 33.2 ms across 16 samples. This is partial
-evidence, not a completed stability run. Tray behavior, broad Wayland use and
-long-run acceptance remain open.
+See the [compatibility notes](COMPATIBILITY.md) for the specific fields and
+platforms checked so far. GNOME displayed all three action buttons in a desktop
+notification preview. Real correction in Telegram and Chrome, broader
+Wayland use, and extended stability testing remain open.
