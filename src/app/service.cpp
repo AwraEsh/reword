@@ -132,6 +132,30 @@ bool Service::policyCurrent(const Field &field, qint64 revision, quint64 cancell
            revision == store_->value("configRevision", 0).toLongLong() &&
            cancellation == cancellationRevision_.load();
 }
+bool Service::pollNativeAction() {
+    const auto name = adapter_->takeAction();
+    if (name.isEmpty())
+        return false;
+    if (name != "pending") {
+        action(name);
+        return true;
+    }
+    auto field = adapter_->inspect(false);
+    // A passive shortcut grab can temporarily unset only the focus state.
+    // Preserve Undo across that interval, but never read text. All other
+    // policy and identity boundaries still erase observation.
+    field.focused = true;
+    const Access access{store_->selectionAllowed(field.app), browserApp(field.app),
+                        store_->paused()};
+    const bool permittedField = safe(field, access, store_->options());
+    if (jobRunning_ && nativeJob_ &&
+        (!permittedField || field.app != nativeJobApp_ || field.id != nativeJobField_))
+        cancelNativeJob();
+    const auto &anchor = previous_.id.isEmpty() ? undoAfter_ : previous_;
+    if (!permittedField || field.id != anchor.id || field.app != anchor.app)
+        resetObservation(4);
+    return true;
+}
 void Service::tick() {
     if (!adapter_ || !store_)
         return;
@@ -185,29 +209,8 @@ void Service::tick() {
                 emit state(description, shortcutsHealthy_);
             }
         }
-        auto a = adapter_->takeAction();
-        if (a == "pending") {
-            auto field = adapter_->inspect(false);
-            // A passive shortcut grab can temporarily unset only the focus
-            // state. Preserve Undo across that interval, but never read text.
-            // All other policy/identity boundaries still erase observation.
-            field.focused = true;
-            const Access access{store_->selectionAllowed(field.app), browserApp(field.app), store_->paused()};
-            if (jobRunning_ && nativeJob_ &&
-                (!safe(field, access, store_->options()) || field.app != nativeJobApp_ ||
-                 field.id != nativeJobField_))
-                cancelNativeJob();
-            const auto &anchor = previous_.id.isEmpty() ? undoAfter_ : previous_;
-            if (!safe(field, access, store_->options()) || field.id != anchor.id ||
-                field.app != anchor.app) {
-                resetObservation(4);
-            }
+        if (pollNativeAction())
             return;
-        }
-        if (!a.isEmpty()) {
-            action(a);
-            return;
-        }
         if (!adapter_->changed())
             return;
         Field jobTarget;
@@ -217,6 +220,10 @@ void Service::tick() {
         auto f = permitted(jobRunning_ && nativeJob_ ? &jobTarget : nullptr,
                            ReadPurpose::Live, &metadataOnly);
         if (f.id.isEmpty()) {
+            // The grab may have begun after the first shortcut poll, while
+            // the provider was answering. Check before discarding Undo.
+            if (!undoBefore_.isEmpty() && pollNativeAction())
+                return;
             cancelNativeJob();
             resetObservation(5);
             return;
@@ -241,6 +248,8 @@ void Service::tick() {
             // between those reads. Reapply field and privacy guards as usual.
             f = permitted(&f, ReadPurpose::Live);
             if (f.id.isEmpty()) {
+                if (!undoBefore_.isEmpty() && pollNativeAction())
+                    return;
                 cancelNativeJob();
                 resetObservation(5);
                 return;

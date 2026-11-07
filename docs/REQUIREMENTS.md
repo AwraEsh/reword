@@ -58,9 +58,8 @@ Approved by the user on 2026-10-15. This file is the durable requirements source
 ## Distribution and GitHub
 - Simple single .exe installer on Windows, bundling application dependencies; no manual Qt/runtime setup.
 - Linux AppImage preferred for simple launch; .deb also supplied. Explain unavoidable host integration for Wayland/tray.
-- Disciplined Git and meaningful commits with tests/docs in the authenticated user's GitHub account. The initial private-repository request was superseded by the explicit public-repository request.
-- Repository prepared for later public visibility: no credentials, private content, runtime database, host paths or downloaded dependencies.
-- User explicitly requested PUBLIC visibility after initial private creation. Public source must remain free of private/runtime data.
+- Keep a clear Git history with focused commits, tests and documentation in the user's GitHub repository.
+- The user changed the repository from private to public. Keep credentials, private content, runtime databases, machine-specific paths and downloaded dependencies out of version control.
 
 ## Evidence and handoff
 - Test policies, retry cycle, language independence, ambiguous words, stale edits/Undo, history limits, pause and security boundaries.

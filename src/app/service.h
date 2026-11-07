@@ -43,6 +43,7 @@ class Service : public QObject {
     void resetRetry(int reason = 3);
     void resetObservation(int reason = 3);
     void runText(QString input, bool native, Field field = {});
+    bool pollNativeAction();
     void tick();
     enum class ReadPurpose { Explicit, Live };
     Field permitted(const Field *expected = nullptr, ReadPurpose purpose = ReadPurpose::Explicit,

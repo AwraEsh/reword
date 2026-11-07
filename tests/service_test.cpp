@@ -502,6 +502,22 @@ class ServiceTest : public QObject {
         h.service.action("undo");
         QCOMPARE(h.adapter->field.text, QString("teh "));
     }
+    void shortcutArrivingDuringObservationPreservesUndo() {
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        h.adapter->onMetadata = [&] {
+            // The key grab arrives after the first shortcut poll, between
+            // reading the field identity and asking the provider for text.
+            h.adapter->field.focused = false;
+            h.adapter->pendingAction = "pending";
+        };
+        QTRY_COMPARE(h.adapter->pendingAction, QString("pending"));
+        h.adapter->field.focused = true;
+        h.adapter->pendingAction = "undo";
+        QTRY_COMPARE(h.adapter->field.text, QString("teh "));
+    }
     void confirmedPassageIsRecoverableWithoutHistory() {
         Harness h;
         h.store.setValue("history", false);

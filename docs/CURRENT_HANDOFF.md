@@ -28,6 +28,14 @@ and selected correction, Undo, and password exclusion. Diagnostic receipts:
 `.deps/native-write-selected-trace-2/report.json` and
 `.deps/x11-provider-final-native.log`.
 
+The next workload completed the 100-record history cap exercise and reached
+113 selected edits before a live Undo timed out. A focused service test
+reproduced losing Undo when the native shortcut began during an accessibility
+read. The service now checks for the pending shortcut before clearing Undo.
+The same test passes, along with the password, lock, pause and per-app
+boundaries for pending shortcuts. Receipts: `.deps/x11-provider-active-120/report.json`,
+`.deps/x11-late-grab-red.log`, and `.deps/x11-late-grab-green.log`.
+
 The local Preview now runs source `eda761b`. The per-user AppImage was replaced
 at the existing launcher path, with settings and history preserved. The old
 process was allowed to exit normally. The next running binary matched the new
