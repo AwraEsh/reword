@@ -1,5 +1,37 @@
 # Current handoff — 2026-11-07
 
+## Browser live correction transport
+
+The installed Helium 0.12.4.1 and Google Chrome 151.0.7922.173 can run an
+isolated content script that requests a response from a local native host
+and edits just the word range in a plain input or textarea. Both initial
+experiments passed. The fixture uses temporary profiles, a loopback-only
+synthetic page and the DevTools pipe. It sends a fixed test-case ID to a
+fixed-response Python host. No installed Reword data or browser profile
+is used.
+
+The checked-in probe extends the focus case to leave and return to the same
+field while the reply is pending. It also checks text changes, exact caret
+and surrounding text preservation, and that password and read-only fields
+send no request. For commands and test boundaries, see
+[COMPATIBILITY.md](COMPATIBILITY.md).
+Both checked-in runs passed. The reports are
+`.deps/browser-transport-final-helium/report.json` and
+`.deps/browser-transport-final-google-chrome/report.json`.
+
+Next, replace the fixed response with a bounded native messaging host using
+the existing Reword dictionary and Store. Bind the request to the browser
+application rule and recheck Pause and settings before offering a result.
+Test page input notifications, the alternating rewrite cycle, and Undo in
+the browser before treating the route as a release candidate. Normal
+browser profiles, rich editors, Windows host registration and YukiGram's
+message composer are still unverified.
+
+The Undo change at `24cba30` passed the regular hosted Linux and Windows
+test matrix in both GitHub runs. The combined GUI and IBus probe ran
+separately on Debian. [Run 42402667244](https://github.com/AwraEsh/reword/actions/runs/42402667244),
+[Run 42402671580](https://github.com/AwraEsh/reword/actions/runs/42402671580).
+
 ## Undo with the GUI and IBus running together
 
 The combined private X11 probe reproduced the conflict. GNOME Text Editor

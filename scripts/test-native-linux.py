@@ -34,7 +34,15 @@ def main():
                         help="Use the compiled Reword engine instead of the fixed-word IBus probe")
     parser.add_argument("--ibus-gui", action="store_true",
                         help="Include the Reword GUI and its native shortcut grabs")
+    parser.add_argument("--browser-output", help="Run the private browser transport fixture")
+    parser.add_argument("--browser", choices=("helium", "google-chrome"))
     args = parser.parse_args()
+    if args.browser and not args.browser_output:
+        parser.error("--browser needs --browser-output.")
+    if args.browser_output:
+        if args.ibus_output or args.fixture_timing_only or args.active_app or args.active_output:
+            parser.error("The browser fixture runs separately from other private probes.")
+        args.browser_output = str(Path(args.browser_output).resolve())
     if args.ibus_gui and not args.ibus_engine:
         parser.error("The IBus GUI test needs --ibus-engine.")
     if args.ibus_engine and not args.ibus_output:
@@ -59,6 +67,9 @@ def main():
                 ]
                 if args.fixture_timing_only:
                     command.append("--fixture-timing-only")
+                if args.browser_output:
+                    command.extend(["--browser-output", args.browser_output,
+                                    "--browser", args.browser or "helium"])
                 if args.ibus_output:
                     command.extend(["--ibus-output", args.ibus_output])
                     if args.ibus_engine:
@@ -155,6 +166,13 @@ def main():
                                   file=sys.stderr, flush=True)
                     raise RuntimeError("Private window manager did not become ready.")
                 time.sleep(.05)
+            if args.browser_output:
+                driver = spawn(["node", str(ROOT / "tests/browser_transport/probe.mjs"),
+                                str(folder), args.browser_output, args.browser], "browser-probe")
+                result = driver.wait(timeout=55)
+                print("PASS: private browser transport fixture." if result == 0 else
+                      "FAIL: private browser transport fixture. Inspect its report.", flush=True)
+                return result
             bus.call_sync("org.a11y.Bus", "/org/a11y/bus", "org.freedesktop.DBus.Properties", "Set",
                           GLib.Variant("(ssv)", ("org.a11y.Status", "IsEnabled", GLib.Variant("b", True))),
                           None, Gio.DBusCallFlags.NONE, 3000, None)
