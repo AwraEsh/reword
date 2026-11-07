@@ -6,6 +6,35 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <stdexcept>
+
+namespace {
+bool writeFrame(const QJsonObject &frame) {
+    auto bytes = QJsonDocument(frame).toJson(QJsonDocument::Compact) + '\n';
+    qsizetype done = 0;
+    while (done < bytes.size()) {
+        auto count = write(STDOUT_FILENO, bytes.constData() + done, bytes.size() - done);
+        if (count <= 0)
+            return false;
+        done += count;
+    }
+    return true;
+}
+
+bool requestAuthorization() {
+    // Only the parent can authorize. Its single-byte response is separate
+    // from the JSON command stream and only valid for this pending edit.
+    pollfd response{STDIN_FILENO, POLLIN, 0};
+    char reply = 0;
+    if (!writeFrame({{"authorize", true}}) ||
+        poll(&response, 1, reword::NativeRequestTimeoutMs) != 1 || !(response.revents & POLLIN) ||
+        read(STDIN_FILENO, &reply, 1) != 1 || (reply != '0' && reply != '1'))
+        throw std::runtime_error("Native authorization channel closed.");
+    return reply == '1';
+}
+}
+
 int main(int argc, char **argv) {
     umask(0077);
     QCoreApplication app(argc, argv);
@@ -55,14 +84,14 @@ int main(int argc, char **argv) {
                     result = {{"field", reword::encodeField(adapter->readExpected(expected))}};
                 } else if (operation == "changed")
                     result = {{"changed", adapter->changed()}};
-                else if (operation == "replace") {
+                else if (operation == "replace-authorized") {
                     auto text = o["text"].toString();
                     int caret = o["caret"].toInt(-1);
                     bool bounded = text.size() <= 200000 && text.toUcs4().size() <= 100000 &&
                                    caret >= 0 && caret <= text.size();
-                    result = {{"ok", bounded && adapter->replace(
+                    result = {{"ok", bounded && pending.isEmpty() && adapter->replace(
                                                     reword::decodeField(o["expected"].toObject()),
-                                                    text, caret)}};
+                                                    text, caret, requestAuthorization)}};
                 } else if (operation == "shortcuts")
                     result = {{"ok", adapter->shortcuts(o["fix"].toString(), o["undo"].toString(),
                                                         o["pause"].toString())}};
@@ -78,15 +107,9 @@ int main(int argc, char **argv) {
                 app.exit(3);
                 return;
             }
-            auto bytes = QJsonDocument(result).toJson(QJsonDocument::Compact) + '\n';
-            qsizetype done = 0;
-            while (done < bytes.size()) {
-                auto count = write(STDOUT_FILENO, bytes.constData() + done, bytes.size() - done);
-                if (count <= 0) {
-                    app.quit();
-                    return;
-                }
-                done += count;
+            if (!writeFrame(result)) {
+                app.quit();
+                return;
             }
         }
     });

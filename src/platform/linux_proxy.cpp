@@ -8,7 +8,7 @@ class LinuxProxy final : public Adapter {
     QProcess child_;
     QByteArray pending_;
     bool healthy_ = false;
-    QJsonObject request(QJsonObject input) {
+    QJsonObject request(QJsonObject input, const WriteAuthorization &authorize = {}) {
         if (!healthy_)
             return {};
         auto bytes = QJsonDocument(input).toJson(QJsonDocument::Compact) + '\n';
@@ -23,7 +23,8 @@ class LinuxProxy final : public Adapter {
         }
         QElapsedTimer time;
         time.start();
-        while (time.elapsed() < 2000) {
+        bool challenged = false;
+        while (time.elapsed() < NativeRequestTimeoutMs) {
             pending_ += child_.readAllStandardOutput();
             if (pending_.size() > 1024 * 1024)
                 break;
@@ -33,9 +34,26 @@ class LinuxProxy final : public Adapter {
                 pending_.remove(0, end + 1);
                 QJsonParseError error;
                 auto doc = QJsonDocument::fromJson(frame, &error);
-                if (error.error == QJsonParseError::NoError && doc.isObject())
-                    return doc.object();
-                break;
+                if (error.error != QJsonParseError::NoError || !doc.isObject())
+                    break;
+                const auto response = doc.object();
+                if (!response.contains("authorize"))
+                    return response;
+                if (!authorize || challenged || !response["authorize"].toBool())
+                    break;
+                challenged = true;
+                bool allowed = false;
+                try {
+                    allowed = authorize();
+                } catch (...) {
+                    // Storage failure must deny the pending write.
+                }
+                if (time.elapsed() >= NativeRequestTimeoutMs)
+                    break;
+                const char reply = allowed ? '1' : '0';
+                if (child_.write(&reply, 1) != 1)
+                    break;
+                continue;
             }
             if (child_.state() != QProcess::Running)
                 break;
@@ -79,12 +97,17 @@ class LinuxProxy final : public Adapter {
     bool changed() override {
         return request({{"operation", "changed"}})["changed"].toBool();
     }
-    bool replace(const Field &expected, const QString &text, int caret) override {
-        return request({{"operation", "replace"},
-                        {"expected", encodeField(expected)},
-                        {"text", text},
-                        {"caret", caret}})["ok"]
-            .toBool();
+    bool replace(const Field &expected, const QString &text, int caret,
+                 const WriteAuthorization &authorize) override {
+        if (!authorize)
+            return false;
+        bool allowed = false;
+        const auto response = request({{"operation", "replace-authorized"},
+                                       {"expected", encodeField(expected)},
+                                       {"text", text},
+                                       {"caret", caret}},
+                                      [&] { return allowed = authorize(); });
+        return allowed && response["ok"].toBool();
     }
     QString description() const override {
         auto description = healthy_ ? const_cast<LinuxProxy *>(this)

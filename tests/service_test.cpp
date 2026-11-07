@@ -36,7 +36,7 @@ class FixtureAdapter final : public Adapter {
     QStringList activeShortcuts;
     bool rejectRestore = false, rejectedShortcut = false;
     int rejectedShortcutAttempts = 0;
-    std::function<void()> onShortcutRejected, onRead, onWrite, onMetadata;
+    std::function<void()> onShortcutRejected, onRead, beforeWrite, onWrite, onMetadata;
     bool quiet = false;
     QString pendingAction;
     QString takeAction() override {
@@ -79,9 +79,14 @@ class FixtureAdapter final : public Adapter {
             return {};
         return inspect(true);
     }
-    bool replace(const Field &expected, const QString &text, int caret) override {
+    bool replace(const Field &expected, const QString &text, int caret,
+                 const WriteAuthorization &authorize) override {
         ++writes;
         if (std::exchange(rejectNext, false) || !sameTarget(expected, field))
+            return false;
+        if (auto callback = std::exchange(beforeWrite, {}))
+            callback();
+        if (!authorize || !authorize())
             return false;
         type(text);
         field.caret = caret;
@@ -790,6 +795,43 @@ class ServiceTest : public QObject {
         h.service.action("undo");
         QCOMPARE(h.adapter->field.text, QString("the "));
         QCOMPARE(h.adapter->writes, 1);
+    }
+    void removalDuringNativeValidationStopsWrite_data() {
+        QTest::addColumn<QString>("operation");
+        QTest::newRow("live") << QString("live");
+        QTest::newRow("selection") << QString("fix");
+        QTest::newRow("undo") << QString("undo");
+    }
+    void removalDuringNativeValidationStopsWrite() {
+        QFETCH(QString, operation);
+        Harness h;
+        QTRY_VERIFY(h.adapter->reads > 0);
+        if (operation == "undo") {
+            h.adapter->type("teh ");
+            QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        } else {
+            h.adapter->type("teh ");
+        }
+        if (operation == "fix") {
+            h.adapter->field.selectionStart = 0;
+            h.adapter->field.selectionEnd = 3;
+        }
+        const auto original = h.adapter->field.text;
+        bool revoked = false;
+        h.adapter->beforeWrite = [&] {
+            h.store.removeApplication(h.adapter->field.app);
+            revoked = true;
+        };
+        if (operation == "live") {
+            ServiceTestAccess::tick(h.service);
+        } else {
+            h.adapter->quiet = true;
+            h.service.action(operation);
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(revoked, 10000);
+        QTest::qWait(30);
+        QCOMPARE(h.adapter->field.text, original);
+        QVERIFY(h.store.histories().isEmpty());
     }
     void burstPreservesOffsetsAndPunctuation() {
         Harness h;

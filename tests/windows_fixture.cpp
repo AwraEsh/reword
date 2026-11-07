@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <QString>
+#include <cstdio>
 #include <string>
 static HWND edit = nullptr;
 static std::string pending;
@@ -40,6 +41,9 @@ static void command(HWND window) {
                                    WS_CHILD | WS_VISIBLE | ES_PASSWORD | ES_AUTOHSCROLL, 10, 10,
                                    460, 30, window, nullptr, GetModuleHandleW(nullptr), nullptr);
             SetFocus(edit);
+        } else if (s == "sync") {
+            std::fputs("READY\n", stdout);
+            std::fflush(stdout);
         } else if (s.rfind("text:", 0) == 0) {
             auto text = QString::fromUtf8(s.substr(5));
             SendMessageW(edit, EM_SETLIMITTEXT, 200001, 0);

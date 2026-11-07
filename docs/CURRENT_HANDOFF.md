@@ -1,5 +1,23 @@
 # Current handoff — 2026-11-07
 
+The user confirmed after the host restart that reliable correction and Undo in
+allowed applications are the product priority. See [REQUIREMENTS.md](REQUIREMENTS.md).
+Track skipped edits in ordinary supported fields as functional failures. The
+public repository is inspectable. A formal open-source license remains a
+separate decision because the current project license reserves those rights.
+
+The development build now checks app permission again at the native write
+boundary. The regression reproduced writes after rule removal in live correction,
+selected correction and Undo before the fix. X11 also rejects changes to text,
+selection, focus or field eligibility observed during authorization. GTK can
+switch an entry to password mode without a usable event, so the adapter
+refreshes role and state without reading text before submitting the edit.
+Three controlled X11 cycles passed, including successful ordinary edits and
+Undo after denied or stale attempts. Local receipts:
+`.deps/native-write-policy-red.log`, `.deps/native-write-field-events-red.log`,
+and `.deps/native-write-sensitive-native.log`. The draft installers below
+were built before this change.
+
 The local Preview now runs source `eda761b`. The per-user AppImage was replaced
 at the existing launcher path, with settings and history preserved. The old
 process was allowed to exit normally. The next running binary matched the new

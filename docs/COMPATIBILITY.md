@@ -31,10 +31,11 @@ universal cross-process atomic compare-and-swap. Every supported application
 needs its own compatibility checks. No field can be assumed safe solely because
 its application was allowed.
 
-Changing an app rule stops new work and invalidates results that are still
-being computed. If a Windows or X11 replacement has already been dispatched
-to the native adapter, its provider call can still finish after the rule
-changes. This window needs further work before production acceptance.
+The X11 and Windows adapters recheck app policy after validating the native
+target. Slow or denied authorization leaves the field untouched. X11 drops
+edits when it observes a focus or target change during authorization. Windows
+checks the target again before requesting final authorization. Once an edit
+has reached the desktop provider, a later policy change cannot recall it.
 
 ## Reproduce the isolated probes
 

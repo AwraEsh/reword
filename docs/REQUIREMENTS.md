@@ -5,7 +5,14 @@ Approved by the user on 2026-10-15. This file is the durable requirements source
 ## Product and quality
 - Offline desktop writing assistant for Windows 10/11 x64 and Debian-based Linux, X11 and Wayland.
 - C++20, Qt 6 Quick/QML, CMake, SQLite, Hunspell. No cloud processing or telemetry.
-- Safety, preservation of text and privacy come first, followed by stability, accuracy, speed and visual craft.
+- Correct, reliable operation in applications the user has allowed comes first.
+  Measure success with edits that apply, the alternating retry cycle, and Undo
+  that restores the intended text. A skipped edit in an ordinary supported field
+  is a functional defect and needs investigation.
+- Keep protections tied to concrete cases such as a password field, a locked
+  session, revoked permission, or text that changed before replacement. When an
+  integration lacks a signal, look for a reliable fallback and test it on the
+  affected desktop. Keep diagnostics free of private text.
 - English-only UI, notifications and tray. Persian/English content, independent language switches.
 - Restrained professional UI, proper keyboard access, scaling, dark/light mode, bidi content.
 - No placeholder claims of complete system-wide support; publish per-adapter capabilities and verified application matrix.
@@ -61,6 +68,20 @@ Approved by the user on 2026-10-15. This file is the durable requirements source
 - Aim for word correction p95 under 50 ms on test hardware; measure rather than assume.
 - Multi-hour stability/resource acceptance required before declaring production ready.
 - Persist implementation ledger, architecture, build/package instructions, compatibility evidence and remaining work.
+
+## 2026-11-07: working integrations are the product priority
+
+The user explicitly prioritizes a writing assistant that works in daily use.
+Installing Reword and allowing an application expresses trust in local text
+processing for that application. Use that permission to make supported
+correction and Undo reliable. Keep the explicit access controls and test that
+they stop edits in the cases they cover. Keep track of false refusals, fix them
+at the adapter boundary, and state the reason when integration is unavailable.
+
+The user described Reword as open source and wants its implementation to be
+inspectable. The repository is public. The current [LICENSE](../LICENSE)
+reserves redistribution and modification rights, so a formal open-source
+license choice is still open.
 
 ## 2026-10-18: release and local installation instruction
 

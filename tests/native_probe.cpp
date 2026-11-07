@@ -46,19 +46,57 @@ int main(int argc, char **argv) {
         return fail("Fixture is not supported by this desktop accessibility connection.");
     auto stale = f;
     stale.text = "stale";
-    if (adapter->replace(stale, "WRONG", 5))
+    const auto allow = [] { return true; };
+    if (adapter->replace(stale, "WRONG", 5, allow))
         return fail("Stale transaction was accepted.");
-    if (!adapter->replace(f, "the ", 4))
+    bool asked = false;
+    if (adapter->replace(f, "WRONG", 5, [&] { asked = true; return false; }) ||
+        !asked || !reword::sameTarget(f, adapter->readExpected(f)))
+        return fail("Native authorization denial did not preserve the field.");
+    if (adapter->replace(f, "WRONG", 5, [] {
+            QThread::msleep(2 * reword::WriteAuthorizationBudgetMs);
+            return true;
+        }) || !reword::sameTarget(f, adapter->readExpected(f)))
+        return fail("Late authorization did not preserve the field.");
+    auto fixtureSnapshot = [&](QByteArray command, QByteArray expected) {
+        fixture.write(command + "\nsnapshot\n");
+        return fixture.waitForReadyRead(300) && fixture.readLine().trimmed() == expected;
+    };
+    bool newerTextObserved = false;
+    if (adapter->replace(f, "WRONG", 5, [&] {
+            newerTextObserved = fixtureSnapshot("text:newer", "DATA:bmV3ZXI=");
+            return newerTextObserved;
+        }) || !newerTextObserved)
+        return fail("A change during authorization did not stop the edit.");
+    f = adapter->readExpected(f);
+    if (f.text != "newer")
+        return fail("A change during authorization was overwritten.");
+    const auto caret = f.caret;
+    bool selectionObserved = false;
+    if (adapter->replace(f, "WRONG", 5, [&] {
+            selectionObserved = fixtureSnapshot("select-all", "DATA:bmV3ZXI=");
+            return selectionObserved;
+        }) || !selectionObserved)
+        return fail("A selection change during authorization did not stop the edit.");
+    f = adapter->readExpected(f);
+    if (f.text != "newer" || f.caret != caret || f.selectionStart != 0 ||
+        f.selectionEnd != f.text.size())
+        return fail("A selection-only change was not preserved.");
+    if (!adapter->replace(f, "the ", 4, allow))
         return fail("Guarded replacement was not confirmed.");
-    fixture.write("password\n");
-    fixture.waitForBytesWritten();
-    QThread::msleep(150);
+    f = adapter->readExpected(f);
+    bool passwordObserved = false;
+    if (adapter->replace(f, "WRONG", 5, [&] {
+            passwordObserved = fixtureSnapshot("password", "DATA:dGhlIA==");
+            return passwordObserved;
+        }) || !passwordObserved || !fixtureSnapshot("", "DATA:dGhlIA=="))
+        return fail("A password transition during authorization did not stop the edit.");
     f = adapter->inspect(true);
     if (!f.password || !f.text.isEmpty())
         return fail("Password field was read or unrecognized.");
     fixture.write("quit\n");
     fixture.waitForBytesWritten();
     fixture.waitForFinished(2000);
-    std::cout << "PASS: metadata-only inspection, stale rejection, GTK entry replacement, password "
-                 "exclusion.\n";
+    std::cout << "PASS: GTK rejects stale targets and denied, late or changed-target authorization; "
+                 "replacement and password exclusion verified.\n";
 }

@@ -24,17 +24,24 @@ well as spelling corrections.
 
 `src/platform/adapter.h` is the native inspection/replacement/shortcut boundary.
 The service first requests metadata and applies the access policy before it
-requests text. Adapters recheck the expected target and text before writing.
-Desktop APIs cannot provide a universal cross-process atomic edit, so support
-must be tested per application.
+requests text. Adapters recheck the expected target and text, then ask the
+service to confirm the app's current mode, pause state, configuration revision
+and cancellation before submitting an edit. Selected-text edits also check the
+operation deadline. An authorization check lasting 50 ms or longer is rejected.
+Desktop APIs cannot provide a universal cross-process atomic edit. An edit
+already sent to a provider can still complete during a policy or target change.
 
 On X11, AT-SPI runs in `reword-native-helper`. Bounded JSON frames pass over its
 parent-owned stdin/stdout pipes. This keeps its GLib event loop separate from the
 Qt Quick GUI. Only plain single-line editable fields are currently supported.
+The helper asks for authorization only after it validates the field. One reply
+is accepted for that request. A broken handshake closes the connection. Focus
+and target change events observed during the check invalidate the edit.
 
 Windows uses UI Automation, with bounded Win32 snapshots for standard Edit
-controls. Hotkeys use a message-only native window. Elevated applications remain
-subject to Windows access restrictions.
+controls. It refreshes the expected field after the first authorization check
+and verifies policy again before calling SetValue. Hotkeys use a message-only
+native window. Elevated applications remain subject to Windows access restrictions.
 
 Wayland live correction belongs to the Fcitx5 addon, using its input context and
 surrounding text. It is disabled on X11 to avoid two correction cycles. Pending

@@ -1,7 +1,11 @@
 #pragma once
 #include "core/core.h"
+#include <functional>
 #include <memory>
 namespace reword {
+using WriteAuthorization = std::function<bool()>;
+inline constexpr int WriteAuthorizationBudgetMs = 50;
+
 class Adapter {
   public:
     virtual ~Adapter() = default;
@@ -14,7 +18,10 @@ class Adapter {
     virtual bool changed() {
         return true;
     }
-    virtual bool replace(const Field &expected, const QString &newText, int newCaret) = 0;
+    // Ask after native target validation, immediately before submitting the
+    // edit. A missing or denied authorization must leave the target untouched.
+    virtual bool replace(const Field &expected, const QString &newText, int newCaret,
+                         const WriteAuthorization &authorize) = 0;
     virtual QString description() const = 0;
     // "pending" means a native shortcut still owns the keyboard/focus grace.
     // Callers must avoid text observation until an action or an empty result.

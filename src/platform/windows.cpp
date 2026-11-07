@@ -4,6 +4,7 @@
 #include <UIAutomation.h>
 #include <wrl/client.h>
 #include "adapter.h"
+#include <QDeadlineTimer>
 #include <QKeySequence>
 #include <QFileInfo>
 #include <vector>
@@ -255,8 +256,9 @@ class WindowsAdapter final : public Adapter {
         return f;
     }
   public:
-    bool replace(const Field &expected, const QString &text, int caret) override {
-        if (!sameTarget(expected, readExpected(expected)))
+    bool replace(const Field &expected, const QString &text, int caret,
+                 const WriteAuthorization &authorize) override {
+        if (!authorize || !sameTarget(expected, readExpected(expected)))
             return false;
         auto e = validated_;
         ComPtr<IUIAutomationValuePattern> v;
@@ -265,12 +267,19 @@ class WindowsAdapter final : public Adapter {
             FAILED(e->get_CurrentHasKeyboardFocus(&focused)) || !focused || !unlocked() ||
             FAILED(e->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&v))))
             return false;
-        BSTR replacement =
-            SysAllocStringLen(reinterpret_cast<const OLECHAR *>(text.utf16()), UINT(text.size()));
-        if (!replacement)
+        const auto authorizeFresh = [&] {
+            const QDeadlineTimer window(WriteAuthorizationBudgetMs, Qt::PreciseTimer);
+            return authorize() && !window.hasExpired();
+        };
+        if (!authorizeFresh() || !sameTarget(expected, readExpected(expected)))
             return false;
-        HRESULT written = v->SetValue(replacement);
-        SysFreeString(replacement);
+        std::unique_ptr<OLECHAR, decltype(&SysFreeString)> replacement(
+            SysAllocStringLen(reinterpret_cast<const OLECHAR *>(text.utf16()), UINT(text.size())),
+            &SysFreeString);
+        if (!replacement || !authorizeFresh())
+            return false;
+        HRESULT written = v->SetValue(replacement.get());
+        replacement.reset();
         if (FAILED(written))
             return false;
         ComPtr<IUIAutomationTextPattern> p;

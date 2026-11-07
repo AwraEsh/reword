@@ -113,7 +113,8 @@ class UiMetadataAdapter final : public reword::Adapter {
         field.id = "controlled-ui-field";
         return field;
     }
-    bool replace(const reword::Field &, const QString &, int) override {
+    bool replace(const reword::Field &, const QString &, int,
+                 const reword::WriteAuthorization &) override {
         return false;
     }
     QString description() const override {
@@ -159,9 +160,10 @@ class UiSelectionAdapter final : public reword::Adapter {
             ++actions;
         return action;
     }
-    bool replace(const reword::Field &expected, const QString &text, int caret) override {
+    bool replace(const reword::Field &expected, const QString &text, int caret,
+                 const reword::WriteAuthorization &authorize) override {
         QMutexLocker lock(&mutex_);
-        if (!reword::sameTarget(expected, field_))
+        if (!reword::sameTarget(expected, field_) || !authorize || !authorize())
             return false;
         ++writes;
         field_.text = text;

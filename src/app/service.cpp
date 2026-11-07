@@ -305,8 +305,12 @@ void Service::tick() {
                 retry_ = savedRetry;
                 break;
             }
-            if (!adapter_->replace(f, updated, caret)) {
-                traceRetry(17);
+            bool denied = false;
+            if (!adapter_->replace(f, updated, caret, [&] {
+                    denied = !policyCurrent(f, operationRevision, cancellation, ReadPurpose::Live);
+                    return !denied;
+                })) {
+                traceRetry(denied ? 16 : 17);
                 retry_ = savedRetry;
                 break;
             }
@@ -331,6 +335,10 @@ void Service::tick() {
                 int reason = after.id != f.id || after.app != f.app ? 10
                              : after.text != updated ? 11 : 12;
                 resetObservation(observationFailureReason(f, reason));
+                break;
+            }
+            if (!policyCurrent(after, operationRevision, cancellation, ReadPurpose::Live)) {
+                resetObservation(16);
                 break;
             }
             undoPassage_ = false;
@@ -426,7 +434,11 @@ void Service::runText(QString input, bool native, Field field) {
                     QString updated = field.text;
                     updated.replace(field.selectionStart, field.selectionEnd - field.selectionStart,
                                     change.corrected);
-                    if (deadline.hasExpired() || !policyCurrent(current, revision, cancellation)) {
+                    const auto authorize = [&] {
+                        return !deadline.hasExpired() && policyCurrent(current, revision, cancellation) &&
+                               !deadline.hasExpired();
+                    };
+                    if (!authorize()) {
                         emit message(deadline.hasExpired()
                                          ? "Operation timed out. Nothing was replaced."
                                          : "Cancelled or settings changed. Nothing was replaced.");
@@ -436,7 +448,7 @@ void Service::runText(QString input, bool native, Field field) {
                     // a provider can reject confirmation after changing text.
                     emit passageRecoveryAvailable(input, change.corrected);
                     // Signal delivery may synchronously revoke this operation.
-                    if (deadline.hasExpired() || !policyCurrent(current, revision, cancellation)) {
+                    if (!authorize()) {
                         resetObservation();
                         emit message(deadline.hasExpired()
                                          ? "Operation timed out. Nothing was replaced."
@@ -444,7 +456,8 @@ void Service::runText(QString input, bool native, Field field) {
                         return;
                     }
                     if (!adapter_->replace(field, updated,
-                                           field.selectionStart + change.corrected.size())) {
+                                           field.selectionStart + change.corrected.size(),
+                                           authorize)) {
                         resetObservation();
                         emit message(
                             "Replacement was not confirmed. Check the text; its original is "
@@ -537,7 +550,8 @@ void Service::undo() {
         emit message("Cancelled or settings changed. Nothing was replaced.");
         return;
     }
-    if (adapter_->replace(f, undoBefore_, undoCaret_)) {
+    if (adapter_->replace(f, undoBefore_, undoCaret_,
+                          [&] { return policyCurrent(f, revision, cancellation, purpose); })) {
         auto after = permitted(&f, purpose);
         if (after.id != f.id || after.app != f.app || after.text != undoBefore_ ||
             after.caret != undoCaret_) {

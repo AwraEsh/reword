@@ -6,6 +6,7 @@
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QDBusVariant>
+#include <QDeadlineTimer>
 #include <QElapsedTimer>
 #include <QQueue>
 #undef signals
@@ -24,6 +25,11 @@ class LinuxAdapter final : public Adapter {
     AtspiAccessible *focus_ = nullptr;
     GRef<AtspiAccessible> validated_{nullptr, g_object_unref};
     AtspiEventListener *listener_ = nullptr;
+    static constexpr const char *fieldEventTypes_[] = {
+        "object:state-changed:focused", "object:text-changed", "object:text-caret-moved",
+        "object:text-selection-changed", "object:property-change:accessible-role",
+        "object:state-changed:editable", "object:state-changed:sensitive",
+        "object:state-changed:single-line"};
     static inline Display *trapped_ = nullptr;
     static inline int trapError_ = 0;
     static inline XErrorHandler previousHandler_ = nullptr;
@@ -35,6 +41,7 @@ class LinuxAdapter final : public Adapter {
         return previousHandler_ ? previousHandler_(d, e) : 0;
     }
     bool dirty_ = true;
+    quint64 fieldEvents_ = 0;
     QElapsedTimer lastPoll_, lastScan_;
     int scanApplication_ = 0;
     Display *display_ = nullptr;
@@ -100,12 +107,19 @@ class LinuxAdapter final : public Adapter {
     static void event(AtspiEvent *e, void *data) {
         auto self = static_cast<LinuxAdapter *>(data);
         self->dirty_ = true;
-        if (QString::fromUtf8(e->type).startsWith("object:state-changed:focused") && e->detail1) {
+        const bool focusChanged = QString::fromUtf8(e->type).startsWith("object:state-changed:focused");
+        if (focusChanged || e->source == self->validated_.get())
+            ++self->fieldEvents_;
+        if (focusChanged && e->detail1) {
             if (self->focus_)
                 g_object_unref(self->focus_);
             self->focus_ = ATSPI_ACCESSIBLE(g_object_ref(e->source));
         }
         g_boxed_free(ATSPI_TYPE_EVENT, e);
+    }
+    static void dispatchPendingEvents() {
+        for (int i = 0; i < 32 && g_main_context_pending(nullptr); ++i)
+            g_main_context_iteration(nullptr, false);
     }
     void discoverInitialFocus() {
         if (focus_ || (lastScan_.isValid() && lastScan_.elapsed() < 1000))
@@ -211,8 +225,7 @@ class LinuxAdapter final : public Adapter {
         atspi_set_timeout(80, 100);
         available_ = true;
         listener_ = atspi_event_listener_new(event, this, nullptr);
-        for (auto event :
-             {"object:state-changed:focused", "object:text-changed", "object:text-caret-moved"})
+        for (auto event : fieldEventTypes_)
             atspi_event_listener_register(listener_, event, nullptr);
         lastPoll_.start();
         if (!wayland_)
@@ -220,8 +233,7 @@ class LinuxAdapter final : public Adapter {
     }
     ~LinuxAdapter() override {
         if (listener_) {
-            for (auto event :
-                 {"object:state-changed:focused", "object:text-changed", "object:text-caret-moved"})
+            for (auto event : fieldEventTypes_)
                 atspi_event_listener_deregister(listener_, event, nullptr);
             g_object_unref(listener_);
         }
@@ -242,8 +254,7 @@ class LinuxAdapter final : public Adapter {
     bool changed() override {
         if (!available_)
             return false;
-        for (int i = 0; i < 32 && g_main_context_pending(nullptr); ++i)
-            g_main_context_iteration(nullptr, false);
+        dispatchPendingEvents();
         if (lastPoll_.elapsed() > 1000) {
             dirty_ = true;
             lastPoll_.restart();
@@ -273,12 +284,30 @@ class LinuxAdapter final : public Adapter {
         return snapshot(true, &expected);
     }
   private:
+    static bool readEligibility(AtspiAccessible *target, Field &field) {
+        GError *error = nullptr;
+        const auto role = atspi_accessible_get_role(target, &error);
+        if (error) {
+            g_error_free(error);
+            return false;
+        }
+        field.password = role == ATSPI_ROLE_PASSWORD_TEXT;
+        GRef<AtspiStateSet> states(atspi_accessible_get_state_set(target), g_object_unref);
+        if (!states)
+            return false;
+        field.focused = atspi_state_set_contains(states.get(), ATSPI_STATE_FOCUSED);
+        field.editable = atspi_state_set_contains(states.get(), ATSPI_STATE_EDITABLE) &&
+                         atspi_state_set_contains(states.get(), ATSPI_STATE_SENSITIVE);
+        const bool singleLine = atspi_state_set_contains(states.get(), ATSPI_STATE_SINGLE_LINE);
+        field.plain = role == ATSPI_ROLE_ENTRY || (role == ATSPI_ROLE_TEXT && singleLine);
+        field.known = field.plain || field.password;
+        return true;
+    }
     Field snapshot(bool includeText, const Field *expected) {
         validated_.reset();
         if (!available_)
             return {};
-        for (int i = 0; i < 32 && g_main_context_pending(nullptr); ++i)
-            g_main_context_iteration(nullptr, false);
+        dispatchPendingEvents();
         discoverInitialFocus();
         Field f;
         if (!focus_)
@@ -299,26 +328,11 @@ class LinuxAdapter final : public Adapter {
         f.id = QString::fromUtf8(obj->app->bus_name) + QString::fromUtf8(obj->path);
         if (expected && (f.id != expected->id || f.app != expected->app))
             return {};
-        auto role = atspi_accessible_get_role(target.get(), &error);
-        if (error) {
-            g_error_free(error);
+        if (!readEligibility(target.get(), f))
             return f;
-        }
-        f.password = role == ATSPI_ROLE_PASSWORD_TEXT;
-        auto states = atspi_accessible_get_state_set(target.get());
-        if (!states)
-            return f;
-        f.focused = atspi_state_set_contains(states, ATSPI_STATE_FOCUSED);
-        f.editable = atspi_state_set_contains(states, ATSPI_STATE_EDITABLE);
-        bool sensitive = atspi_state_set_contains(states, ATSPI_STATE_SENSITIVE);
-        bool singleLine = atspi_state_set_contains(states, ATSPI_STATE_SINGLE_LINE);
-        g_object_unref(states);
-        f.plain = role == ATSPI_ROLE_ENTRY || (role == ATSPI_ROLE_TEXT && singleLine);
-        f.known = f.plain || f.password;
         // The Fcitx addon owns Wayland live edits; never double-correct via AT-SPI.
         f.locked = !unlocked();
-        if (!includeText || f.password || !f.known || !f.editable || !f.focused || f.locked ||
-            !sensitive)
+        if (!includeText || f.password || !f.known || !f.editable || !f.focused || f.locked)
             return f;
         GRef<AtspiText> text(atspi_accessible_get_text_iface(target.get()), g_object_unref);
         GRef<AtspiEditableText> editable(atspi_accessible_get_editable_text_iface(target.get()),
@@ -369,7 +383,8 @@ class LinuxAdapter final : public Adapter {
         return f;
     }
   public:
-    bool replace(const Field &expected, const QString &newText, int caret) override {
+    bool replace(const Field &expected, const QString &newText, int caret,
+                 const WriteAuthorization &authorize) override {
         auto current = readExpected(expected);
         if (!sameTarget(expected, current) || !validated_)
             return false;
@@ -380,9 +395,25 @@ class LinuxAdapter final : public Adapter {
         GRef<AtspiText> text(atspi_accessible_get_text_iface(target.get()), g_object_unref);
         if (!editable || !text)
             return false;
+        const auto replacement = newText.toUtf8();
+        const auto fieldEvents = fieldEvents_;
+        const QDeadlineTimer authorizationWindow(WriteAuthorizationBudgetMs, Qt::PreciseTimer);
+        if (!authorize || !authorize() || authorizationWindow.hasExpired() || !unlocked())
+            return false;
+        // GTK can change the role of an existing entry without a text or
+        // focus event. Refresh the metadata without requesting field text.
+        atspi_accessible_clear_cache_single(target.get());
+        Field eligibility;
+        if (!readEligibility(target.get(), eligibility) || !eligibility.plain ||
+            eligibility.password || !eligibility.editable || !eligibility.focused)
+            return false;
+        dispatchPendingEvents();
+        if (authorizationWindow.hasExpired() || fieldEvents_ != fieldEvents ||
+            g_main_context_pending(nullptr))
+            return false;
         GError *error = nullptr;
         bool ok = atspi_editable_text_set_text_contents(editable.get(),
-                                                        newText.toUtf8().constData(), &error);
+                                                        replacement.constData(), &error);
         if (error) {
             g_error_free(error);
             return false;
