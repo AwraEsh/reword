@@ -1,6 +1,7 @@
 """Only known mountpoints beneath the caller-owned test directory may detach."""
 from pathlib import Path
 import io
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -53,6 +54,20 @@ class OwnedMountTest(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     detach_test_mounts(directory)
 
+    def test_failed_unmount_requires_mount_to_have_disappeared(self):
+        for disappeared in (False, True):
+            with self.subTest(disappeared=disappeared), tempfile.TemporaryDirectory() as directory:
+                mounted = {str(Path(directory).resolve() / 'runtime/doc')}
+                error = subprocess.CalledProcessError(1, 'fusermount3')
+                with patch('owned_mounts.mount_points',
+                           side_effect=[mounted, set() if disappeared else mounted]), \
+                     patch('owned_mounts.shutil.which', return_value='/usr/bin/fusermount3'), \
+                     patch('owned_mounts.subprocess.run', side_effect=error):
+                    if disappeared:
+                        detach_test_mounts(directory)
+                    else:
+                        with self.assertRaises(subprocess.CalledProcessError):
+                            detach_test_mounts(directory)
 
 if __name__ == '__main__':
     unittest.main()

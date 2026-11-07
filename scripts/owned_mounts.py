@@ -36,5 +36,10 @@ def detach_test_mounts(directory):
         tool = shutil.which('fusermount3') or shutil.which('fusermount')
         if not tool:
             raise RuntimeError('Cannot detach the private test FUSE mount.')
-        subprocess.run([tool, '-uz', str(mount)], check=True,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            subprocess.run([tool, '-uz', str(mount)], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except subprocess.CalledProcessError:
+            # The portal may already have detached while its bus shut down.
+            if str(mount) in mount_points():
+                raise
