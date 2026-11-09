@@ -1,8 +1,20 @@
 let nativePort;
 let pendingReply;
+let pendingRelease;
+let pendingIsRoute;
+let waitingWord;
 
 function sendWord(word, reply) {
     if (pendingReply) {
+        if (word.releaseUndo) {
+            pendingRelease?.reply({});
+            pendingRelease = {word, reply};
+            return;
+        }
+        if (pendingIsRoute && !waitingWord && !word.claimUndo) {
+            waitingWord = {word, reply};
+            return;
+        }
         reply({error: 'native-host-busy'});
         return;
     }
@@ -25,10 +37,20 @@ function sendWord(word, reply) {
         port.disconnect();
         pendingReply?.({error: 'native-host-timeout'});
     }, 5000);
+    pendingIsRoute = Boolean(word.releaseUndo || word.claimUndo);
     pendingReply = result => {
         clearTimeout(timeout);
         pendingReply = undefined;
         reply(result);
+        if (pendingRelease) {
+            const release = pendingRelease;
+            pendingRelease = undefined;
+            sendWord(release.word, release.reply);
+        } else if (waitingWord) {
+            const waiting = waitingWord;
+            waitingWord = undefined;
+            sendWord(waiting.word, waiting.reply);
+        }
     };
     port.postMessage(word);
 }
@@ -41,6 +63,7 @@ chrome.runtime.onMessage.addListener((request, sender, send) => {
 
     if (PROBE_ENGINE) {
         if (request.policy === true) sendWord({policy: true}, send);
+        else if (PROBE_ROUTE && request.route) sendWord(request.route, send);
         else {
             sendWord(request.word, reply => {
                 if (['stale', 'blur', 'revoke', 'pause-cycle', 'pending-caret'].includes(request.test)) {

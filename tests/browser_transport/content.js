@@ -9,7 +9,10 @@ let undoTimer;
 
 function clearUndo() {
     clearTimeout(undoTimer);
+    const record = undo;
     undo = undefined;
+    if (PROBE_ROUTE && record)
+        return message({test: record.field.id, route: {releaseUndo: record.attempt}});
 }
 
 function clearRetry() {
@@ -90,8 +93,8 @@ document.addEventListener('keydown', async event => {
     }
     event.preventDefault();
     event.stopImmediatePropagation();
-    clearUndo();
     clearRetry();
+    await clearUndo();
 
     const policy = await message({test: field.id, policy: true});
     const isCurrent = () => samePosition() && field.value === record.expected;
@@ -238,8 +241,15 @@ document.addEventListener('input', async event => {
         }
         if (PROBE_ENGINE && typeof shortcut === 'string') {
             undo = {field, target, inputRevision, expected: after, caret: newCaret,
-                    original: word, start, end: start + reply.corrected.length, revision, shortcut};
+                    original: word, start, end: start + reply.corrected.length, revision, shortcut,
+                    attempt: reply.attempt};
             undoTimer = setTimeout(clearUndo, 30000);
+            if (PROBE_ROUTE) {
+                const record = undo;
+                const route = await message({test: field.id, route: {claimUndo: record.attempt, revision}});
+                if (undo !== record) return;
+                field.dataset.undoRoute = route?.claimed ? 'claimed' : 'unavailable';
+            }
         }
     }
     if (PROBE_ENGINE) {

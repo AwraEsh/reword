@@ -90,6 +90,16 @@ Focus changes and expiry return the chord to the native helper. Fix and
 Pause keep their existing grabs. The route changes key delivery only. The
 engine still checks focus, permission and current text before applying Undo.
 
+With `REWORD_BROWSER_HOST=ON`, an authenticated browser host can request the
+same handoff for a confirmed browser correction. It verifies the foreground
+X11 window belongs to its parent browser using XRes and binds the route to
+the correction's settings revision. The route lasts at most 30 seconds.
+The host clears it on release, a foreground change or a policy change.
+The X server drops the selection owner when the host disconnects. The
+root property carries only window IDs and a timestamp. The adapter keeps
+its other grabs and does not use the route to authorize an edit.
+[Xlib selection ownership](https://www.x.org/releases/X11R7.6/doc/libX11/specs/libX11/libX11.html).
+
 The opt-in Linux browser host verifies the configured extension origin and
 gets the browser executable path from its parent process. Native messaging
 frames have a 4 KiB limit. The host uses the same application mode, browser

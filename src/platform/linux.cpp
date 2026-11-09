@@ -52,7 +52,7 @@ class LinuxAdapter final : public Adapter {
     int scanApplication_ = 0;
     Display *display_ = nullptr;
     QHash<int, QString> keys_;
-    Atom ibusUndoRoute_ = None, activeWindowAtom_ = None;
+    Atom ibusUndoRoute_ = None, browserUndoRoute_ = None, activeWindowAtom_ = None;
     int undoShortcut_ = 0;
     bool undoGrabbed_ = false;
     QElapsedTimer lastUndoGrabFailure_;
@@ -496,9 +496,12 @@ class LinuxAdapter final : public Adapter {
         }
     }
     void updateUndoGrab() {
-        if (!undoShortcut_ || ibusUndoRoute_ == None)
+        if (!undoShortcut_ || (ibusUndoRoute_ == None && browserUndoRoute_ == None))
             return;
-        const bool native = !x11IBusOwnsUndo(display_, ibusUndoRoute_, activeWindowAtom_);
+        const bool delegated =
+            (ibusUndoRoute_ != None && x11IBusOwnsUndo(display_, ibusUndoRoute_, activeWindowAtom_)) ||
+            (browserUndoRoute_ != None && x11BrowserOwnsUndo(display_, browserUndoRoute_, activeWindowAtom_));
+        const bool native = !delegated;
         if (native == undoGrabbed_)
             return;
         if (!native) {
@@ -540,6 +543,11 @@ class LinuxAdapter final : public Adapter {
         lastUndoGrabFailure_.invalidate();
 #ifdef REWORD_IBUS_UNDO_ROUTING
         ibusUndoRoute_ = XInternAtom(display_, IBusUndoRouteProperty, False);
+#endif
+#ifdef REWORD_BROWSER_UNDO_ROUTING
+        browserUndoRoute_ = XInternAtom(display_, BrowserUndoRouteAtom, False);
+#endif
+#if defined(REWORD_IBUS_UNDO_ROUTING) || defined(REWORD_BROWSER_UNDO_ROUTING)
         activeWindowAtom_ = XInternAtom(display_, "_NET_ACTIVE_WINDOW", False);
 #endif
         auto grab = [&](QString sequence, QString action) {

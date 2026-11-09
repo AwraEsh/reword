@@ -99,7 +99,8 @@ try {
     const origin = 'http://127.0.0.1:' + server.address().port;
     await mkdir(extension);
     const originConfig = 'const PROBE_ORIGIN = ' + JSON.stringify(origin) + ';\n' +
-        'const PROBE_ENGINE = ' + Boolean(engineHost) + ';\n';
+        'const PROBE_ENGINE = ' + Boolean(engineHost) + ';\n' +
+        'const PROBE_ROUTE = ' + (x11Mode === 'gui') + ';\n';
     await writeFile(join(extension, 'content.js'),
         originConfig + await readFile(join(fixture, 'content.js'), 'utf8'));
     const workerConfig = originConfig + 'const PROBE_HOST = ' + JSON.stringify(hostName) + ';\n';
@@ -411,6 +412,10 @@ try {
             eventCountMatches: corrected.pageEvents === 1,
         };
         result.correctionOutcome = corrected.outcome ?? 'no-outcome';
+        if (gui) {
+            result.browserClaimedUndo = await evaluate(
+                "document.getElementById('undo').dataset.undoRoute === 'claimed'");
+        }
         result.pageCorrection = Object.values(result.correctionChecks).every(Boolean);
         result.correctionHostStages = result.nativeHostStages.slice(correctionStageStart);
         const guiUndoBefore = guiUndoRequests;
@@ -429,6 +434,15 @@ try {
         if (gui) result.guiReceivedUndo = guiUndoRequests > guiUndoBefore;
         if (result.guiReceivedUndo && result.liveUndo) {
             throw new Error('The physical Undo chord reached both handlers');
+        }
+        if (gui && result.liveUndo) {
+            const before = guiUndoRequests;
+            await sleep(150);
+            result.guiRegainedUndo = x11(browserPid, 'undo') &&
+                await waitFor(() => guiUndoRequests > before);
+            if (!result.browserClaimedUndo || !result.guiRegainedUndo) {
+                throw new Error('Undo ownership did not return to the desktop after restoration');
+            }
         }
         await focus('veto', 7);
         await typeWord();
@@ -473,6 +487,21 @@ try {
             silent.undoOutcome === 'declined' && silent.pageEvents === 1;
 
         await prepareUndo();
+        if (gui) {
+            result.guiPauseDuringBrowserUndo = x11(browserPid, 'pause') &&
+                await waitFor(() => x11(browserPid, 'paused'));
+            if (!result.guiPauseDuringBrowserUndo) throw new Error('Browser Undo blocked Pause');
+            const before = guiUndoRequests;
+            // The browser lease is rechecked on a bounded interval after Pause.
+            await sleep(250);
+            result.guiRegainedUndoOnPause = x11(browserPid, 'undo') &&
+                await waitFor(() => guiUndoRequests > before);
+            if (!result.guiRegainedUndoOnPause || !x11(browserPid, 'pause') ||
+                !await waitFor(() => x11(browserPid, 'resumed'))) {
+                throw new Error('The GUI did not reclaim Undo and Resume after Pause');
+            }
+            await prepareUndo();
+        }
         setPolicy('pauseUntil', '-1');
         setPolicy('pauseUntil', '0');
         await undoKey();
@@ -504,7 +533,18 @@ try {
         await prepareUndo();
         await undoKey();
         const oldKey = await status('undo');
-        await pressKey('k', 75, 3, 'KeyK');
+        if (gui) {
+            const before = guiUndoRequests;
+            result.physicalCustomUndoSent = x11(browserPid, 'custom-undo');
+            if (!result.physicalCustomUndoSent) throw new Error('The custom physical Undo chord was not sent');
+            const custom = await undoResult();
+            result.guiReceivedCustomUndo = guiUndoRequests > before;
+            if (result.guiReceivedCustomUndo || custom.undoOutcome !== 'applied') {
+                throw new Error('The GUI intercepted the custom browser Undo chord');
+            }
+        } else {
+            await pressKey('k', 75, 3, 'KeyK');
+        }
         const custom = await undoResult();
         result.undoGuards.customShortcut = oldKey.value === 'prefix the suffix' &&
             custom.value === 'prefix teh suffix' && custom.undoOutcome === 'applied' &&

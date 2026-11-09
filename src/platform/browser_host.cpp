@@ -9,9 +9,13 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <cerrno>
 #include <cstdio>
+#include <poll.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "x11_ibus_undo_route.h"
+#include <X11/extensions/XRes.h>
 
 namespace {
 constexpr quint32 MaxFrameBytes = 4096;
@@ -53,6 +57,84 @@ bool writeResponse(const QJsonObject &response) {
            std::fwrite(payload.constData(), 1, size, stdout) == size && std::fflush(stdout) == 0;
 }
 
+class BrowserUndoRoute {
+    Display *display_ = nullptr;
+    Window owner_ = None, browserWindow_ = None;
+    Atom route_ = None, activeWindow_ = None;
+    quint32 issued_ = 0;
+
+  public:
+    QString attempt;
+    qint64 revision = -1;
+
+    ~BrowserUndoRoute() {
+        if (display_)
+            XCloseDisplay(display_);
+    }
+
+    void clear() {
+        if (!owner_)
+            return;
+        // Destroying our own window releases selection ownership without
+        // disturbing another browser host that might now own the selection.
+        XDestroyWindow(display_, owner_);
+        XFlush(display_);
+        owner_ = None;
+        attempt.clear();
+    }
+
+    bool current() const {
+        return owner_ && reword::x11RouteClock() - issued_ < reword::BrowserUndoRouteLifetimeMs &&
+               reword::x11RootValue(display_, activeWindow_, XA_WINDOW) == browserWindow_ &&
+               XGetSelectionOwner(display_, route_) == owner_;
+    }
+
+    bool claim(pid_t browserPid, const QString &offeredAttempt, qint64 offeredRevision) {
+        clear();
+        if (!display_) {
+            if (qEnvironmentVariable("XDG_SESSION_TYPE") != "x11")
+                return false;
+            display_ = XOpenDisplay(nullptr);
+            if (!display_)
+                return false;
+            // The foreground window can disappear while we query its client ID.
+            XSetErrorHandler(+[](Display *, XErrorEvent *) { return 0; });
+            activeWindow_ = XInternAtom(display_, "_NET_ACTIVE_WINDOW", False);
+            route_ = XInternAtom(display_, reword::BrowserUndoRouteAtom, False);
+        }
+        browserWindow_ = reword::x11RootValue(display_, activeWindow_, XA_WINDOW);
+        if (!browserWindow_ || browserPid <= 1)
+            return false;
+        XResClientIdSpec request{browserWindow_, XRES_CLIENT_ID_PID_MASK};
+        long count = 0;
+        XResClientIdValue *identities = nullptr;
+        XResQueryClientIds(display_, 1, &request, &count, &identities);
+        bool owned = false;
+        if (identities) {
+            for (long i = 0; i < count && i < 8; ++i)
+                owned |= XResGetClientPid(&identities[i]) == browserPid;
+            XResClientIdsDestroy(count, identities);
+        }
+        if (!owned || reword::x11RootValue(display_, activeWindow_, XA_WINDOW) != browserWindow_)
+            return false;
+
+        const auto root = DefaultRootWindow(display_);
+        owner_ = XCreateSimpleWindow(display_, root, 0, 0, 1, 1, 0, 0, 0);
+        issued_ = reword::x11RouteClock();
+        const unsigned long values[] = {owner_, browserWindow_, issued_};
+        XChangeProperty(display_, root, route_, XA_CARDINAL, 32, PropModeReplace,
+                        reinterpret_cast<const unsigned char *>(values), 3);
+        XSetSelectionOwner(display_, route_, owner_, CurrentTime);
+        if (!current()) {
+            clear();
+            return false;
+        }
+        attempt = offeredAttempt;
+        revision = offeredRevision;
+        return true;
+    }
+};
+
 class BrowserCorrection {
     const QString application_;
     reword::Store store_;
@@ -63,6 +145,8 @@ class BrowserCorrection {
     QElapsedTimer clock_;
     quint64 lastOffer_ = 0;
     qint64 lastOfferRevision_ = -1;
+    bool offerCanClaimUndo_ = false;
+    BrowserUndoRoute route_;
 
     bool permitted() const {
         return !store_.paused() && store_.allowed(application_) &&
@@ -75,15 +159,40 @@ class BrowserCorrection {
         clock_.start();
     }
 
+    bool maintainRoute() {
+        if (route_.attempt.isEmpty())
+            return false;
+        if (route_.current() && permitted() &&
+            route_.revision == store_.value("configRevision", 0).toLongLong())
+            return true;
+        route_.clear();
+        return false;
+    }
+
     QJsonObject suggest(const QByteArray &payload) {
         const QDeadlineTimer deadline(MaximumSuggestionAgeMs, Qt::PreciseTimer);
         const auto revision = store_.value("configRevision", 0).toLongLong();
         if (!permitted()) {
+            route_.clear();
             trace(Stage::Blocked);
             return {};
         }
         const auto request = QJsonDocument::fromJson(payload).object();
+        if (request.size() == 1 && request.value("releaseUndo").isString()) {
+            if (route_.attempt == request.value("releaseUndo").toString())
+                route_.clear();
+            return {};
+        }
         const auto expectedRevision = QString::number(revision);
+        if (request.size() == 2 && request.value("claimUndo").isString()) {
+            const auto attempt = request.value("claimUndo").toString();
+            const bool claimed = offerCanClaimUndo_ && lastOfferRevision_ == revision &&
+                request.value("revision").toString() == expectedRevision &&
+                attempt == QString::number(lastOffer_) && route_.claim(getppid(), attempt, revision);
+            if (claimed)
+                offerCanClaimUndo_ = false;
+            return {{"claimed", claimed}};
+        }
         if (request.size() == 1 && request.value("policy").toBool()) {
             const auto undo = store_.value("undoShortcut", "Ctrl+Alt+Z").toString();
             if (store_.value("configRevision", 0).toLongLong() != revision)
@@ -132,6 +241,7 @@ class BrowserCorrection {
         const auto wordKey = QString::fromLatin1(
             QCryptographicHash::hash(word->token.toUtf8(), QCryptographicHash::Sha256).toHex());
         const bool apply = retry_.shouldCorrect(application_, word->start, wordKey, clock_.elapsed());
+        offerCanClaimUndo_ = apply;
         lastOfferRevision_ = revision;
         QJsonObject response{{"start", word->start}, {"length", word->token.size()},
                              {"attempt", QString::number(++lastOffer_)}};
@@ -159,8 +269,17 @@ int main(int argc, char **argv) {
         directory = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/reword";
     try {
         BrowserCorrection correction(application, directory);
+        std::setvbuf(stdin, nullptr, _IONBF, 0);
         trace(Stage::Ready);
         for (;;) {
+            if (correction.maintainRoute()) {
+                pollfd input{STDIN_FILENO, POLLIN, 0};
+                const auto ready = poll(&input, 1, 150);
+                if (!ready || (ready < 0 && errno == EINTR))
+                    continue;
+                if (ready < 0)
+                    return 2;
+            }
             quint32 size = 0;
             const auto header = std::fread(&size, 1, sizeof size, stdin);
             if (!header && std::feof(stdin))

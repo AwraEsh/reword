@@ -1,5 +1,28 @@
 # Current handoff — 2026-11-09
 
+## X11 browser Undo routing
+
+An opt-in browser host now claims only Undo after a confirmed browser
+range edit. It checks the foreground window's XRes client PID against
+its browser parent and limits the claim to the current policy revision.
+The GUI retains Pause and resumes owning Undo after a release or an
+invalidated claim. A host exit also releases the X11 selection.
+
+Helium and Chrome with the GUI running passed physical default and custom Undo,
+desktop fallback after restoring text, and Pause while the browser held
+Undo. The earlier failed report remains below. The passing reports are
+`.deps/browser-route-final-helium/report.json` and
+`.deps/browser-route-final-chrome/report.json`. The handoff is still an
+opt-in test fixture. Normal browser registration, packaged native host
+updates and the Windows route remain open.
+
+The native GTK and GNOME Text Editor/IBus Undo checks passed in both
+retests. The first full IBus probe missed a Persian correction after an
+IBus key deadline (diagnostic 12). The repeat passed including Persian
+and the independent language settings. See
+`.deps/browser-route-final-ibus/report.json` and
+`.deps/browser-route-ibus-repeat/report.json`.
+
 ## Physical browser Undo with the desktop GUI
 
 The controlled X11 probe reproduced the remaining routing failure. With
@@ -12,8 +35,8 @@ the original. See `.deps/browser-physical-control/report.json` and
 `.deps/browser-physical-gui-red/report.json`.
 
 Use `--browser-engine --browser-x11 control` for the positive control and
-`--browser-engine --browser-x11 gui` for the failing acceptance case.
-The latter returns failure until routing is fixed. The helper validates
+`--browser-engine --browser-x11 gui` to exercise the fix. Before the
+routing change the GUI case returned failure. The helper validates
 the private X server and foreground window before sending a key and
 records only content-free outcomes. CDP still supplies the synthetic
 spelling input. The final repeat confirmed both results and the
@@ -22,14 +45,7 @@ fixed-response transport control passed. Reports are
 `.deps/browser-physical-gui-final/report.json` and
 `.deps/browser-physical-transport-control/report.json`.
 
-Start the fix at the native Undo grab in `src/platform/linux.cpp`.
-The existing IBus route shows how to hand back only Undo. A browser
-route needs the authenticated browser host, the actual foreground
-window and a confirmed browser Undo record. Expire or clear it after
-focus loss, Pause, configuration changes, or host exit. Verify physical
-default and custom shortcuts, no double handling, and the native GTK
-and IBus controls before promoting it. Windows and normal browser
-profile registration still require separate verification.
+The routing change and its follow-up are recorded above.
 
 ## Browser Undo verification resumed
 

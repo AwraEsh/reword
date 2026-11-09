@@ -15,7 +15,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path)
     parser.add_argument("pid", type=int)
-    parser.add_argument("action", choices=("foreground", "undo", "pause", "paused", "resumed"))
+    parser.add_argument("action", choices=("foreground", "undo", "custom-undo", "pause", "paused", "resumed"))
     args = parser.parse_args()
     desktop = OwnedDesktop(args.root)
     try:
@@ -31,7 +31,9 @@ def main():
                 row = store.execute("SELECT value FROM settings WHERE key='pauseUntil'").fetchone()
             expected = -1 if args.action == "paused" else 0
             return 0 if row and json.loads(row[0]) == [expected] else 1
-        if args.action != "foreground":
+        if args.action == "custom-undo":
+            desktop._keys(["Control_L", "Alt_L", "k"], chord=True)
+        elif args.action != "foreground":
             desktop.shortcut(args.action)
         return 0
     finally:

@@ -7,6 +7,8 @@
 namespace reword {
 inline constexpr char IBusUndoRouteProperty[] = "_REWORD_IBUS_UNDO_ROUTE_V1";
 inline constexpr quint32 IBusUndoRouteLifetimeMs = 600;
+inline constexpr char BrowserUndoRouteAtom[] = "_REWORD_BROWSER_UNDO_ROUTE_V1";
+inline constexpr quint32 BrowserUndoRouteLifetimeMs = 30000;
 
 inline quint32 x11RouteClock() {
     QElapsedTimer clock;
@@ -42,6 +44,26 @@ inline bool x11IBusOwnsUndo(Display *display, Atom route, Atom activeWindow) {
         const auto *values = reinterpret_cast<const unsigned long *>(data);
         current = values[0] && x11RouteClock() - quint32(values[1]) < IBusUndoRouteLifetimeMs &&
                   values[0] == x11RootValue(display, activeWindow, XA_WINDOW);
+    }
+    if (data)
+        XFree(data);
+    return current;
+}
+
+inline bool x11BrowserOwnsUndo(Display *display, Atom route, Atom activeWindow) {
+    Atom type = None;
+    int format = 0;
+    unsigned long count = 0, remaining = 0;
+    unsigned char *data = nullptr;
+    const auto status = XGetWindowProperty(display, DefaultRootWindow(display), route, 0, 3,
+                                           False, XA_CARDINAL, &type, &format, &count, &remaining, &data);
+    bool current = false;
+    if (status == Success && type == XA_CARDINAL && format == 32 && count == 3 && !remaining && data) {
+        const auto *values = reinterpret_cast<const unsigned long *>(data);
+        current = values[0] && values[1] &&
+            x11RouteClock() - quint32(values[2]) < BrowserUndoRouteLifetimeMs &&
+            values[1] == x11RootValue(display, activeWindow, XA_WINDOW) &&
+            values[0] == XGetSelectionOwner(display, route);
     }
     if (data)
         XFree(data);
