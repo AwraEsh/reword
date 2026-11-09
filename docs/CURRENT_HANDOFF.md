@@ -1,5 +1,37 @@
 # Current handoff — 2026-11-09
 
+## Linux package browser runtime
+
+The Linux packaging script includes the host and extension when
+`REWORD_BROWSER_HOST=ON`. The packaged launcher loads the libraries
+and Qt plugins from the bundle, then execs the host so the browser
+remains its parent. Registration records the persistent launcher path.
+The Debian command resolves to `/opt/reword/usr/bin/reword-browser-launcher`.
+For AppImage browser setup, extract to a persistent directory and
+register from that directory. Normal desktop AppImage launch is separate.
+
+All 32 packaging unit cases passed, covering the opt-in contents and
+rejection of a stale host build when the option is off. The native registration test
+verified the packaged-launcher path and rejected an executable from
+another directory. The Debian GUI command now resolves the installed
+`/usr/bin/reword` symlink before locating the bundled executable. A
+regression test reproduced exit 127 with the previous launcher.
+
+Helium used the launcher and extension from an extracted `.deb`. Chrome
+used the launcher and extension from an extracted AppImage. The site gate,
+correction and Undo passed in both private browser profiles with developer
+runtime paths removed. See `.deps/browser-packages-verified/helium/report.json`
+and `.deps/browser-packages-verified/chrome/report.json`. The rebuilt `.deb`
+passed GUI smoke through its installed-style symlink in a private root.
+The rebuilt AppImage passed GUI smoke in extract-and-run mode. Both used
+fresh data directories. The artifacts and verified `SHA256SUMS` are in
+`.deps/browser-packages-verified/`.
+
+Normal desktop installation and browser-profile setup, the Windows native
+host, GNOME Text Editor input-method distribution, and YukiGram remain
+open. The installed Preview and normal browser profiles were outside
+these tests.
+
 ## Linux browser host registration
 
 The opt-in native host accepts `--register-browser` and
@@ -19,10 +51,8 @@ The same registration suite passed against the staged CMake binary.
 The physical X11 Undo test with the GUI also passed using the new
 registration path. See `.deps/browser-registration-x11/report.json`.
 
-The next distribution gate is a persistent launch path for the AppImage
-and inclusion in the Debian installer. The commands here were exercised
-in private profiles. The installed Preview and the user's browser data
-were outside this run.
+The commands here were exercised in private profiles. The installed
+Preview and the user's browser data were outside this run.
 
 ## Unpacked browser extension and site opt-in
 

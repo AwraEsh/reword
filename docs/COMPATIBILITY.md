@@ -10,9 +10,10 @@ This table describes tested fixtures, not blanket support for applications.
 | Debian X11 / Chrome 151.0.7922.173 | With forced renderer accessibility, a temporary browser profile exposed the focused HTML input. The typed typo remained unchanged. | The browser input did not expose the AT-SPI EditableText interface in that test. |
 | Private Debian X11 / browser native messaging | Helium 0.12.4.1 and Google Chrome 151.0.7922.173 carried a local request and applied a guarded range edit in a plain input and textarea. The fixture discarded late replies after typing or focus changes and excluded password and read-only controls. | Fixed-response transport fixture. Browser correction with the Reword engine, rich web editors and installed browser profiles are still unverified. |
 | Private Debian X11 / compiled Reword browser host | Helium and Chrome corrected English and Persian, passed alternating in-place retries, notified the form of range changes, honored page vetoes and restored a correction with the configured Undo shortcut. | Opt-in Linux host with a fixture extension. Desktop global shortcut delivery, ordinary browser profiles, rich fields and Windows registration remain open. |
-| Private Debian X11 / physical browser Undo | The opt-in Helium and Chrome fixtures restored text using physical default and custom Undo while the GUI ran. The GUI retained Pause and regained Undo after restore or Pause. | Temporary browser profiles. Ordinary browser profiles, packaged host registration and the Windows route remain open. |
+| Private Debian X11 / physical browser Undo | The opt-in Helium and Chrome fixtures restored text using physical default and custom Undo while the GUI ran. The GUI retained Pause and regained Undo after restore or Pause. | Temporary browser profiles using the development host. Ordinary browser profiles and the Windows route remain open. |
 | Private Debian X11 / unpacked Chromium extension | Helium and Chrome kept a site unchanged before registration, corrected and restored a word after registration, and stopped forwarding requests when the site was disabled. | Temporary profiles with the loopback test permission pre-granted. The browser permission prompt and normal profile installation are separate checks. |
-| Linux browser host registration | The native command registered the host, updated its executable path and removed its own manifest in temporary browser data directories. Helium and Chrome launched the registered host. | Manual opt-in developer install. AppImage and Debian release integration and Windows registration remain open. |
+| Linux browser host registration | The native command registered the host, updated its executable path and removed its own manifest in temporary browser data directories. Helium and Chrome launched the registered host. | Manual opt-in registration. Windows registration remains open. |
+| Linux package browser runtime | Helium launched the host from an extracted `.deb` and Chrome launched it from an extracted AppImage, with developer library paths removed. Correction, Undo and the site gate passed. | Temporary browser profiles. AppImage registration requires a persistent extraction. Normal desktop installation and upgrade testing remain open. |
 | Debian X11 / YukiGram 7.1.5.0 (Flatpak) | The user reported live correction did not run with Automatic selected. | The message field has no confirmed writable native path. |
 | Private Debian X11 / IBus 1.5.32 | A fixed-word test engine corrected text in GNOME Text Editor 48.3 and preserved the reference text. In Helium, the test engine corrected its own preedit composition before committing it. The HTML password control kept its original text. | Diagnostic engine only. Helium sent key events and accepted composition but did not send surrounding text or report field purpose to the engine during the test. YukiGram and the production correction policies remain unverified on this path. |
 | Private Debian X11 / compiled Reword IBus engine and GUI | GNOME Text Editor 48.3 corrected English and Persian. Independent language switches, alternating retry, Pause and Resume, per-app denial, 25 ms English key spacing, and live Undo passed. The native Undo also worked in a GTK single-line control before and after the editor. | Opt-in development target. Undo requires a current surrounding-text observation. Selected-text correction, live editing in Helium and YukiGram, and normal-desktop installation remain open. |
@@ -117,8 +118,9 @@ python3 scripts/test-native-linux.py --browser google-chrome --browser-engine --
 
 The fixture registers the host only in its own temporary profile and
 uses a temporary Reword store. An opt-in CMake installation stages the
-host and extension. The release installers still need browser host
-registration. Live correction in this experiment is limited to plain
+host and extension. Linux packages built with the browser host option
+include both files and a launcher for the bundled libraries. Live
+correction in this experiment is limited to plain
 inputs and textareas of at most 384 UTF-16 code units.
 
 ~~~sh
@@ -147,6 +149,41 @@ command from a new persistent installation to update the host path.
 To remove the native manifest, quit the browser and run
 `reword-browser-host --unregister-browser "/path/to/browser data"`.
 Remove the extension separately in browser settings.
+
+### Register from the Linux packages
+
+For a Debian package built with the browser host option, run
+`reword-browser-host --register-browser "/path/to/browser data"` and load
+`/opt/reword/usr/share/reword/browser/chromium` as the unpacked extension.
+The registration is per user and is an explicit command.
+
+For the AppImage, extract it once to a persistent directory to use the
+browser feature. In that directory, run the bundled launcher and load
+the extension from the extracted directory. The same AppImage can be
+used normally for the desktop app.
+
+~~~sh
+/path/to/Reword-0.1.0-x86_64.AppImage --appimage-extract
+./squashfs-root/usr/bin/reword-browser-launcher --register-browser "/path/to/browser data"
+~~~
+
+Choose `squashfs-root/usr/share/reword/browser/chromium` in the
+extension manager. When moving or updating the extraction, extract to a
+new persistent directory and rerun the registration command there.
+Use `--unregister-browser` with the same launcher to remove the manifest.
+
+To check the package without installing it or touching an existing browser
+profile, extract the `.deb` and point the private fixture at its launcher.
+
+~~~sh
+dpkg-deb --extract dist/reword_0.1.0_amd64.deb ./local-deb-root
+python3 scripts/test-native-linux.py --browser helium --browser-engine --browser-extension \
+  --browser-host ./local-deb-root/opt/reword/usr/bin/reword-browser-launcher \
+  --browser-output ./local-deb-browser-report
+~~~
+
+Use `--browser google-chrome` and the launcher under `squashfs-root` to
+check the extracted AppImage the same way.
 
 To exercise the physical X11 shortcut, build the GUI with the browser
 host option enabled and run both modes in the private desktop.

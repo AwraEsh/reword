@@ -11,7 +11,8 @@ from package_audit import (dynamic_libraries, is_elf, minimum_glibc,
 from package_provenance import DebianProvenance
 from package_qml import deploy_qml
 root=pathlib.Path(__file__).resolve().parents[1]
-build=root/'build'; dist=root/'dist'; dist.mkdir(exist_ok=True)
+build=root/'build'; dist=pathlib.Path(os.environ.get('REWORD_DIST_DIR', root/'dist')).resolve()
+dist.mkdir(parents=True,exist_ok=True)
 appdir=dist/'Reword.AppDir'
 origins={}
 def copy_runtime(source, destination):
@@ -26,6 +27,15 @@ for name in ['usr/bin','usr/lib','usr/plugins','usr/qml','usr/share/reword/dicti
  (appdir/name).mkdir(parents=True,exist_ok=True)
 shutil.copy2(build/'reword',appdir/'usr/bin/reword')
 shutil.copy2(build/'reword-native-helper',appdir/'usr/bin/reword-native-helper')
+cache=build/'CMakeCache.txt'
+browser_host=cache.is_file() and bool(re.search(
+ r'^REWORD_BROWSER_HOST:BOOL=(?:ON|TRUE|YES|Y|1)$',cache.read_text(),re.MULTILINE|re.IGNORECASE))
+if browser_host:
+ shutil.copy2(build/'reword-browser-host',appdir/'usr/bin/reword-browser-host')
+ launcher=appdir/'usr/bin/reword-browser-launcher'
+ shutil.copy2(root/'packaging/reword-browser-launcher',launcher)
+ launcher.chmod(0o755)
+ shutil.copytree(root/'browser/chromium',appdir/'usr/share/reword/browser/chromium')
 qt_prefix=pathlib.Path(os.environ.get('REWORD_QT_PREFIX',str(root/'.deps/usr')))
 if not qt_prefix.exists(): qt_prefix=pathlib.Path('/usr')
 qt_lib=qt_prefix/'lib/x86_64-linux-gnu/qt6'
@@ -80,12 +90,14 @@ third_party=DebianProvenance(extracted_root=extracted,
  'fcitxAddon':addon.exists(),'fcitxHostLibraries':addon_libraries,
  'fcitxHostPackages':addon_packages,
  'thirdParty':third_party,
+ 'browserHost':browser_host,
  'qmlModules':qml_modules,'inputContextPlugins':input_contexts,
 },indent=2)+'\n')
 shutil.copy2(root/'assets/reword.desktop',appdir/'reword.desktop')
 shutil.copy2(root/'assets/reword.svg',appdir/'reword.svg')
 (appdir/'AppRun').write_text('''#!/bin/sh
-HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+APP_RUN=$(readlink -f -- "$0") || exit 1
+HERE=${APP_RUN%/*}
 export LD_LIBRARY_PATH="$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export QT_PLUGIN_PATH="$HERE/usr/plugins"
 export QML_IMPORT_PATH="$HERE/usr/qml"
@@ -98,6 +110,8 @@ debroot=dist/'deb-root'
 if debroot.exists():shutil.rmtree(debroot)
 shutil.copytree(appdir,debroot/'opt/reword',symlinks=False)
 (debroot/'usr/bin').mkdir(parents=True);(debroot/'usr/bin/reword').symlink_to('/opt/reword/AppRun')
+if browser_host:
+ (debroot/'usr/bin/reword-browser-host').symlink_to('/opt/reword/usr/bin/reword-browser-launcher')
 (debroot/'usr/share/applications').mkdir(parents=True);shutil.copy2(root/'assets/reword.desktop',debroot/'usr/share/applications/reword.desktop')
 (debroot/'usr/share/icons/hicolor/scalable/apps').mkdir(parents=True);shutil.copy2(root/'assets/reword.svg',debroot/'usr/share/icons/hicolor/scalable/apps/reword.svg')
 dependencies=debian_dependencies(glibc,addon_packages)

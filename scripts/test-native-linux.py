@@ -38,6 +38,8 @@ def main():
     parser.add_argument("--browser", choices=("helium", "google-chrome"))
     parser.add_argument("--browser-engine", action="store_true",
                         help="Use the compiled Reword browser host")
+    parser.add_argument("--browser-host", type=Path,
+                        help="Use the browser launcher and extension from a staged Linux package")
     parser.add_argument("--browser-x11", choices=("control", "gui"),
                         help="Exercise the browser Undo chord through the owned X server")
     parser.add_argument("--browser-extension", action="store_true",
@@ -49,6 +51,12 @@ def main():
         parser.error("--browser-x11 needs --browser-engine.")
     if args.browser_extension and (not args.browser_engine or args.browser_x11):
         parser.error("--browser-extension needs --browser-engine and runs separately from --browser-x11.")
+    if args.browser_host:
+        if not args.browser_engine:
+            parser.error("--browser-host needs --browser-engine.")
+        args.browser_host = args.browser_host.resolve()
+        if not args.browser_host.is_file() or not os.access(args.browser_host, os.X_OK):
+            parser.error("--browser-host needs an executable package launcher.")
     if args.browser_output:
         if args.ibus_output or args.fixture_timing_only or args.active_app or args.active_output:
             parser.error("The browser fixture runs separately from other private probes.")
@@ -82,6 +90,8 @@ def main():
                                     "--browser", args.browser or "helium"])
                     if args.browser_engine:
                         command.append("--browser-engine")
+                    if args.browser_host:
+                        command.extend(["--browser-host", str(args.browser_host)])
                     if args.browser_x11:
                         command.extend(["--browser-x11", args.browser_x11])
                     if args.browser_extension:
@@ -215,6 +225,7 @@ def main():
                 if args.browser_x11:
                     command.extend([args.browser_x11, sys.executable])
                 env["REWORD_PROBE_EXTENSION"] = "1" if args.browser_extension else "0"
+                env["REWORD_PROBE_BROWSER_HOST"] = str(args.browser_host or "")
                 driver = spawn(command, "browser-probe")
                 result = driver.wait(timeout=65 if args.browser_x11 else 55)
                 print("PASS: private browser transport fixture." if result == 0 else

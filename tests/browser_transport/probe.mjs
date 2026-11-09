@@ -14,11 +14,19 @@ if (!root || !output || !['helium', 'google-chrome'].includes(executable)) {
     throw new Error('Expected an owned test directory, a report path and a supported test browser');
 }
 const fixture = fileURLToPath(new URL('.', import.meta.url));
-const extensionSources = fileURLToPath(new URL('../../browser/chromium/', import.meta.url));
+const packagedHost = process.env.REWORD_PROBE_BROWSER_HOST;
+const extensionSources = packagedHost ? join(dirname(packagedHost), '../share/reword/browser/chromium') :
+    fileURLToPath(new URL('../../browser/chromium/', import.meta.url));
 const extension = join(root, 'extension');
 const profile = join(root, 'profile');
 const hostName = engineHost ? 'org.reword.browser' : 'org.reword.transport_probe';
-const hostPath = engineHost || join(root, 'native-host');
+const hostPath = packagedHost || engineHost || join(root, 'native-host');
+const hostEnvironment = {...process.env};
+if (packagedHost) {
+    for (const key of ['LD_LIBRARY_PATH', 'QT_PLUGIN_PATH', 'QML_IMPORT_PATH', 'REWORD_DICTIONARY_DIR']) {
+        delete hostEnvironment[key];
+    }
+}
 const hostLog = join(root, 'host-cases');
 const extensionManifest = JSON.parse(await readFile(join(extensionSources, 'manifest.json'), 'utf8'));
 const extensionKey = engineHost ? extensionManifest.key : undefined;
@@ -26,7 +34,8 @@ const id = createHash('sha256').update(extensionKey ? Buffer.from(extensionKey, 
     .digest('hex').slice(0, 32)
     .replace(/[0-9a-f]/g, character => String.fromCharCode(97 + parseInt(character, 16)));
 const extensionOrigin = 'chrome-extension://' + id + '/';
-const result = {browser: executable, compiledEngine: Boolean(engineHost), stage: 'setup'};
+const result = {browser: executable, compiledEngine: Boolean(engineHost),
+                packagedRuntime: Boolean(packagedHost), stage: 'setup'};
 const writeJSON = (path, value) => writeFile(path, JSON.stringify(value, null, 2) + '\n');
 const page = await readFile(join(fixture, 'page.html'));
 const formObserver = await readFile(join(fixture, 'form-observer.js'));
@@ -128,7 +137,7 @@ try {
 
     if (engineHost) {
         await mkdir(profile, {mode: 0o700});
-        execFileSync(engineHost, ['--register-browser', profile], {timeout: 5000});
+        execFileSync(hostPath, ['--register-browser', profile], {timeout: 5000, env: hostEnvironment});
     } else {
         await copyFile(join(fixture, 'host.py'), hostPath);
         await chmod(hostPath, 0o700);
@@ -166,7 +175,7 @@ try {
         '--disable-sync', '--no-proxy-server', '--password-store=basic', '--ozone-platform=x11',
         '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1', 'about:blank',
     ], {
-        env: {...process.env, HOME: root, REWORD_DATA_DIR: join(root, 'reword'),
+        env: {...hostEnvironment, HOME: root, REWORD_DATA_DIR: join(root, 'reword'),
               REWORD_BROWSER_HOST_DIAGNOSTICS: '1'},
         stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'],
     });

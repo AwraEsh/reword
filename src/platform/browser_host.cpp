@@ -259,10 +259,25 @@ int main(int argc, char **argv) {
     qInstallMessageHandler([](QtMsgType, const QMessageLogContext &, const QString &) {});
     QCoreApplication app(argc, argv);
     const auto args = app.arguments();
-    if (args.size() == 3 && (args[1] == "--register-browser" || args[1] == "--unregister-browser")) {
+    const bool packaged = args.size() == 5 && args[1] == "--register-browser" &&
+                          args[3] == "--launcher";
+    if (packaged || (args.size() == 3 &&
+                     (args[1] == "--register-browser" || args[1] == "--unregister-browser"))) {
         const bool remove = args[1] == "--unregister-browser";
+        const QFileInfo executable(app.applicationFilePath());
+        auto launchPath = executable.absoluteFilePath();
+        if (packaged) {
+            const QFileInfo launcher(args[4]);
+            launchPath = launcher.canonicalFilePath();
+            if (launcher.fileName() != "reword-browser-launcher" ||
+                launcher.isSymLink() || launcher.canonicalPath() != executable.canonicalPath() ||
+                !QFileInfo(launchPath).isExecutable()) {
+                std::fputs("Use the browser launcher from the same Reword installation.\n", stderr);
+                return 2;
+            }
+        }
         try {
-            reword::registerBrowserHost(args[2], app.applicationFilePath(), remove);
+            reword::registerBrowserHost(args[2], launchPath, remove);
             std::puts(remove ? "Reword browser registration removed." : "Reword browser host registered.");
             return 0;
         } catch (const std::exception &error) {

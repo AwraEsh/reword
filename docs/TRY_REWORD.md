@@ -27,6 +27,14 @@ launch checks. A system-wide upgrade has yet to be verified.
 Wayland typing integration additionally requires the Fcitx5 addon and host setup;
 the AppImage alone does not install an input-method addon.
 
+### Try live correction in Chrome or Helium
+
+The experimental browser integration was tested on Linux X11. It requires a build with
+`REWORD_BROWSER_HOST=ON`. Register the host and load the bundled extension,
+then allow the browser in **Applications** and turn on the site from the
+extension button. The AppImage needs a persistent extraction for browser
+registration. See the [Linux package setup steps](COMPATIBILITY.md#register-from-the-linux-packages).
+
 ## First use
 
 Paste a short passage into the workspace and choose **Correct text**. Language
@@ -63,5 +71,6 @@ app again, it needs permission before correcting text there.
 
 See the [compatibility notes](COMPATIBILITY.md) for the specific fields and
 platforms checked so far. GNOME displayed all three action buttons in a desktop
-notification preview. Real correction in Telegram and Chrome, broader
-Wayland use, and extended stability testing remain open.
+notification preview. Chrome and Helium corrected and restored text in
+temporary test profiles. Regular browser profiles, Telegram, broader Wayland
+use and extended stability testing remain open.

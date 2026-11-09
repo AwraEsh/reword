@@ -40,6 +40,19 @@ with tempfile.TemporaryDirectory(prefix="reword-registration-") as temp:
     run(upgraded, "--register-browser", profile)
     assert json.loads(manifest.read_bytes())["path"] == str(upgraded)
 
+    launcher = root / "reword-browser-launcher"
+    launcher.write_text("#!/bin/sh\nexit 0\n", encoding="utf8")
+    launcher.chmod(0o755)
+    subprocess.run([str(upgraded), "--register-browser", str(profile), "--launcher", str(launcher)],
+                   check=True, capture_output=True, timeout=5)
+    assert json.loads(manifest.read_bytes())["path"] == str(launcher)
+    outsider = profile / launcher.name
+    shutil.copy2(launcher, outsider)
+    rejected = subprocess.run(
+        [str(upgraded), "--register-browser", str(profile), "--launcher", str(outsider)],
+        capture_output=True, timeout=5)
+    assert rejected.returncode != 0 and json.loads(manifest.read_bytes())["path"] == str(launcher)
+
     # A different extension's manifest must survive both operations.
     foreign = dict(installed, allowed_origins=["chrome-extension://" + "a" * 32 + "/"])
     manifest.write_text(json.dumps(foreign), encoding="utf8")

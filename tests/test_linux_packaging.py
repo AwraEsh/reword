@@ -33,6 +33,7 @@ class LinuxPackagingTest(unittest.TestCase):
         self.env = dict(os.environ, REWORD_QT_PREFIX=str(self.root / ".deps/usr"))
         self.env["PATH"] = str(self.root / "tools") + os.pathsep + os.environ["PATH"]
         self.env.pop("APPIMAGETOOL", None)
+        self.env.pop("REWORD_DIST_DIR", None)
         self.tool("ldd", "print('linux-vdso.so.1 (0x1234)')")
         self.tool("dpkg-shlibdeps", "print('shlibs:Depends=libc6 (>= 2.17), libqt6core6 (>= 6.4.2), libstdc++6 (>= 12), libfcitx5core7 (>= 5.0.21)')")
         self.tool("readelf", "print(\"Version needs section '.gnu.version_r' contains 1 entry:\"); print('  Name: GLIBC_2.39 Flags: none Version: 2')")
@@ -382,6 +383,53 @@ class LinuxPackagingTest(unittest.TestCase):
         package = self.root / "dist/reword_0.1.0_amd64.deb"
         depends = subprocess.check_output(["dpkg-deb", "-f", str(package), "Depends"], text=True)
         self.assertIn("libc6 (>= 2.39)", depends)
+
+    def test_debian_gui_launcher_resolves_its_installation_symlink(self):
+        gui = self.root / "build/reword"
+        gui.write_text("#!/bin/sh\nprintf '%s\\n' \"$QT_PLUGIN_PATH\" \"$@\"\n")
+        gui.chmod(0o755)
+        result = self.package()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        stage = self.root / "dist/deb-root"
+        command = stage / "usr/bin/reword"
+        app_run = stage / command.readlink().relative_to("/")
+        command.unlink()
+        command.symlink_to(app_run)
+        launched = subprocess.run([str(command), "--smoke-test"], text=True, capture_output=True)
+        self.assertEqual(launched.returncode, 0, launched.stderr)
+        self.assertEqual(launched.stdout.splitlines(),
+                         [str(app_run.parent / "usr/plugins"), "--smoke-test"])
+
+    def test_browser_option_stages_the_host_extension_and_stable_launcher(self):
+        cache = self.root / "build/CMakeCache.txt"
+        cache.write_text("REWORD_BROWSER_HOST:BOOL=ON\n")
+        host = self.root / "build/reword-browser-host"
+        host.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\"\n")
+        host.chmod(0o755)
+        shutil.copytree(ROOT / "browser", self.root / "browser")
+        shutil.copy2(ROOT / "packaging/reword-browser-launcher",
+                     self.root / "packaging/reword-browser-launcher")
+        result = self.package()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        app = self.root / "dist/Reword.AppDir"
+        packaged = app / "usr/bin/reword-browser-launcher"
+        self.assertTrue(packaged.is_file())
+        self.assertTrue((app / "usr/share/reword/browser/chromium/manifest.json").is_file())
+        profile = str(self.root / "Browser data")
+        output = subprocess.check_output([str(packaged), "--register-browser", profile], text=True)
+        self.assertEqual(output.splitlines(), ["--register-browser", profile, "--launcher", str(packaged)])
+        self.assertEqual((self.root / "dist/deb-root/usr/bin/reword-browser-host").readlink(),
+                         Path("/opt/reword/usr/bin/reword-browser-launcher"))
+        self.assertTrue(json.loads((app / "usr/share/reword/runtime-manifest.json").read_text())["browserHost"])
+
+    def test_disabled_browser_option_ignores_an_old_host_binary(self):
+        (self.root / "build/CMakeCache.txt").write_text("REWORD_BROWSER_HOST:BOOL=OFF\n")
+        (self.root / "build/reword-browser-host").touch()
+        result = self.package()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        app = self.root / "dist/Reword.AppDir"
+        self.assertFalse((app / "usr/bin/reword-browser-host").exists())
+        self.assertFalse((app / "usr/share/reword/browser").exists())
 
 
 if __name__ == "__main__":
