@@ -1,5 +1,36 @@
 # Current handoff — 2026-11-09
 
+## Physical browser Undo with the desktop GUI
+
+The controlled X11 probe reproduced the remaining routing failure. With
+Helium foreground and Reword's GUI absent, XTest sent the configured
+physical Undo chord and the browser restored the original text. With
+the GUI running, the same browser still corrected the word, and physical
+Pause and Resume both updated the shared store. The GUI then recorded
+receiving the physical Undo chord, while the browser did not restore
+the original. See `.deps/browser-physical-control/report.json` and
+`.deps/browser-physical-gui-red/report.json`.
+
+Use `--browser-engine --browser-x11 control` for the positive control and
+`--browser-engine --browser-x11 gui` for the failing acceptance case.
+The latter returns failure until routing is fixed. The helper validates
+the private X server and foreground window before sending a key and
+records only content-free outcomes. CDP still supplies the synthetic
+spelling input. The final repeat confirmed both results and the
+fixed-response transport control passed. Reports are
+`.deps/browser-physical-control-final/report.json`,
+`.deps/browser-physical-gui-final/report.json` and
+`.deps/browser-physical-transport-control/report.json`.
+
+Start the fix at the native Undo grab in `src/platform/linux.cpp`.
+The existing IBus route shows how to hand back only Undo. A browser
+route needs the authenticated browser host, the actual foreground
+window and a confirmed browser Undo record. Expire or clear it after
+focus loss, Pause, configuration changes, or host exit. Verify physical
+default and custom shortcuts, no double handling, and the native GTK
+and IBus controls before promoting it. Windows and normal browser
+profile registration still require separate verification.
+
 ## Browser Undo verification resumed
 
 The failing Helium run returned no correction before the form or Undo
@@ -20,8 +51,7 @@ values. See `.deps/browser-page-undo-length-helium/report.json`,
 `.deps/browser-page-undo-length-repeat/report.json` and
 `.deps/browser-page-undo-length-chrome/report.json`.
 
-The next browser gate is the configured Undo key with the desktop GUI
-running and owning the global shortcut. Normal browser profiles,
+The physical shortcut result is recorded above. Normal browser profiles,
 registration on Windows, rich editors and real-site compatibility
 remain open. Browser-host suggestion latency under load still needs
 measurement and improvement.

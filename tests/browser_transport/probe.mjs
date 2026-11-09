@@ -1,5 +1,5 @@
 // Runs inside test-native-linux.py's owned X11 and D-Bus session.
-import {execFileSync, spawn} from 'node:child_process';
+import {execFileSync, spawn, spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {chmod, copyFile, mkdir, readFile, readlink, writeFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
@@ -8,7 +8,7 @@ import {createInterface} from 'node:readline';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
 
-const [root, output, executable, engineHost] = process.argv.slice(2);
+const [root, output, executable, engineHost, x11Mode, python] = process.argv.slice(2);
 if (!root || !output || !['helium', 'google-chrome'].includes(executable)) {
     throw new Error('Expected an owned test directory, a report path and a supported test browser');
 }
@@ -88,6 +88,11 @@ async function hostCases() {
 }
 
 let browser;
+let gui;
+let guiUndoRequests = 0;
+let browserPid;
+const x11 = (pid, action) => spawnSync(python, [join(fixture, 'x11_input.py'),
+    root, String(pid), action], {stdio: 'ignore', timeout: 3500}).status === 0;
 await mkdir(output, {mode: 0o700});
 try {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -117,6 +122,22 @@ try {
         allowed_origins: [extensionOrigin],
     });
 
+    if (x11Mode === 'gui') {
+        result.stage = 'desktop-gui';
+        gui = spawn(join(dirname(engineHost), 'reword'), [], {
+            env: {...process.env, REWORD_DATA_DIR: join(root, 'reword'),
+                  QT_QPA_PLATFORM: 'xcb', QT_QUICK_BACKEND: 'software', REWORD_RETRY_DIAGNOSTICS: '1'},
+            stdio: ['ignore', 'ignore', 'pipe'],
+        });
+        gui.on('error', error => { result.guiLaunchError = error.code; });
+        createInterface({input: gui.stderr}).on('line', line => {
+            if (/^RTRY \d+ 18 -?\d+$/.test(line)) ++guiUndoRequests;
+        });
+        result.guiForeground = await waitFor(() => gui.pid && x11(gui.pid, 'foreground'), 10000);
+        if (!result.guiForeground) {
+            throw new Error('The Reword GUI did not reach the owned desktop foreground');
+        }
+    }
     const useDevToolsInstall = executable === 'google-chrome';
     result.stage = 'browser';
     browser = spawn(executable, [
@@ -154,6 +175,7 @@ try {
     if (engineHost) {
         const {processInfo} = await call('SystemInfo.getProcessInfo');
         const parent = processInfo.find(process => process.type === 'browser');
+        browserPid = parent.id;
         application = await readlink('/proc/' + parent.id + '/exe');
         setPolicy('rule', 'allow');
     }
@@ -174,6 +196,18 @@ try {
         result.hostReady = await waitFor(
             () => evaluate("document.documentElement.dataset.rewordProbeReady === 'yes'"), 7000);
         if (!result.hostReady) throw new Error('The browser host did not warm up');
+    }
+    if (x11Mode) {
+        result.x11Mode = x11Mode;
+        result.browserForeground = await waitFor(() => x11(browserPid, 'foreground'));
+        if (!result.browserForeground) throw new Error('The browser was not the active X11 window');
+    }
+    if (gui) {
+        result.stage = 'desktop-shortcuts';
+        result.guiPause = x11(browserPid, 'pause') && await waitFor(() => x11(browserPid, 'paused'));
+        result.guiResume = result.guiPause && x11(browserPid, 'pause') &&
+            await waitFor(() => x11(browserPid, 'resumed'));
+        if (!result.guiResume) throw new Error('The GUI did not handle the physical Pause shortcut');
     }
 
     const focus = (field, caret = 0) => evaluate(
@@ -379,13 +413,23 @@ try {
         result.correctionOutcome = corrected.outcome ?? 'no-outcome';
         result.pageCorrection = Object.values(result.correctionChecks).every(Boolean);
         result.correctionHostStages = result.nativeHostStages.slice(correctionStageStart);
-        await pressKey('z', 90, 3, 'KeyZ'); // CDP Alt and Ctrl bits.
+        const guiUndoBefore = guiUndoRequests;
+        if (x11Mode) {
+            result.physicalUndoSent = x11(browserPid, 'undo');
+            if (!result.physicalUndoSent) throw new Error('The physical Undo chord was not sent');
+        } else {
+            await pressKey('z', 90, 3, 'KeyZ'); // CDP Alt and Ctrl bits.
+        }
         const undone = await waitFor(async () => {
             const current = await status('undo');
             return current.value === original && current;
         });
         result.liveUndo = undone.value === original && undone.caret === 8 + misspelling.length &&
             undone.pageValue === original && undone.pageEvent === 'historyUndo' && undone.pageEvents === 2;
+        if (gui) result.guiReceivedUndo = guiUndoRequests > guiUndoBefore;
+        if (result.guiReceivedUndo && result.liveUndo) {
+            throw new Error('The physical Undo chord reached both handlers');
+        }
         await focus('veto', 7);
         await typeWord();
         const vetoed = await outcome('veto');
@@ -476,6 +520,7 @@ try {
     process.exitCode = 1;
 } finally {
     if (browser && browser.exitCode === null && browser.signalCode === null) browser.kill();
+    if (gui && gui.exitCode === null && gui.signalCode === null) gui.kill();
     server.close();
     await writeJSON(join(output, 'report.json'), result);
 }

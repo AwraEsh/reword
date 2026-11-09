@@ -38,9 +38,13 @@ def main():
     parser.add_argument("--browser", choices=("helium", "google-chrome"))
     parser.add_argument("--browser-engine", action="store_true",
                         help="Use the compiled Reword browser host")
+    parser.add_argument("--browser-x11", choices=("control", "gui"),
+                        help="Exercise the browser Undo chord through the owned X server")
     args = parser.parse_args()
     if (args.browser or args.browser_engine) and not args.browser_output:
         parser.error("Browser options need --browser-output.")
+    if args.browser_x11 and not args.browser_engine:
+        parser.error("--browser-x11 needs --browser-engine.")
     if args.browser_output:
         if args.ibus_output or args.fixture_timing_only or args.active_app or args.active_output:
             parser.error("The browser fixture runs separately from other private probes.")
@@ -74,6 +78,8 @@ def main():
                                     "--browser", args.browser or "helium"])
                     if args.browser_engine:
                         command.append("--browser-engine")
+                    if args.browser_x11:
+                        command.extend(["--browser-x11", args.browser_x11])
                 if args.ibus_output:
                     command.extend(["--ibus-output", args.ibus_output])
                     if args.ibus_engine:
@@ -170,35 +176,22 @@ def main():
                                   file=sys.stderr, flush=True)
                     raise RuntimeError("Private window manager did not become ready.")
                 time.sleep(.05)
-            if args.browser_output:
-                command = ["node", str(ROOT / "tests/browser_transport/probe.mjs"),
-                           str(folder), args.browser_output, args.browser]
-                if args.browser_engine:
-                    command.append(str(ROOT / "build/reword-browser-host"))
-                driver = spawn(command, "browser-probe")
-                result = driver.wait(timeout=55)
-                print("PASS: private browser transport fixture." if result == 0 else
-                      "FAIL: private browser transport fixture. Inspect its report.", flush=True)
-                return result
-            bus.call_sync("org.a11y.Bus", "/org/a11y/bus", "org.freedesktop.DBus.Properties", "Set",
-                          GLib.Variant("(ssv)", ("org.a11y.Status", "IsEnabled", GLib.Variant("b", True))),
-                          None, Gio.DBusCallFlags.NONE, 3000, None)
-            lock_ready = folder / "lock-ready"
-            lock = spawn([sys.executable, str(ROOT / "tests/test_lock_service.py"),
-                          str(lock_ready)], "lock")
-            for _ in range(40):
-                if lock.poll() is not None:
-                    raise RuntimeError("Controlled lock service exited during startup.")
-                if lock_ready.is_file():
-                    break
-                time.sleep(.05)
-            else:
-                raise RuntimeError("Controlled lock service failed to start.")
-            subprocess.run([sys.executable, str(ROOT / "tests/fixture_timing_probe.py"),
-                            str(ROOT / "build/reword_fixture")], env=env, timeout=25, check=True)
-            if args.fixture_timing_only:
-                return 0
-            if args.active_app or args.ibus_output:
+            if not args.browser_output or args.browser_x11:
+                bus.call_sync("org.a11y.Bus", "/org/a11y/bus", "org.freedesktop.DBus.Properties", "Set",
+                              GLib.Variant("(ssv)", ("org.a11y.Status", "IsEnabled", GLib.Variant("b", True))),
+                              None, Gio.DBusCallFlags.NONE, 3000, None)
+                lock_ready = folder / "lock-ready"
+                lock = spawn([sys.executable, str(ROOT / "tests/test_lock_service.py"),
+                              str(lock_ready)], "lock")
+                for _ in range(40):
+                    if lock.poll() is not None:
+                        raise RuntimeError("Controlled lock service exited during startup.")
+                    if lock_ready.is_file():
+                        break
+                    time.sleep(.05)
+                else:
+                    raise RuntimeError("Controlled lock service failed to start.")
+            if args.active_app or args.ibus_output or args.browser_x11:
                 from process_metrics import sample_process
                 context = {key: env[key] for key in
                            ("DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR")}
@@ -208,6 +201,22 @@ def main():
                 with context_file.open("x", encoding="utf-8") as stream:
                     json.dump(context, stream)
                 context_file.chmod(0o600)
+            if args.browser_output:
+                command = ["node", str(ROOT / "tests/browser_transport/probe.mjs"),
+                           str(folder), args.browser_output, args.browser]
+                if args.browser_engine:
+                    command.append(str(ROOT / "build/reword-browser-host"))
+                if args.browser_x11:
+                    command.extend([args.browser_x11, sys.executable])
+                driver = spawn(command, "browser-probe")
+                result = driver.wait(timeout=65 if args.browser_x11 else 55)
+                print("PASS: private browser transport fixture." if result == 0 else
+                      "FAIL: private browser transport fixture. Inspect its report.", flush=True)
+                return result
+            subprocess.run([sys.executable, str(ROOT / "tests/fixture_timing_probe.py"),
+                            str(ROOT / "build/reword_fixture")], env=env, timeout=25, check=True)
+            if args.fixture_timing_only:
+                return 0
             if args.ibus_output:
                 command = [sys.executable, str(ROOT / "scripts/ibus-x11-probe.py"),
                            "--owned-directory", str(folder), "--output", args.ibus_output]
