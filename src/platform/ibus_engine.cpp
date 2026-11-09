@@ -28,6 +28,7 @@ using namespace std::chrono_literals;
 constexpr auto witnessLifetime = 250ms;
 constexpr auto keyBudget = 40ms;
 constexpr int surroundingByteLimit = 200000;
+constexpr char componentName[] = "org.freedesktop.IBus.Reword";
 constexpr char engineName[] = "reword-x11";
 
 enum class Trace {
@@ -661,8 +662,9 @@ void reword_ibus_engine_class_init(RewordIBusEngineClass *klass) {
 int main(int argc, char **argv) {
     umask(0077);
     QCoreApplication app(argc, argv);
-    if (qEnvironmentVariable("XDG_SESSION_TYPE") != "x11" ||
-        !app.arguments().contains("--register"))
+    const auto arguments = app.arguments();
+    if (qEnvironmentVariable("XDG_SESSION_TYPE") != "x11" || arguments.size() != 2 ||
+        (arguments[1] != "--ibus" && arguments[1] != "--register"))
         return 2;
     try {
         auto directory = qEnvironmentVariable("REWORD_DATA_DIR");
@@ -686,13 +688,21 @@ int main(int argc, char **argv) {
         std::unique_ptr<IBusFactory, decltype(&g_object_unref)> factory(
             ibus_factory_new(ibus_bus_get_connection(bus.get())), g_object_unref);
         ibus_factory_add_engine(factory.get(), engineName, reword_ibus_engine_get_type());
-        std::unique_ptr<IBusComponent, decltype(&g_object_unref)> component(
-            ibus_component_new("org.freedesktop.IBus.Reword", "Reword X11 input method",
-                               "0.1.0", "", "Reword", "", "", ""), g_object_unref);
-        ibus_component_add_engine(component.get(), ibus_engine_desc_new(
-            engineName, "Reword (experimental)", "Offline typing correction", "", "",
-            "Reword", "", "default"));
-        if (!ibus_bus_register_component(bus.get(), component.get())) {
+        bool registered;
+        if (arguments[1] == "--ibus") {
+            registered = ibus_bus_request_name(bus.get(), componentName,
+                                               IBUS_BUS_NAME_FLAG_DO_NOT_QUEUE) ==
+                         IBUS_BUS_REQUEST_NAME_REPLY_PRIMARY_OWNER;
+        } else {
+            std::unique_ptr<IBusComponent, decltype(&g_object_unref)> component(
+                ibus_component_new(componentName, "Reword X11 input method",
+                                   "0.1.0", "", "Reword", "", "", ""), g_object_unref);
+            ibus_component_add_engine(component.get(), ibus_engine_desc_new(
+                engineName, "Reword (experimental)", "Offline typing correction", "", "",
+                "Reword", "", "default"));
+            registered = ibus_bus_register_component(bus.get(), component.get());
+        }
+        if (!registered) {
             qWarning("Reword IBus could not register the engine.");
             return 1;
         }

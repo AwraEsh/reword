@@ -27,6 +27,17 @@ launch checks. A system-wide upgrade has yet to be verified.
 Wayland typing integration additionally requires the Fcitx5 addon and host setup;
 the AppImage alone does not install an input-method addon.
 
+### Try live correction in GNOME Text Editor on X11
+
+Use a Debian package built with `REWORD_IBUS=ON` on an X11 session that
+uses IBus. Debian provides the IBus daemon and GTK4 integration in `ibus`
+and `ibus-gtk4`. Sign out and back in after installing the package, then
+look for **Reword (X11)** under English in **Settings → Keyboard → Input
+Sources**. Select that source, run Reword and allow GNOME Text Editor in
+**Applications**. To stop using the engine, switch back to your previous
+input source. Reword uses the same application rules after switching.
+[GNOME keyboard settings](https://help.gnome.org/gnome-help/keyboard-layouts.html).
+
 ### Try live correction in Chrome or Helium
 
 The experimental browser integration was tested on Linux X11. It requires a build with

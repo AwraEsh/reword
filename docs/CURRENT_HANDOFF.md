@@ -1,5 +1,37 @@
 # Current handoff — 2026-11-09
 
+## Debian IBus component for GNOME Text Editor
+
+Debian packages built with `REWORD_IBUS=ON` ship the `Reword (X11)` input
+source and a launcher with the bundled runtime. IBus starts the engine
+on selection through its normal component registry. The user adds the input
+source after signing in again, and Reword uses the existing settings. The
+development `--register` entry point still works through direct registration.
+System input-source registration is provided by the Debian package.
+
+The packaging regression reproduced the missing component before the fix.
+All 34 Linux packaging unit cases passed after the fix. The private X11
+probe discovered the descriptor from the extracted `.deb` and confirmed
+that selecting the input source started the packaged engine. The packaged
+GUI and GNOME Text Editor passed English and Persian correction, language
+isolation, first/second/third retry, Undo, Pause and Resume, disabled rules,
+and the password check. See `.deps/ibus-package-check/gnome-editor/report.json`.
+The local `.deb` candidate used zstd compression. The test used an extracted
+package and private IBus registry. GNOME Settings discovery and a normal
+desktop installation still need verification.
+
+The development-mode regression reached every stage. Its first run missed
+the saved-file assertion after disabling the editor rule, while the engine
+trace recorded policy rejection and the following saved document contained
+the unchanged typo. The cause of the missed observation remains unverified.
+The same probe passed on repeat. Reports are under
+`.deps/ibus-package-check/development-regression/` and
+`.deps/ibus-package-check/development-repeat/`.
+
+The rebuilt AppImage passed the GUI extract-and-run smoke test. CTest
+passed the `packaging` and `browser_registration` groups. Both Linux
+artifacts and their verified `SHA256SUMS` are in `.deps/ibus-package-check/`.
+
 ## Linux package browser runtime
 
 The Linux packaging script includes the host and extension when
@@ -28,9 +60,8 @@ fresh data directories. The artifacts and verified `SHA256SUMS` are in
 `.deps/browser-packages-verified/`.
 
 Normal desktop installation and browser-profile setup, the Windows native
-host, GNOME Text Editor input-method distribution, and YukiGram remain
-open. The installed Preview and normal browser profiles were outside
-these tests.
+host, and YukiGram remain open. The installed Preview and normal browser
+profiles were outside these tests.
 
 ## Linux browser host registration
 

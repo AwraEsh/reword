@@ -7,12 +7,14 @@ import os
 from pathlib import Path
 import re
 import select
+import shlex
 import shutil
 import sqlite3
 from contextlib import closing
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 
 from active_desktop import OwnedDesktop
 from active_fixture import FixtureClient
@@ -107,17 +109,18 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--reword-engine", action="store_true")
     parser.add_argument("--reword-gui", action="store_true")
+    parser.add_argument("--package", type=Path)
     args = parser.parse_args()
     os.umask(0o077)
     root = args.owned_directory
     desktop = OwnedDesktop(root)
     try:
-        return run_probe(desktop, root, args.output, args.reword_engine, args.reword_gui)
+        return run_probe(desktop, root, args.output, args.reword_engine, args.reword_gui, args.package)
     finally:
         desktop.close()
 
 
-def run_probe(desktop, root, output, reword_engine, reword_gui):
+def run_probe(desktop, root, output, reword_engine, reword_gui, package):
     output.mkdir(mode=0o700)
     address = f"unix:path={root}/runtime/reword-ibus"
     env = dict(os.environ, IBUS_ADDRESS=address, GTK_IM_MODULE="ibus", QT_IM_MODULE="ibus",
@@ -128,9 +131,10 @@ def run_probe(desktop, root, output, reword_engine, reword_gui):
     result = {}
     gui = None
 
-    def spawn(argv, tag, **kwargs):
+    def spawn(argv, tag, *, environment=None, **kwargs):
         with (output / (tag + ".log")).open("wb") as log:
-            process = subprocess.Popen(argv, env=env, stderr=log, **kwargs)
+            process = subprocess.Popen(argv, env=environment if environment is not None else env,
+                                       stderr=log, **kwargs)
         children.append(process)
         return process
 
@@ -179,11 +183,33 @@ def run_probe(desktop, root, output, reword_engine, reword_gui):
     try:
         helper = spawn([str(ROOT / "build/reword-native-helper")], "native-helper",
                        stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        spawn(["ibus-daemon", "--single", "--panel=disable", "--emoji-extension=disable",
-               "--config=disable", "--address=" + address], "ibus-daemon")
+        daemon_command = ["ibus-daemon", "--single", "--panel=disable", "--emoji-extension=disable",
+                          "--config=disable", "--address=" + address]
+        package_environment = {key: value for key, value in env.items() if key not in
+                               ("LD_LIBRARY_PATH", "QT_PLUGIN_PATH", "QML_IMPORT_PATH", "REWORD_DICTIONARY_DIR")}
+        engine_log = output / "engine.log"
+        if package:
+            component_dir = root / "ibus-components"
+            component_dir.mkdir()
+            component = ET.parse(package / "usr/share/ibus/component/reword.xml")
+            executable = component.find("exec")
+            command, *arguments = shlex.split(executable.text)
+            executable.text = shlex.join([str(package / Path(command).relative_to("/")), *arguments])
+            component.write(component_dir / "reword.xml", encoding="utf-8", xml_declaration=True)
+            package_environment["IBUS_COMPONENT_PATH"] = str(component_dir) + ":/usr/share/ibus/component"
+            daemon_command.extend(["--cache=none", "--verbose"])
+            engine_log = output / "ibus-daemon.log"
+        daemon = spawn(daemon_command, "ibus-daemon", environment=package_environment if package else None)
         if not wait_for(lambda: (root / "runtime/reword-ibus").is_socket(), 5):
             raise RuntimeError("Private IBus socket did not appear")
-        if reword_engine:
+        engine = None
+        if package:
+            name = "reword-x11"
+            engines = subprocess.check_output(["ibus", "list-engine"], env=env, text=True, timeout=5)
+            result["packaged_component_discovered"] = any(
+                line.strip().startswith(name + " - ") for line in engines.splitlines())
+            result["packaged_engine_starts_on_selection"] = not (root / "reword/reword.sqlite").exists()
+        elif reword_engine:
             engine = spawn([str(ROOT / "build/reword-ibus"), "--register"], "engine")
             name = "reword-x11"
         else:
@@ -192,7 +218,9 @@ def run_probe(desktop, root, output, reword_engine, reword_gui):
             name = "reword-owned-probe"
 
         def select_engine():
-            if engine.poll() is not None:
+            if daemon.poll() is not None:
+                raise RuntimeError("Private IBus daemon stopped before selection")
+            if engine is not None and engine.poll() is not None:
                 result["engine_exit"] = engine.returncode
                 raise RuntimeError("Private engine stopped before selection")
             with (output / "engine-selection.log").open("wb") as log:
@@ -207,11 +235,19 @@ def run_probe(desktop, root, output, reword_engine, reword_gui):
         result["stage"] = "select-engine"
         if not wait_for(select_engine, 12):
             raise RuntimeError("Private engine did not register")
+        if package:
+            result["packaged_engine_activated"] = wait_for(
+                lambda: b"Reword IBus engine registered." in engine_log.read_bytes(), 3)
 
         if reword_gui:
             env.update(QT_QPA_PLATFORM="xcb", QT_QUICK_BACKEND="software",
                        REWORD_RETRY_DIAGNOSTICS="1")
-            gui = spawn([str(ROOT / "build/reword")], "reword-gui")
+            if package:
+                package_environment.update(QT_QPA_PLATFORM="xcb", QT_QUICK_BACKEND="software",
+                                           REWORD_RETRY_DIAGNOSTICS="1")
+                gui = spawn([str(package / "opt/reword/AppRun")], "reword-gui", environment=package_environment)
+            else:
+                gui = spawn([str(ROOT / "build/reword")], "reword-gui")
             result["gui_active"] = wait_for(lambda: active_process(desktop, gui), 10)
             if not result["gui_active"]:
                 raise RuntimeError("Reword GUI did not start")
@@ -285,7 +321,7 @@ def run_probe(desktop, root, output, reword_engine, reword_gui):
                 result["editor_second_preserved"] = rewrite("teh")
                 result["editor_third_corrected"] = rewrite("the")
                 def live_writes():
-                    return (output / "engine.log").read_bytes().splitlines().count(b"IBUS 13")
+                    return engine_log.read_bytes().splitlines().count(b"IBUS 13")
 
                 # Save itself can invalidate the last IBus snapshot. Exercise
                 # Undo immediately after a fresh correction without saving first.
@@ -454,6 +490,10 @@ setInterval(() => {
                                ("gui_active", "gui_remained_running", "gui_single_line_undo",
                                 "gui_pause_in_editor", "gui_resume_in_editor",
                                 "gui_return_correction", "gui_return_undo"))
+    if package:
+        passed = passed and all(result.get(key) for key in
+                               ("packaged_component_discovered", "packaged_engine_starts_on_selection",
+                                "packaged_engine_activated"))
     return 0 if passed else 1
 
 

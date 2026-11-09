@@ -17,6 +17,7 @@ This table describes tested fixtures, not blanket support for applications.
 | Debian X11 / YukiGram 7.1.5.0 (Flatpak) | The user reported live correction did not run with Automatic selected. | The message field has no confirmed writable native path. |
 | Private Debian X11 / IBus 1.5.32 | A fixed-word test engine corrected text in GNOME Text Editor 48.3 and preserved the reference text. In Helium, the test engine corrected its own preedit composition before committing it. The HTML password control kept its original text. | Diagnostic engine only. Helium sent key events and accepted composition but did not send surrounding text or report field purpose to the engine during the test. YukiGram and the production correction policies remain unverified on this path. |
 | Private Debian X11 / compiled Reword IBus engine and GUI | GNOME Text Editor 48.3 corrected English and Persian. Independent language switches, alternating retry, Pause and Resume, per-app denial, 25 ms English key spacing, and live Undo passed. The native Undo also worked in a GTK single-line control before and after the editor. | Opt-in development target. Undo requires a current surrounding-text observation. Selected-text correction, live editing in Helium and YukiGram, and normal-desktop installation remain open. |
+| Private Debian X11 / packaged Reword IBus component | IBus discovered the descriptor from an extracted `.deb` and launched the engine when selected. The packaged GUI and GNOME Text Editor passed the correction, language, retry, Undo, Pause and permission checks. | The private registry points at the extracted package. GNOME Settings discovery, normal desktop installation and upgrade, and selected-text correction in the editor remain open. |
 | GNOME Shell consent | The user saw a native demo banner with Yes, Not now and No. The app's action handling, reminder and stale-response checks run on a private D-Bus test session. | The demo did not alter permissions. Windows banner appearance still needs a desktop check. |
 | Controlled Linux Xvfb / Openbox | CI at 03069a1 passed build, four automated suites, GUI launch and three native GTK/service probe cycles. | Synthetic single-line fields; no physical lock-screen proof. |
 | Linux without accessibility bus | Helper reports unavailable; internal workspace remains usable. | No native correction. |
@@ -90,6 +91,25 @@ python3 scripts/test-native-linux.py --ibus-engine --ibus-gui --ibus-output ./lo
 The driver uses a separate profile, store, X server and IBus daemon. It
 checks the first three attempts, Pause and Resume, per-app denial, Undo
 routing and normal typing when the adapter cannot verify a target.
+
+The optional Debian IBus component is installed under `/usr/share/ibus/component`.
+It is discovered by IBus and starts when selected as an input source. Debian
+packages built with `REWORD_IBUS=ON` suggest `ibus` and `ibus-gtk4`. The
+Debian package provides system input-source registration.
+[IBus component registry](https://ibus.github.io/docs/ibus-1.5/IBusRegistry.html).
+
+To exercise that registration and the packaged GUI in the private desktop:
+
+~~~sh
+dpkg-deb --extract dist/reword_0.1.0_amd64.deb ./local-deb-root
+python3 scripts/test-native-linux.py --ibus-engine --ibus-gui \
+  --ibus-package ./local-deb-root --ibus-output ./local-ibus-package-report
+~~~
+
+The driver puts a copy of the installed descriptor in the private IBus
+registry and points its launcher at the extracted package. The GUI and
+engine use the bundled libraries. Input-source selection is confined to
+the private X server and IBus daemon.
 
 To reproduce the browser transport fixture, use Node.js, Python 3, and the
 installed browser in addition to the private X11 dependencies:

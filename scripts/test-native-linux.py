@@ -34,6 +34,8 @@ def main():
                         help="Use the compiled Reword engine instead of the fixed-word IBus probe")
     parser.add_argument("--ibus-gui", action="store_true",
                         help="Include the Reword GUI and its native shortcut grabs")
+    parser.add_argument("--ibus-package", type=Path,
+                        help="Activate the engine through the component in an extracted Debian package")
     parser.add_argument("--browser-output", help="Run the private browser transport fixture")
     parser.add_argument("--browser", choices=("helium", "google-chrome"))
     parser.add_argument("--browser-engine", action="store_true",
@@ -63,6 +65,10 @@ def main():
         args.browser_output = str(Path(args.browser_output).resolve())
     if args.ibus_gui and not args.ibus_engine:
         parser.error("The IBus GUI test needs --ibus-engine.")
+    if args.ibus_package:
+        args.ibus_package = args.ibus_package.resolve()
+        if not args.ibus_engine or not (args.ibus_package / "usr/share/ibus/component/reword.xml").is_file():
+            parser.error("--ibus-package needs --ibus-engine and an extracted IBus-enabled Debian package.")
     if args.ibus_engine and not args.ibus_output:
         parser.error("The compiled IBus engine test needs --ibus-output.")
     if args.ibus_output:
@@ -102,6 +108,8 @@ def main():
                         command.append("--ibus-engine")
                     if args.ibus_gui:
                         command.append("--ibus-gui")
+                    if args.ibus_package:
+                        command.extend(["--ibus-package", str(args.ibus_package)])
                 if args.active_app:
                     command.extend(["--active-app", args.active_app, "--active-seconds",
                                     str(args.active_seconds), "--active-output", args.active_output])
@@ -242,6 +250,8 @@ def main():
                     command.append("--reword-engine")
                 if args.ibus_gui:
                     command.append("--reword-gui")
+                if args.ibus_package:
+                    command.extend(["--package", str(args.ibus_package)])
                 driver = spawn(command, "ibus-probe")
                 result = driver.wait(timeout=80)
                 print("PASS: private IBus editing probe." if result == 0 else
