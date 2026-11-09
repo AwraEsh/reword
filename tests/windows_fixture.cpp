@@ -3,6 +3,7 @@
 #include <QString>
 #include <cstdio>
 #include <string>
+#include <string_view>
 #include <vector>
 static HWND edit = nullptr;
 static std::string pending;
@@ -58,7 +59,45 @@ static void command(HWND window) {
         }
     }
 }
+static bool clickFixture(DWORD expectedProcess) {
+    struct Search { DWORD process; HWND window; } search{expectedProcess, nullptr};
+    EnumWindows([](HWND window, LPARAM context) -> BOOL {
+        auto &search = *reinterpret_cast<Search *>(context);
+        DWORD process = 0;
+        GetWindowThreadProcessId(window, &process);
+        wchar_t name[64]{};
+        if (process == search.process && IsWindowVisible(window) && GetClassNameW(window, name, 64) &&
+            std::wstring_view(name) == L"RewordNativeFixture") {
+            search.window = window;
+            return FALSE;
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&search));
+    if (!search.window)
+        return false;
+    const auto field = FindWindowExW(search.window, nullptr, L"Edit", nullptr);
+    RECT bounds{};
+    if (!field || !GetWindowRect(field, &bounds) ||
+        !SetWindowPos(search.window, HWND_TOPMOST, 0, 0, 0, 0,
+                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE))
+        return false;
+    const POINT point{(bounds.left + bounds.right) / 2, (bounds.top + bounds.bottom) / 2};
+    INPUT click[2]{};
+    click[0].type = click[1].type = INPUT_MOUSE;
+    click[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+    click[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
+    const bool sent = GetAncestor(WindowFromPoint(point), GA_ROOT) == search.window &&
+        SetCursorPos(point.x, point.y) && SendInput(2, click, sizeof(INPUT)) == 2;
+    for (int attempt = 0; sent && GetForegroundWindow() != search.window && attempt < 25; ++attempt)
+        Sleep(10);
+    const bool focused = GetForegroundWindow() == search.window;
+    SetWindowPos(search.window, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    return sent && focused;
+}
+
 static int sendTestInput(DWORD expectedProcess, const QString &action) {
+    if (expectedProcess && action == "focus-fixture")
+        return clickFixture(expectedProcess) ? 0 : 1;
     DWORD foreground = 0;
     GetWindowThreadProcessId(GetForegroundWindow(), &foreground);
     if (!expectedProcess || foreground != expectedProcess)

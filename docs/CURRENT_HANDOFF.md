@@ -21,6 +21,12 @@ an active reservation, and the return of native correction and Undo after
 focusing a Win32 editor. Normal desktop setup and the Windows installer
 integration remain separate acceptance steps.
 
+Run 42688334107 passed the Chrome and Pause cases. The next assertion
+stopped when Windows denied foreground activation to the newly launched
+Win32 fixture. The probe now clicks the verified fixture window to exercise
+the transition using native input. The first report is preserved in
+`.deps/windows-undo-candidate-6544901/report.json`.
+
 ## Windows browser native messaging host
 
 `REWORD_BROWSER_HOST=ON` builds the development host on Windows. Its

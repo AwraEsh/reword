@@ -742,8 +742,9 @@ try {
         createInterface({input: nativeEditor.stdout}).on('line', line => {
             if (line.startsWith('TEXT:')) observed = line.slice(5);
         });
-        if (!await waitFor(() => nativeEditor.pid && windowsInput(nativeEditor.pid, 'foreground'), 5000))
-            throw new Error('The Windows edit fixture did not receive focus');
+        if (!await waitFor(() => nativeEditor.pid && windowsInput(nativeEditor.pid, 'focus-fixture'), 5000) ||
+            !await waitFor(() => windowsInput(nativeEditor.pid, 'foreground'), 5000))
+            throw new Error('The Windows edit fixture did not receive focus after a verified click');
         const fieldContains = expected => waitFor(() => {
             nativeEditor.stdin.write('snapshot\n');
             return observed === expected;
