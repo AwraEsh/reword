@@ -177,7 +177,7 @@ jobs:
           $root = Join-Path $env:RUNNER_TEMP "reword-browser-$([Guid]::NewGuid())"
           New-Item -ItemType Directory -Path $root, 'dist' -Force | Out-Null
           $hostExe = (Resolve-Path build/Release/reword-browser-host.exe).Path
-          node tests/browser_transport/probe.mjs $root dist/windows-browser-report $chrome $hostExe
+          node tests/browser_transport/probe.mjs $root dist/windows-browser-report $chrome $hostExe gui
           if ($LASTEXITCODE -ne 0) {
             if (Test-Path dist/windows-browser-report/report.json) { Get-Content dist/windows-browser-report/report.json }
             throw 'The Windows Chrome probe failed'

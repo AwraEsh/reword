@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <cstdio>
 #ifndef _WIN32
 #include <sys/stat.h>
 #endif
@@ -31,6 +32,8 @@ int main(int argc, char **argv) {
             store.setCorrectionOption(key, value);
         } else if (key == "pauseUntil" && (value == "-1" || value == "0")) {
             store.pause(value.toInt());
+        } else if (key == "pauseUntil" && value == "get") {
+            std::puts(store.paused() ? "paused" : "running");
         } else {
             return 2;
         }

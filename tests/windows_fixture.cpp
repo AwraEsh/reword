@@ -3,6 +3,7 @@
 #include <QString>
 #include <cstdio>
 #include <string>
+#include <vector>
 static HWND edit = nullptr;
 static std::string pending;
 static LRESULT CALLBACK windowProc(HWND w, UINT message, WPARAM a, LPARAM b) {
@@ -44,6 +45,11 @@ static void command(HWND window) {
         } else if (s == "sync") {
             std::fputs("READY\n", stdout);
             std::fflush(stdout);
+        } else if (s == "snapshot") {
+            wchar_t text[64]{};
+            GetWindowTextW(edit, text, 64);
+            std::printf("TEXT:%s\n", QString::fromWCharArray(text).toUtf8().constData());
+            std::fflush(stdout);
         } else if (s.rfind("text:", 0) == 0) {
             auto text = QString::fromUtf8(s.substr(5));
             SendMessageW(edit, EM_SETLIMITTEXT, 200001, 0);
@@ -52,7 +58,43 @@ static void command(HWND window) {
         }
     }
 }
-int main() {
+static int sendTestInput(DWORD expectedProcess, const QString &action) {
+    DWORD foreground = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &foreground);
+    if (!expectedProcess || foreground != expectedProcess)
+        return 1;
+    if (action == "foreground")
+        return 0;
+    std::vector<WORD> chord;
+    if (action == "space")
+        chord = {VK_SPACE};
+    else if (action == "undo")
+        chord = {VK_CONTROL, VK_MENU, 'Z'};
+    else if (action == "custom-undo")
+        chord = {VK_CONTROL, VK_MENU, 'K'};
+    else if (action == "pause")
+        chord = {VK_CONTROL, VK_MENU, VK_SHIFT, 'P'};
+    else
+        return 2;
+    INPUT keys[8]{};
+    size_t count = 0;
+    for (WORD key : chord) {
+        keys[count].type = INPUT_KEYBOARD;
+        keys[count++].ki.wVk = key;
+    }
+    for (auto key = chord.rbegin(); key != chord.rend(); ++key) {
+        keys[count].type = INPUT_KEYBOARD;
+        keys[count].ki.dwFlags = KEYEVENTF_KEYUP;
+        keys[count++].ki.wVk = *key;
+    }
+    return SendInput(UINT(count), keys, sizeof(INPUT)) == count ? 0 : 1;
+}
+
+int main(int argc, char **argv) {
+    if (argc == 4 && std::string(argv[1]) == "--input")
+        return sendTestInput(QString::fromLatin1(argv[2]).toUInt(), QString::fromLatin1(argv[3]));
+    if (argc != 1)
+        return 2;
     WNDCLASSW cls{};
     cls.lpfnWndProc = windowProc;
     cls.hInstance = GetModuleHandleW(nullptr);

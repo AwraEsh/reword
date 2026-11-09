@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {existsSync} from 'node:fs';
 import {chmod, copyFile, cp, mkdir, readFile, readlink, writeFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
-import {dirname, join} from 'node:path';
+import {dirname, join, normalize} from 'node:path';
 import {createInterface} from 'node:readline';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
@@ -12,7 +12,8 @@ import {fileURLToPath} from 'node:url';
 const [root, output, executable, engineHost, x11Mode, python] = process.argv.slice(2);
 const production = process.env.REWORD_PROBE_EXTENSION === '1';
 const windows = process.platform === 'win32';
-const supported = windows ? engineHost && production && !x11Mode && /[\\/]chrome\.exe$/i.test(executable ?? '') :
+const windowsGui = windows && x11Mode === 'gui';
+const supported = windows ? engineHost && production && (!x11Mode || windowsGui) && /[\\/]chrome\.exe$/i.test(executable ?? '') :
     ['helium', 'google-chrome'].includes(executable);
 if (!root || !output || !supported) {
     throw new Error('Expected an owned test directory, a report path and a supported test browser');
@@ -107,11 +108,18 @@ async function hostCases() {
 
 let browser;
 let gui;
+let nativeEditor;
 let guiUndoRequests = 0;
 let browserPid;
 let windowsRegistered = false;
 const x11 = (pid, action) => spawnSync(python, [join(fixture, 'x11_input.py'),
     root, String(pid), action], {stdio: 'ignore', timeout: 3500}).status === 0;
+const nativeFixture = windowsGui ? join(dirname(engineHost), 'reword_win_fixture.exe') : null;
+const windowsInput = (pid, action) => spawnSync(nativeFixture, ['--input', String(pid), action],
+    {stdio: 'ignore', timeout: 3500}).status === 0;
+const policyFor = (application, ...change) => execFileSync(
+    join(dirname(engineHost), 'reword_browser_policy_fixture' + (windows ? '.exe' : '')),
+    [join(root, 'reword'), application, ...change], {encoding: 'utf8', timeout: 5000}).trim();
 await mkdir(output, {mode: 0o700});
 try {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -170,16 +178,19 @@ try {
 
     if (x11Mode === 'gui') {
         result.stage = 'desktop-gui';
-        gui = spawn(join(dirname(engineHost), 'reword'), [], {
+        if (windowsGui) policyFor(normalize(executable), 'rule', 'allow');
+        gui = spawn(join(dirname(engineHost), windowsGui ? 'reword.exe' : 'reword'), [], {
             env: {...process.env, REWORD_DATA_DIR: join(root, 'reword'),
-                  QT_QPA_PLATFORM: 'xcb', QT_QUICK_BACKEND: 'software', REWORD_RETRY_DIAGNOSTICS: '1'},
+                  QT_QPA_PLATFORM: windowsGui ? 'windows' : 'xcb', QT_QUICK_BACKEND: 'software',
+                  REWORD_RETRY_DIAGNOSTICS: '1'},
             stdio: ['ignore', 'ignore', 'pipe'],
         });
         gui.on('error', error => { result.guiLaunchError = error.code; });
         createInterface({input: gui.stderr}).on('line', line => {
             if (/^RTRY \d+ 18 -?\d+$/.test(line)) ++guiUndoRequests;
         });
-        result.guiForeground = await waitFor(() => gui.pid && x11(gui.pid, 'foreground'), 10000);
+        result.guiForeground = await waitFor(() => gui.pid &&
+            (windowsGui ? windowsInput(gui.pid, 'foreground') : x11(gui.pid, 'foreground')), 10000);
         if (!result.guiForeground) {
             throw new Error('The Reword GUI did not reach the owned desktop foreground');
         }
@@ -215,9 +226,8 @@ try {
         throw new Error('Unexpected extension identity');
     }
     let application;
-    const setPolicy = (...change) => execFileSync(
-        join(dirname(engineHost), 'reword_browser_policy_fixture' + (windows ? '.exe' : '')),
-        [join(root, 'reword'), application, ...change], {timeout: 5000});
+    const setPolicy = (...change) => policyFor(application, ...change);
+    const isPaused = () => setPolicy('pauseUntil', 'get') === 'paused';
     if (engineHost) {
         const {processInfo} = await call('SystemInfo.getProcessInfo');
         const parent = processInfo.find(process => process.type === 'browser');
@@ -245,12 +255,20 @@ try {
             () => evaluate("document.documentElement.dataset.rewordProbeReady === 'yes'"), 7000);
         if (!result.hostReady) throw new Error('The browser host did not warm up');
     }
-    if (x11Mode) {
+    if (x11Mode && !windowsGui) {
         result.x11Mode = x11Mode;
         result.browserForeground = await waitFor(() => x11(browserPid, 'foreground'));
         if (!result.browserForeground) throw new Error('The browser was not the active X11 window');
     }
-    if (gui) {
+    if (windowsGui) {
+        result.stage = 'desktop-shortcuts';
+        result.browserForeground = await waitFor(() => windowsInput(browserPid, 'foreground'), 5000);
+        if (!result.browserForeground) throw new Error('Chrome did not become the foreground Windows app');
+        result.guiPause = windowsInput(browserPid, 'pause') && await waitFor(isPaused);
+        result.guiResume = result.guiPause && windowsInput(browserPid, 'pause') &&
+            await waitFor(() => !isPaused());
+        if (!result.guiResume) throw new Error('Reword did not receive Windows Pause and Resume');
+    } else if (gui) {
         result.stage = 'desktop-shortcuts';
         result.guiPause = x11(browserPid, 'pause') && await waitFor(() => x11(browserPid, 'paused'));
         result.guiResume = result.guiPause && x11(browserPid, 'pause') &&
@@ -339,11 +357,32 @@ try {
             const current = await status('undo');
             return current.value === 'prefix the suffix' && current.pageEvent === 'insertReplacementText';
         }));
-        await pressKey('z', 90, 3, 'KeyZ');
+        if (windowsGui) {
+            result.stage = 'physical-browser-undo';
+            await sleep(180);
+            if (!windowsInput(browserPid, 'undo')) throw new Error('Windows Undo chord could not be sent');
+        } else {
+            await pressKey('z', 90, 3, 'KeyZ');
+        }
         result.enabledSiteUndo = Boolean(await waitFor(async () => {
             const current = await status('undo');
             return current.value === 'prefix teh suffix' && current.pageEvent === 'historyUndo';
         }));
+        if (windowsGui) {
+            result.guiInterceptedBrowserUndo = guiUndoRequests > 0;
+            if (!result.enabledSiteUndo || result.guiInterceptedBrowserUndo)
+                throw new Error('The desktop Undo shortcut intercepted the browser Undo chord');
+            setPolicy('undoShortcut', 'Ctrl+Alt+K');
+            await call('Page.navigate', {url: origin + '/?custom'}, sessionId);
+            if (!await waitFor(() => evaluate('location.search === "?custom" && document.readyState === "complete"')))
+                throw new Error('Chrome did not load the custom Undo fixture');
+            await focus('undo', 7);
+            await typeWord();
+            const customCorrected = await waitFor(async () => (await status('undo')).value === 'prefix the suffix');
+            result.windowsCustomUndo = Boolean(customCorrected && windowsInput(browserPid, 'custom-undo') &&
+                await waitFor(async () => (await status('undo')).value === 'prefix teh suffix'));
+            if (!result.windowsCustomUndo) throw new Error('The custom Windows browser Undo chord did not restore text');
+        }
         result.noFixtureMarkers = await evaluate(
             "!document.documentElement.dataset.rewordProbeReady && !document.getElementById('undo').dataset.outcome");
         await configureSite('unregisterSite');
@@ -672,6 +711,28 @@ try {
             }
         }
     }
+    if (windowsGui) {
+        result.stage = 'native-editor-undo';
+        policyFor(nativeFixture, 'rule', 'allow');
+        nativeEditor = spawn(nativeFixture, [], {stdio: ['pipe', 'pipe', 'ignore']});
+        let observed = '';
+        createInterface({input: nativeEditor.stdout}).on('line', line => {
+            if (line.startsWith('TEXT:')) observed = line.slice(5);
+        });
+        if (!await waitFor(() => nativeEditor.pid && windowsInput(nativeEditor.pid, 'foreground'), 5000))
+            throw new Error('The Windows edit fixture did not receive focus');
+        const fieldContains = expected => waitFor(() => {
+            nativeEditor.stdin.write('snapshot\n');
+            return observed === expected;
+        });
+        nativeEditor.stdin.write('text:teh\n');
+        if (!await fieldContains('teh')) throw new Error('The Windows edit fixture was not initialized');
+        await sleep(300);
+        result.windowsNativeCorrection = windowsInput(nativeEditor.pid, 'space') && await fieldContains('the ');
+        result.windowsNativeUndo = result.windowsNativeCorrection && windowsInput(nativeEditor.pid, 'custom-undo') &&
+            await fieldContains('teh ');
+        if (!result.windowsNativeUndo) throw new Error('Native editor Undo was unavailable after browser focus ended');
+    }
     result.stage = 'complete';
     await call('Browser.close');
 } catch (error) {
@@ -680,6 +741,7 @@ try {
 } finally {
     if (browser && browser.exitCode === null && browser.signalCode === null) browser.kill();
     if (gui && gui.exitCode === null && gui.signalCode === null) gui.kill();
+    if (nativeEditor && nativeEditor.exitCode === null && nativeEditor.signalCode === null) nativeEditor.kill();
     server.close();
     if (windowsRegistered) {
         const cleanup = spawnSync(hostPath, ['--unregister-browser', 'chrome'],
