@@ -32,6 +32,15 @@ now places the caret at the end of the synthetic word before sending a
 space and reports shortcut delivery independently of text replacement.
 [Win32 selection and caret behavior](https://learn.microsoft.com/en-us/windows/win32/controls/em-setsel).
 
+At `e674033`, both hosted Windows runs passed the Chrome and Win32
+transition. The editor received the word boundary at the expected caret,
+corrected the word, received the custom Undo chord through Reword, and
+restored the original. The Linux X11 GUI probe also passed default and
+custom Undo and Pause. Local reports are
+`.deps/windows-undo-e674033/report.json` and
+`.deps/windows-undo-linux-gui/report.json`.
+[Hosted Windows report](https://github.com/AwraEsh/reword/actions/runs/42690110229).
+
 ## Windows browser native messaging host
 
 `REWORD_BROWSER_HOST=ON` builds the development host on Windows. Its

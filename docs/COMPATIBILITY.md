@@ -24,6 +24,7 @@ This table describes tested fixtures, not blanket support for applications.
 | GNOME 48.7 Wayland / Fcitx 5.1.12 / Qt QLineEdit | Real keyboard input in a private compositor passed first/second/third, rejected-write retry, live Undo, code-span protection, pause, selected correction/history/Undo and password exclusion. | Synthetic field, explicit Qt Fcitx5 integration. Physical session and browser coverage pending. |
 | GNOME Wayland / Fcitx5 / GTK3 GtkEntry | Real input passed first/second/third, live Undo, code-span protection, pause and password exclusion. | This GTK3 input module does not expose the selection anchor; selected-text correction is skipped. Use the workspace. |
 | Windows x64 / hosted Windows runner | CI at 03069a1 passed build, automated tests, installed-file hashes, native-platform clean-PATH launch/uninstall and native Win32 field/password/hotkey probes. | Physical Windows 10/11 UI and browser/editor coverage pending. |
+| Windows x64 / Chrome with the Reword GUI | CI at e674033 passed live correction, default and custom Undo, Pause during a browser correction, and native correction and Undo after switching to a Win32 editor. | Temporary profile and development build. Normal profile setup, physical Windows 10/11 use and browser installer integration remain open. |
 | Internal workspace | Qt Quick tests verify correction/history, stale-result rejection, limits, pause/cancellation and saved markup never requesting HTTP/HTTPS. | Offline rules are conservative; no semantic rewriting. |
 
 ## Native boundaries
