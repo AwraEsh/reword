@@ -23,6 +23,8 @@ int main(int argc, char **argv) {
         } else if ((key == "english" || key == "persian" || key == "browsers") &&
                    (value == "true" || value == "false")) {
             store.setCorrectionOption(key, value == "true");
+        } else if (key == "undoShortcut" && (value == "Ctrl+Alt+Z" || value == "Ctrl+Alt+K")) {
+            store.setCorrectionOption(key, value);
         } else if (key == "pauseUntil" && (value == "-1" || value == "0")) {
             store.pause(value.toInt());
         } else {

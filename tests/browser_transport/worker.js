@@ -35,7 +35,8 @@ function sendWord(word, reply) {
 
 chrome.runtime.onMessage.addListener((request, sender, send) => {
     if (sender.id !== chrome.runtime.id || sender.origin !== PROBE_ORIGIN || sender.frameId !== 0 ||
-        !['plain', 'multiline', 'stale', 'blur', 'policy', 'revoke', 'pause-cycle', 'pending-caret', 'retry']
+        !['plain', 'multiline', 'stale', 'blur', 'policy', 'revoke', 'pause-cycle', 'pending-caret',
+          'retry', 'undo', 'veto']
             .includes(request?.test)) return false;
 
     if (PROBE_ENGINE) {

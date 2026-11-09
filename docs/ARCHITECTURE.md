@@ -101,9 +101,14 @@ transaction as the setting change.
 
 The test extension checks browser policy before reading the field value.
 It compares field identity, focus, input generation, text, caret and
-settings revision after asynchronous work. Only then does it replace
-the reported range. The current fixture does not cover web editors that
-need a page-level input event or a browser-native Undo entry.
+settings revision after asynchronous work. Before replacing the range
+it dispatches a cancelable page `beforeinput` event and rechecks the
+field. A successful range change dispatches a synthetic `input` event.
+The fixture keeps one short-lived Undo record after confirming the
+corrected text and caret. Its configured shortcut rechecks current
+policy and the exact result before restoring the original range and
+sending `historyUndo`. The browser's own undo stack and rich editors
+are outside this fixture.
 
 The host uses the shared retry cycle and returns an in-memory continuation
 token with each candidate or deliberate skip. The extension sends it again

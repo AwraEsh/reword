@@ -24,9 +24,16 @@ const extensionOrigin = 'chrome-extension://' + id + '/';
 const result = {browser: executable, compiledEngine: Boolean(engineHost), stage: 'setup'};
 const writeJSON = (path, value) => writeFile(path, JSON.stringify(value, null, 2) + '\n');
 const page = await readFile(join(fixture, 'page.html'));
-const server = createServer((_request, response) => {
-    response.writeHead(200, {'Content-Type': 'text/html', 'Content-Security-Policy': "default-src 'none'"});
-    response.end(page);
+const formObserver = await readFile(join(fixture, 'form-observer.js'));
+const server = createServer((request, response) => {
+    if (request.url === '/form-observer.js') {
+        response.writeHead(200, {'Content-Type': 'text/javascript'});
+        response.end(formObserver);
+    } else {
+        response.writeHead(200, {'Content-Type': 'text/html',
+            'Content-Security-Policy': "default-src 'none'; script-src 'self'"});
+        response.end(page);
+    }
 });
 
 function devTools(browser) {
@@ -128,7 +135,7 @@ try {
         result.nativeHostStages = [];
         createInterface({input: browser.stderr}).on('line', line => {
             const match = line.match(/^REWORD_BROWSER_HOST ([1-9]|10|11)$/);
-            if (match && result.nativeHostStages.length < 128) {
+            if (match && result.nativeHostStages.length < 256) {
                 result.nativeHostStages.push(Number(match[1]));
             }
         });
@@ -181,16 +188,19 @@ try {
             await insert(word + ' ');
         }
     };
-    const pressKey = async (key, windowsVirtualKeyCode) => {
+    const pressKey = async (key, windowsVirtualKeyCode, modifiers = 0, code = key) => {
         for (const type of ['rawKeyDown', 'keyUp']) {
-            await call('Input.dispatchKeyEvent', {type, key, code: key, windowsVirtualKeyCode},
+            await call('Input.dispatchKeyEvent', {type, key, code, windowsVirtualKeyCode, modifiers},
                        sessionId);
         }
     };
     const status = field => evaluate(
         `(() => { const field = document.getElementById('${field}');
            return {value: field.value, caret: field.selectionStart,
-                   outcome: field.dataset.outcome, requested: field.dataset.requested}; })()`);
+                   outcome: field.dataset.outcome, requested: field.dataset.requested,
+                   pageValue: field.dataset.pageValue, pageEvent: field.dataset.pageEvent,
+                   pageEvents: Number(field.dataset.pageEvents ?? 0), pageVeto: field.dataset.pageVeto,
+                   undoOutcome: field.dataset.undoOutcome}; })()`);
     const outcome = field => waitFor(async () => {
         const current = await status(field);
         return current.outcome && current;
@@ -346,6 +356,117 @@ try {
         result.retryAfterContinuing = await verifyRetry('the', 'applied');
         if (!result.retryAfterCaretMove || !result.retryAfterFocusChange || !result.retryAfterContinuing) {
             throw new Error('The rewrite cycle persisted after leaving the original edit');
+        }
+
+        result.stage = 'page-events-and-undo';
+        // The dictionary-validated common correction keeps this range test
+        // independent of the time budget for a full Hunspell suggestion search.
+        const misspelling = 'adress';
+        const replacement = 'address';
+        await focus('undo', 7);
+        const correctionStageStart = result.nativeHostStages.length;
+        await typeWord(misspelling);
+        const corrected = await outcome('undo');
+        const original = 'prefix ' + misspelling + ' suffix';
+        result.correctionChecks = {
+            applied: corrected.outcome === 'applied',
+            valueMatches: corrected.value === 'prefix ' + replacement + ' suffix',
+            caretMatches: corrected.caret === 8 + replacement.length,
+            pageModelMatches: Boolean(corrected.value) && corrected.pageValue === corrected.value,
+            pageEventMatches: corrected.pageEvent === 'insertReplacementText',
+            eventCountMatches: corrected.pageEvents === 1,
+        };
+        result.correctionOutcome = corrected.outcome ?? 'no-outcome';
+        result.pageCorrection = Object.values(result.correctionChecks).every(Boolean);
+        result.correctionHostStages = result.nativeHostStages.slice(correctionStageStart);
+        await pressKey('z', 90, 3, 'KeyZ'); // CDP Alt and Ctrl bits.
+        const undone = await waitFor(async () => {
+            const current = await status('undo');
+            return current.value === original && current;
+        });
+        result.liveUndo = undone.value === original && undone.caret === 8 + misspelling.length &&
+            undone.pageValue === original && undone.pageEvent === 'historyUndo' && undone.pageEvents === 2;
+        await focus('veto', 7);
+        await typeWord();
+        const vetoed = await outcome('veto');
+        result.pageVeto = vetoed.value === 'prefix teh suffix' && vetoed.pageVeto === 'yes' &&
+            vetoed.pageEvents === 0;
+        if (!result.pageCorrection || !result.liveUndo || !result.pageVeto) {
+            throw new Error('A browser page event or Undo check failed');
+        }
+
+        result.stage = 'undo-guards';
+        const prepareUndo = async ({word = 'teh', pageMode = '', maxLength = -1} = {}) => {
+            await evaluate(`(() => { const field = document.getElementById('undo');
+                for (const key of Object.keys(field.dataset)) delete field.dataset[key];
+                field.dataset.pageMode = ${JSON.stringify(pageMode)};
+                if (${maxLength} < 0) field.removeAttribute('maxlength');
+                else field.maxLength = ${maxLength};
+                field.value = 'prefix suffix'; })()`);
+            await focus('undo', 7);
+            await typeWord(word);
+            return outcome('undo');
+        };
+        const undoKey = () => pressKey('z', 90, 3, 'KeyZ');
+        const undoResult = () => waitFor(async () => {
+            const current = await status('undo');
+            return current.undoOutcome && current;
+        });
+        result.undoGuards = {};
+        await prepareUndo();
+        await insert('x');
+        await undoKey();
+        const continued = await status('undo');
+        result.undoGuards.laterTyping = continued.value === 'prefix the xsuffix' &&
+            continued.pageEvents === 1 && !continued.undoOutcome;
+
+        await prepareUndo();
+        await evaluate(`(() => { const field = document.getElementById('undo');
+            field.value = 'prefix the target'; field.setSelectionRange(11, 11); })()`);
+        await undoKey();
+        const silent = await undoResult();
+        result.undoGuards.silentPageEdit = silent.value === 'prefix the target' &&
+            silent.undoOutcome === 'declined' && silent.pageEvents === 1;
+
+        await prepareUndo();
+        setPolicy('pauseUntil', '-1');
+        setPolicy('pauseUntil', '0');
+        await undoKey();
+        const paused = await undoResult();
+        result.undoGuards.pauseRoundTrip = paused.value === 'prefix the suffix' &&
+            paused.undoOutcome === 'declined' && paused.pageEvents === 1;
+
+        await prepareUndo({pageMode: 'vetoUndo'});
+        await undoKey();
+        const vetoedUndo = await undoResult();
+        result.undoGuards.pageVetoUndo = vetoedUndo.value === 'prefix the suffix' &&
+            vetoedUndo.undoOutcome === 'declined' && vetoedUndo.pageVeto === 'yes' &&
+            vetoedUndo.pageEvents === 1;
+
+        const changedBefore = await prepareUndo({pageMode: 'changeBefore'});
+        result.undoGuards.pageChangeBefore = changedBefore.value === 'prefix teh target' &&
+            changedBefore.outcome === 'declined' && changedBefore.pageEvents === 0;
+        const changedAfter = await prepareUndo({pageMode: 'changeAfter'});
+        await undoKey();
+        const after = await status('undo');
+        result.undoGuards.pageChangeAfter = changedAfter.outcome === 'changed' &&
+            after.value === 'prefix the target' && !after.undoOutcome && after.pageEvents === 1;
+
+        const limited = await prepareUndo({word: misspelling, maxLength: original.length});
+        result.undoGuards.maxLength = limited.value === original && limited.outcome === 'declined' &&
+            limited.pageEvents === 0;
+
+        setPolicy('undoShortcut', 'Ctrl+Alt+K');
+        await prepareUndo();
+        await undoKey();
+        const oldKey = await status('undo');
+        await pressKey('k', 75, 3, 'KeyK');
+        const custom = await undoResult();
+        result.undoGuards.customShortcut = oldKey.value === 'prefix the suffix' &&
+            custom.value === 'prefix teh suffix' && custom.undoOutcome === 'applied' &&
+            custom.pageEvent === 'historyUndo' && custom.pageEvents === 2;
+        if (!Object.values(result.undoGuards).every(Boolean)) {
+            throw new Error('A browser Undo guard failed');
         }
     }
     result.stage = 'complete';

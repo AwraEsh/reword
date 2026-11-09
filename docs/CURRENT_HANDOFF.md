@@ -1,4 +1,72 @@
-# Current handoff — 2026-11-07
+# Current handoff — 2026-11-09
+
+## Browser Undo verification resumed
+
+The failing Helium run returned no correction before the form or Undo
+code ran. A bounded numeric host trace isolated event 11, the host's
+150 ms deadline for a suggestion. The request for `accomodation`
+reached that deadline in the isolated workload. See
+`.deps/browser-page-undo-resume-trace/report.json`. The deadline is
+unchanged. The Undo and maxlength checks now use the dictionary-validated
+common correction `adress` to `address` so they still exercise a range
+whose length changes without depending on a full suggestion search.
+
+The compiled Helium and Chrome fixtures passed page notifications, the page's right
+to veto a correction or Undo, and the configured Undo shortcut. It also
+kept later typing and silent page edits intact, rejected Undo across a
+Pause and Resume round trip, and honored the field's maxlength.
+The fixture confirms the page receives the exact corrected and restored
+values. See `.deps/browser-page-undo-length-helium/report.json`,
+`.deps/browser-page-undo-length-repeat/report.json` and
+`.deps/browser-page-undo-length-chrome/report.json`.
+
+The next browser gate is the configured Undo key with the desktop GUI
+running and owning the global shortcut. Normal browser profiles,
+registration on Windows, rich editors and real-site compatibility
+remain open. Browser-host suggestion latency under load still needs
+measurement and improvement.
+
+## Previous pause during browser Undo verification
+
+The user asked to stop and record the state before the session limit.
+The browser test chain was stopped. The integration worktree is
+`/home/debian/.codex/worktrees/storage-access/reword` on
+`codex/usable-build-integration`. The last pushed commit is `3bc3f6f`,
+which contains the verified browser retry and Pause work. The Undo
+changes and this checkpoint are local working-tree changes. No installer,
+release, or installed Preview was changed in this step.
+
+- The local changes add cancelable page `beforeinput` events, page
+  `input` notifications after successful range changes, and a one-edit
+  browser Undo record. Undo uses the Store's shortcut and checks policy,
+  settings revision, focus, caret, and exact expected text before editing.
+- The red Helium run showed all three basic checks failing. The first
+  implementation run passed page correction notification, Undo of a
+  length-changing correction, and a page veto. Reports are
+  `.deps/browser-page-undo-red/report.json` and
+  `.deps/browser-page-undo-helium/report.json`.
+- The host and policy fixture built again for expanded checks. In the next
+  Helium run, the earlier typing, policy and retry checks passed, but at
+  `page-events-and-undo` the page correction and live Undo checks failed
+  while page veto passed. The cause is unresolved. See
+  `.deps/browser-page-undo-guard-helium/report.json`. The run never reached
+  the expanded guard checks. Chrome and fixed-response follow-ups produced
+  no reports before the stop.
+- Local source is in `src/platform/browser_host.cpp` and
+  `tests/browser_transport/`. The new `form-observer.js` is untracked
+  and is part of this work. The guard tests cover later typing, silent
+  page edits, Pause/Resume, a page veto of Undo, page changes during the
+  event, maxlength and a custom shortcut.
+
+On resume, start with `git status --short`. Rebuild
+`reword-browser-host` and `reword_browser_policy_fixture` if needed.
+Run `python3 scripts/test-native-linux.py --browser-engine --browser-output .deps/browser-page-undo-resume`
+with the same private X11 environment as the earlier browser probes.
+Capture the correction outcome, caret and page event as booleans before
+pressing Undo to isolate the first failure. Finish Helium, Chrome and
+the fixed-response control before pushing. Browser Undo delivery when
+the desktop GUI owns the global shortcut, ordinary browser profiles and
+Windows registration still need separate verification.
 
 ## Browser rewrite cycle and Pause invalidation
 

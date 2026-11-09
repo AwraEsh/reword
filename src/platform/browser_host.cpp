@@ -25,7 +25,7 @@ enum class Stage {
 };
 
 void trace(Stage stage) {
-    static int remaining = qEnvironmentVariableIsSet("REWORD_BROWSER_HOST_DIAGNOSTICS") ? 128 : 0;
+    static int remaining = qEnvironmentVariableIsSet("REWORD_BROWSER_HOST_DIAGNOSTICS") ? 256 : 0;
     if (remaining > 0) {
         --remaining;
         std::fprintf(stderr, "REWORD_BROWSER_HOST %d\n", int(stage));
@@ -84,8 +84,12 @@ class BrowserCorrection {
         }
         const auto request = QJsonDocument::fromJson(payload).object();
         const auto expectedRevision = QString::number(revision);
-        if (request.size() == 1 && request.value("policy").toBool())
-            return {{"revision", expectedRevision}};
+        if (request.size() == 1 && request.value("policy").toBool()) {
+            const auto undo = store_.value("undoShortcut", "Ctrl+Alt+Z").toString();
+            if (store_.value("configRevision", 0).toLongLong() != revision)
+                return {};
+            return {{"revision", expectedRevision}, {"undoShortcut", undo}};
+        }
         const auto text = request.value("text").toString();
         const auto caret = request.value("caret").toInt(-1);
         const auto boundary = request.value("boundary").toString();

@@ -4,6 +4,13 @@ const inputRevisions = new WeakMap();
 const boundaries = ' .,!؟?،';
 let retry;
 let retryTimer;
+let undo;
+let undoTimer;
+
+function clearUndo() {
+    clearTimeout(undoTimer);
+    undo = undefined;
+}
 
 function clearRetry() {
     clearTimeout(retryTimer);
@@ -14,6 +21,7 @@ function targetChanged(event) {
     if (!event.isTrusted) return;
     ++targetRevision;
     clearRetry();
+    clearUndo();
 }
 
 for (const event of ['focus', 'blur']) {
@@ -22,6 +30,7 @@ for (const event of ['focus', 'blur']) {
 document.addEventListener('selectionchange', () => {
     if (retry && (retry.field.selectionStart !== retry.caret ||
                   retry.field.selectionEnd !== retry.caret)) clearRetry();
+    if (undo && !caretAt(undo.field, undo.caret)) clearUndo();
 }, true);
 document.addEventListener('pointerdown', targetChanged, true);
 document.addEventListener('keydown', event => {
@@ -38,6 +47,66 @@ function eligible(field) {
 }
 
 const message = request => chrome.runtime.sendMessage(request).catch(() => null);
+
+function caretAt(field, caret) {
+    return field.selectionStart === caret && field.selectionEnd === caret;
+}
+
+function replaceRange(field, {start, end, replacement, inputType}, isCurrent) {
+    const fits = () => field.maxLength < 0 ||
+        field.value.length + replacement.length - (end - start) <= field.maxLength;
+    if (!isCurrent() || !fits()) return false;
+    const event = {bubbles: true, composed: true, inputType,
+                   data: inputType === 'historyUndo' ? null : replacement};
+    if (!field.dispatchEvent(new InputEvent('beforeinput', {...event, cancelable: true})) ||
+        !isCurrent() || !fits()) return false;
+    field.setRangeText(replacement, start, end, 'preserve');
+    field.dispatchEvent(new InputEvent('input', event));
+    return true;
+}
+
+function matchesShortcut(event, shortcut) {
+    if (typeof shortcut !== 'string' || event.getModifierState('AltGraph')) return false;
+    const modifiers = shortcut.split('+');
+    const key = modifiers.pop();
+    const pressed = [['Ctrl', event.ctrlKey], ['Alt', event.altKey],
+                     ['Shift', event.shiftKey], ['Meta', event.metaKey]]
+        .filter(([, down]) => down).map(([name]) => name);
+    return pressed.length > 0 && /^[A-Z]$/.test(key) && event.key.toUpperCase() === key &&
+        pressed.length === modifiers.length && pressed.every(name => modifiers.includes(name));
+}
+
+document.addEventListener('keydown', async event => {
+    const record = undo;
+    if (!record || !event.isTrusted || event.repeat || event.isComposing || event.defaultPrevented ||
+        !matchesShortcut(event, record.shortcut)) return;
+
+    const field = record.field;
+    const samePosition = () => record.target === targetRevision && eligible(field) &&
+        inputRevisions.get(field) === record.inputRevision && caretAt(field, record.caret);
+    if (!samePosition()) {
+        clearUndo();
+        return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    clearUndo();
+    clearRetry();
+
+    const policy = await message({test: field.id, policy: true});
+    const isCurrent = () => samePosition() && field.value === record.expected;
+    if (policy?.revision !== record.revision || policy.undoShortcut !== record.shortcut ||
+        !isCurrent() || !replaceRange(field, {start: record.start, end: record.end,
+            replacement: record.original, inputType: 'historyUndo'}, isCurrent)) {
+        field.dataset.undoOutcome = 'declined';
+        return;
+    }
+    const restored = record.expected.slice(0, record.start) + record.original +
+        record.expected.slice(record.end);
+    field.dataset.undoOutcome = eligible(field) && field.value === restored &&
+        caretAt(field, record.caret + record.original.length - (record.end - record.start))
+        ? 'applied' : 'changed';
+}, true);
 
 function observeRewrite(field, event) {
     if (!retry) return;
@@ -81,14 +150,17 @@ document.addEventListener('input', async event => {
     const field = event.target;
     const inputRevision = (inputRevisions.get(field) ?? 0) + 1;
     inputRevisions.set(field, inputRevision);
-    if (PROBE_ENGINE) observeRewrite(field, event);
+    if (PROBE_ENGINE) {
+        clearUndo();
+        observeRewrite(field, event);
+    }
     if (event.isComposing || event.inputType !== 'insertText' || !eligible(field)) return;
 
     const caret = field.selectionStart;
     if (!caret || caret !== field.selectionEnd) return;
     const target = targetRevision;
     const unchanged = () => target === targetRevision && inputRevisions.get(field) === inputRevision &&
-        eligible(field) && field.selectionStart === caret && field.selectionEnd === caret;
+        eligible(field) && caretAt(field, caret);
     let revision;
     if (PROBE_ENGINE) {
         if (event.data?.length !== 1 || !boundaries.includes(event.data)) return;
@@ -130,12 +202,14 @@ document.addEventListener('input', async event => {
         field.dataset.outcome = 'stale';
         return;
     }
+    let shortcut;
     if (PROBE_ENGINE) {
         const permission = await message({test: field.id, policy: true});
         if (permission?.revision !== revision || !unchanged() || field.value !== expected) {
             field.dataset.outcome = 'stale';
             return;
         }
+        shortcut = permission.undoShortcut;
     }
     const start = PROBE_ENGINE ? reply.start : caret - 4;
     if (!Number.isInteger(start) || start < 0 || start >= caret - 1 ||
@@ -146,7 +220,28 @@ document.addEventListener('input', async event => {
     }
     const word = expected.slice(start, caret - 1);
     const segment = (skipped ? word : reply.corrected) + boundary;
-    if (!skipped) field.setRangeText(reply.corrected, start, caret - 1, 'preserve');
+    if (!skipped) {
+        const end = caret - 1;
+        if (!replaceRange(field, {start, end, replacement: reply.corrected, inputType: 'insertReplacementText'},
+                          () => unchanged() && field.value === expected)) {
+            clearRetry();
+            field.dataset.outcome = 'declined';
+            return;
+        }
+        const after = expected.slice(0, start) + reply.corrected + expected.slice(end);
+        const newCaret = caret + reply.corrected.length - word.length;
+        if (target !== targetRevision || inputRevisions.get(field) !== inputRevision ||
+            !eligible(field) || field.value !== after || !caretAt(field, newCaret)) {
+            clearRetry();
+            field.dataset.outcome = 'changed';
+            return;
+        }
+        if (PROBE_ENGINE && typeof shortcut === 'string') {
+            undo = {field, target, inputRevision, expected: after, caret: newCaret,
+                    original: word, start, end: start + reply.corrected.length, revision, shortcut};
+            undoTimer = setTimeout(clearUndo, 30000);
+        }
+    }
     if (PROBE_ENGINE) {
         clearRetry();
         retry = {field, start, word, segment, revision, attempt: reply.attempt,
