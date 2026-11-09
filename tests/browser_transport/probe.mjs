@@ -738,22 +738,33 @@ try {
         result.stage = 'native-editor-undo';
         policyFor(nativeFixture, 'rule', 'allow');
         nativeEditor = spawn(nativeFixture, [], {stdio: ['pipe', 'pipe', 'ignore']});
-        let observed = '';
+        let observed = '', caret = -1;
         createInterface({input: nativeEditor.stdout}).on('line', line => {
-            if (line.startsWith('TEXT:')) observed = line.slice(5);
+            const snapshot = line.match(/^TEXT:(\d+):(.*)$/);
+            if (snapshot) {
+                caret = Number(snapshot[1]);
+                observed = snapshot[2];
+            }
         });
         if (!await waitFor(() => nativeEditor.pid && windowsInput(nativeEditor.pid, 'focus-fixture'), 5000) ||
             !await waitFor(() => windowsInput(nativeEditor.pid, 'foreground'), 5000))
             throw new Error('The Windows edit fixture did not receive focus after a verified click');
         const fieldContains = expected => waitFor(() => {
             nativeEditor.stdin.write('snapshot\n');
-            return observed === expected;
+            return observed === expected && caret === expected.length;
         });
         nativeEditor.stdin.write('text:teh\n');
         if (!await fieldContains('teh')) throw new Error('The Windows edit fixture was not initialized');
         await sleep(300);
-        result.windowsNativeCorrection = windowsInput(nativeEditor.pid, 'space') && await fieldContains('the ');
-        result.windowsNativeUndo = result.windowsNativeCorrection && windowsInput(nativeEditor.pid, 'custom-undo') &&
+        result.windowsNativeSpaceSent = windowsInput(nativeEditor.pid, 'space');
+        result.windowsNativeCorrection = result.windowsNativeSpaceSent && await fieldContains('the ');
+        result.windowsNativeCaretAfterSpace = caret;
+        result.windowsNativeBoundaryAtEnd = observed === 'teh ' || observed === 'the ';
+        const beforeNativeUndo = guiUndoRequests;
+        result.windowsNativeChordSent = windowsInput(nativeEditor.pid, 'custom-undo');
+        result.windowsNativeShortcutReturned = result.windowsNativeChordSent &&
+            await waitFor(() => guiUndoRequests > beforeNativeUndo);
+        result.windowsNativeUndo = result.windowsNativeCorrection && result.windowsNativeShortcutReturned &&
             await fieldContains('teh ');
         if (!result.windowsNativeUndo) throw new Error('Native editor Undo was unavailable after browser focus ended');
     }

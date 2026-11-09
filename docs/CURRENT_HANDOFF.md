@@ -27,6 +27,11 @@ Win32 fixture. The probe now clicks the verified fixture window to exercise
 the transition using native input. The first report is preserved in
 `.deps/windows-undo-candidate-6544901/report.json`.
 
+Run 42689189392 reached the native editor after the click. The fixture
+now places the caret at the end of the synthetic word before sending a
+space and reports shortcut delivery independently of text replacement.
+[Win32 selection and caret behavior](https://learn.microsoft.com/en-us/windows/win32/controls/em-setsel).
+
 ## Windows browser native messaging host
 
 `REWORD_BROWSER_HOST=ON` builds the development host on Windows. Its

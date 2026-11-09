@@ -49,13 +49,15 @@ static void command(HWND window) {
         } else if (s == "snapshot") {
             wchar_t text[64]{};
             GetWindowTextW(edit, text, 64);
-            std::printf("TEXT:%s\n", QString::fromWCharArray(text).toUtf8().constData());
+            DWORD caret = 0;
+            SendMessageW(edit, EM_GETSEL, 0, reinterpret_cast<LPARAM>(&caret));
+            std::printf("TEXT:%lu:%s\n", caret, QString::fromWCharArray(text).toUtf8().constData());
             std::fflush(stdout);
         } else if (s.rfind("text:", 0) == 0) {
             auto text = QString::fromUtf8(s.substr(5));
             SendMessageW(edit, EM_SETLIMITTEXT, 200001, 0);
             SetWindowTextW(edit, reinterpret_cast<LPCWSTR>(text.utf16()));
-            SendMessageW(edit, EM_SETSEL, -1, -1);
+            SendMessageW(edit, EM_SETSEL, WPARAM(text.size()), LPARAM(text.size()));
         }
     }
 }
