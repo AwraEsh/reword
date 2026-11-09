@@ -1,5 +1,6 @@
 #include "core/store.h"
 #include "browser_extension_origin.h"
+#include "browser_registration.h"
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -258,6 +259,17 @@ int main(int argc, char **argv) {
     qInstallMessageHandler([](QtMsgType, const QMessageLogContext &, const QString &) {});
     QCoreApplication app(argc, argv);
     const auto args = app.arguments();
+    if (args.size() == 3 && (args[1] == "--register-browser" || args[1] == "--unregister-browser")) {
+        const bool remove = args[1] == "--unregister-browser";
+        try {
+            reword::registerBrowserHost(args[2], app.applicationFilePath(), remove);
+            std::puts(remove ? "Reword browser registration removed." : "Reword browser host registered.");
+            return 0;
+        } catch (const std::exception &error) {
+            std::fprintf(stderr, "%s\n", error.what());
+            return 1;
+        }
+    }
     const auto application = browserApplication();
     if (application.isEmpty() || args.size() != 2 || !allowedOrigin(args[1]))
         return 2;

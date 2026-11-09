@@ -12,6 +12,7 @@ This table describes tested fixtures, not blanket support for applications.
 | Private Debian X11 / compiled Reword browser host | Helium and Chrome corrected English and Persian, passed alternating in-place retries, notified the form of range changes, honored page vetoes and restored a correction with the configured Undo shortcut. | Opt-in Linux host with a fixture extension. Desktop global shortcut delivery, ordinary browser profiles, rich fields and Windows registration remain open. |
 | Private Debian X11 / physical browser Undo | The opt-in Helium and Chrome fixtures restored text using physical default and custom Undo while the GUI ran. The GUI retained Pause and regained Undo after restore or Pause. | Temporary browser profiles. Ordinary browser profiles, packaged host registration and the Windows route remain open. |
 | Private Debian X11 / unpacked Chromium extension | Helium and Chrome kept a site unchanged before registration, corrected and restored a word after registration, and stopped forwarding requests when the site was disabled. | Temporary profiles with the loopback test permission pre-granted. The browser permission prompt and normal profile installation are separate checks. |
+| Linux browser host registration | The native command registered the host, updated its executable path and removed its own manifest in temporary browser data directories. Helium and Chrome launched the registered host. | Manual opt-in developer install. AppImage and Debian release integration and Windows registration remain open. |
 | Debian X11 / YukiGram 7.1.5.0 (Flatpak) | The user reported live correction did not run with Automatic selected. | The message field has no confirmed writable native path. |
 | Private Debian X11 / IBus 1.5.32 | A fixed-word test engine corrected text in GNOME Text Editor 48.3 and preserved the reference text. In Helium, the test engine corrected its own preedit composition before committing it. The HTML password control kept its original text. | Diagnostic engine only. Helium sent key events and accepted composition but did not send surrounding text or report field purpose to the engine during the test. YukiGram and the production correction policies remain unverified on this path. |
 | Private Debian X11 / compiled Reword IBus engine and GUI | GNOME Text Editor 48.3 corrected English and Persian. Independent language switches, alternating retry, Pause and Resume, per-app denial, 25 ms English key spacing, and live Undo passed. The native Undo also worked in a GTK single-line control before and after the editor. | Opt-in development target. Undo requires a current surrounding-text observation. Selected-text correction, live editing in Helium and YukiGram, and normal-desktop installation remain open. |
@@ -124,6 +125,28 @@ inputs and textareas of at most 384 UTF-16 code units.
 cmake --install build --component Browser --prefix /path/to/staging
 python3 scripts/test-native-linux.py --browser-engine --browser-extension --browser-output ./local-browser-extension
 ~~~
+
+For a manual Linux development install, use the full opt-in CMake
+installation so the host and dictionaries are in the same prefix. Keep
+that prefix in a persistent directory. Find **Profile Path** on the
+browser's version page and use the parent of the profile folder as the
+browser data directory. For Chrome's
+default `Default` profile this is usually `~/.config/google-chrome`.
+Quit the browser, then run the host from the installed location.
+[Chromium native messaging host location](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging#native-messaging-host-location).
+
+~~~sh
+/path/to/reword/bin/reword-browser-host --register-browser "/path/to/browser data"
+~~~
+
+In the browser's extension settings, enable Developer mode and choose
+**Load unpacked**. Select the installed `share/reword/browser/chromium`
+directory. Allow the browser in Reword's Applications settings and use
+the extension button to enable the current site. Use the same register
+command from a new persistent installation to update the host path.
+To remove the native manifest, quit the browser and run
+`reword-browser-host --unregister-browser "/path/to/browser data"`.
+Remove the extension separately in browser settings.
 
 To exercise the physical X11 shortcut, build the GUI with the browser
 host option enabled and run both modes in the private desktop.

@@ -1,5 +1,29 @@
 # Current handoff — 2026-11-09
 
+## Linux browser host registration
+
+The opt-in native host accepts `--register-browser` and
+`--unregister-browser` with an explicit browser data directory. It writes
+the absolute path of the running host, atomically updates its own manifest
+after a move, and leaves other registrations alone. It checks directory
+ownership and rejects linked or group-writable destinations.
+
+The registration suite passed in temporary data directories. Helium and
+Chrome then discovered and launched the host through the real command.
+The unpacked extension still corrected and restored text and stopped
+host requests when the site was disabled. Reports are
+`.deps/browser-registration-green.log`,
+`.deps/browser-registration-helium/report.json` and
+`.deps/browser-registration-chrome/report.json`.
+The same registration suite passed against the staged CMake binary.
+The physical X11 Undo test with the GUI also passed using the new
+registration path. See `.deps/browser-registration-x11/report.json`.
+
+The next distribution gate is a persistent launch path for the AppImage
+and inclusion in the Debian installer. The commands here were exercised
+in private profiles. The installed Preview and the user's browser data
+were outside this run.
+
 ## Unpacked browser extension and site opt-in
 
 The Chromium extension now has its own files under `browser/chromium/`.
@@ -27,8 +51,8 @@ The optional CMake install includes the host and the unpacked extension.
 The staged host was executable and the staged extension matched the source
 file for file. Rebuild the host after enabling the CMake option before
 running the install step.
-Per-profile host registration, AppImage and Debian packaging, extension
-signing and the Windows native host remain open. The installed Preview
+AppImage and Debian packaging, extension signing and the Windows native
+host remain open. The installed Preview
 and normal browser profiles were outside this test.
 
 ## X11 browser Undo routing

@@ -126,17 +126,20 @@ try {
         });
     }
 
-    if (!engineHost) {
+    if (engineHost) {
+        await mkdir(profile, {mode: 0o700});
+        execFileSync(engineHost, ['--register-browser', profile], {timeout: 5000});
+    } else {
         await copyFile(join(fixture, 'host.py'), hostPath);
         await chmod(hostPath, 0o700);
         await writeFile(join(root, 'expected-origin'), extensionOrigin);
+        const hosts = join(profile, 'NativeMessagingHosts');
+        await mkdir(hosts, {recursive: true});
+        await writeJSON(join(hosts, hostName + '.json'), {
+            name: hostName, description: 'Reword transport fixture', path: hostPath, type: 'stdio',
+            allowed_origins: [extensionOrigin],
+        });
     }
-    const hosts = join(profile, 'NativeMessagingHosts');
-    await mkdir(hosts, {recursive: true});
-    await writeJSON(join(hosts, hostName + '.json'), {
-        name: hostName, description: 'Reword transport fixture', path: hostPath, type: 'stdio',
-        allowed_origins: [extensionOrigin],
-    });
 
     if (x11Mode === 'gui') {
         result.stage = 'desktop-gui';
