@@ -122,7 +122,7 @@ jobs:
         run: vcpkg install hunspell:x64-windows --disable-metrics
       - name: Configure
         shell: pwsh
-        run: cmake -S . -B build -DCMAKE_PREFIX_PATH="$env:RUNNER_TEMP/Qt/6.8.3/msvc2022_64" -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DREWORD_FCITX=OFF
+        run: cmake -S . -B build -DCMAKE_PREFIX_PATH="$env:RUNNER_TEMP/Qt/6.8.3/msvc2022_64" -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DREWORD_FCITX=OFF -DREWORD_BROWSER_HOST=ON
       - run: cmake --build build --config Release --parallel 2
       - name: Inspect native storage initialization
         shell: pwsh
@@ -166,6 +166,27 @@ jobs:
             build/Testing/Temporary/LastTest.log
       - name: Windows dependency metadata tests
         run: python -m unittest discover -s tests -p test_windows_pe_package.py -v
+      - name: Chrome native messaging and correction
+        shell: pwsh
+        env:
+          REWORD_PROBE_EXTENSION: '1'
+        run: |
+          $chrome = @("$env:ProgramFiles/Google/Chrome/Application/chrome.exe", "${env:ProgramFiles(x86)}/Google/Chrome/Application/chrome.exe") |
+            Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+          if (!$chrome) { throw 'Chrome is missing from the Windows test runner' }
+          $root = Join-Path $env:RUNNER_TEMP "reword-browser-$([Guid]::NewGuid())"
+          New-Item -ItemType Directory -Path $root, 'dist' -Force | Out-Null
+          $hostExe = (Resolve-Path build/Release/reword-browser-host.exe).Path
+          node tests/browser_transport/probe.mjs $root dist/windows-browser-report $chrome $hostExe
+          if ($LASTEXITCODE -ne 0) {
+            if (Test-Path dist/windows-browser-report/report.json) { Get-Content dist/windows-browser-report/report.json }
+            throw 'The Windows Chrome probe failed'
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Reword-Windows-Chrome-Report
+          path: dist/windows-browser-report/report.json
       - name: Bundle and create installer
         shell: pwsh
         run: |

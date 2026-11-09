@@ -1,6 +1,7 @@
-// Runs inside test-native-linux.py's owned X11 and D-Bus session.
+// Runs in an owned X11 session or a disposable Windows CI account.
 import {execFileSync, spawn, spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
+import {existsSync} from 'node:fs';
 import {chmod, copyFile, cp, mkdir, readFile, readlink, writeFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {dirname, join} from 'node:path';
@@ -10,7 +11,10 @@ import {fileURLToPath} from 'node:url';
 
 const [root, output, executable, engineHost, x11Mode, python] = process.argv.slice(2);
 const production = process.env.REWORD_PROBE_EXTENSION === '1';
-if (!root || !output || !['helium', 'google-chrome'].includes(executable)) {
+const windows = process.platform === 'win32';
+const supported = windows ? engineHost && production && !x11Mode && /[\\/]chrome\.exe$/i.test(executable ?? '') :
+    ['helium', 'google-chrome'].includes(executable);
+if (!root || !output || !supported) {
     throw new Error('Expected an owned test directory, a report path and a supported test browser');
 }
 const fixture = fileURLToPath(new URL('.', import.meta.url));
@@ -21,7 +25,7 @@ const extension = join(root, 'extension');
 const profile = join(root, 'profile');
 const hostName = engineHost ? 'org.reword.browser' : 'org.reword.transport_probe';
 const hostPath = packagedHost || engineHost || join(root, 'native-host');
-const hostEnvironment = {...process.env};
+const hostEnvironment = {...process.env, REWORD_DATA_DIR: join(root, 'reword')};
 if (packagedHost) {
     for (const key of ['LD_LIBRARY_PATH', 'QT_PLUGIN_PATH', 'QML_IMPORT_PATH', 'REWORD_DICTIONARY_DIR']) {
         delete hostEnvironment[key];
@@ -105,6 +109,7 @@ let browser;
 let gui;
 let guiUndoRequests = 0;
 let browserPid;
+let windowsRegistered = false;
 const x11 = (pid, action) => spawnSync(python, [join(fixture, 'x11_input.py'),
     root, String(pid), action], {stdio: 'ignore', timeout: 3500}).status === 0;
 await mkdir(output, {mode: 0o700});
@@ -137,7 +142,20 @@ try {
 
     if (engineHost) {
         await mkdir(profile, {mode: 0o700});
-        execFileSync(hostPath, ['--register-browser', profile], {timeout: 5000, env: hostEnvironment});
+        if (windows) {
+            const key = 'HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\org.reword.browser';
+            const existing = spawnSync('reg.exe', ['query', key, '/ve'], {timeout: 5000});
+            if (existing.error || existing.status !== 1) throw new Error('Expected an unused Windows test registry entry');
+            const rejected = spawnSync(hostPath, [extensionOrigin, '--parent-window=0'],
+                {timeout: 5000, env: hostEnvironment, input: Buffer.from([2, 0, 0, 0, 123, 125])});
+            result.untrustedLaunchRejected = rejected.status === 2 && !rejected.stdout.length &&
+                !existsSync(hostEnvironment.REWORD_DATA_DIR);
+            if (!result.untrustedLaunchRejected) throw new Error('A non-browser process reached the native host');
+            execFileSync(hostPath, ['--register-browser', 'chrome'], {timeout: 5000, env: hostEnvironment});
+            windowsRegistered = true;
+        } else {
+            execFileSync(hostPath, ['--register-browser', profile], {timeout: 5000, env: hostEnvironment});
+        }
     } else {
         await copyFile(join(fixture, 'host.py'), hostPath);
         await chmod(hostPath, 0o700);
@@ -166,17 +184,17 @@ try {
             throw new Error('The Reword GUI did not reach the owned desktop foreground');
         }
     }
-    const useDevToolsInstall = executable === 'google-chrome';
+    const useDevToolsInstall = windows || executable === 'google-chrome';
     result.stage = 'browser';
     browser = spawn(executable, [
         '--remote-debugging-pipe', '--user-data-dir=' + profile,
         useDevToolsInstall ? '--enable-unsafe-extension-debugging' : '--load-extension=' + extension,
         '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
-        '--disable-sync', '--no-proxy-server', '--password-store=basic', '--ozone-platform=x11',
+        '--disable-sync', '--no-proxy-server', '--password-store=basic',
+        windows ? '--disable-gpu' : '--ozone-platform=x11',
         '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1', 'about:blank',
     ], {
-        env: {...hostEnvironment, HOME: root, REWORD_DATA_DIR: join(root, 'reword'),
-              REWORD_BROWSER_HOST_DIAGNOSTICS: '1'},
+        env: {...hostEnvironment, HOME: root, REWORD_BROWSER_HOST_DIAGNOSTICS: '1'},
         stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'],
     });
     browser.on('error', error => { result.launchError = error.code; });
@@ -198,13 +216,15 @@ try {
     }
     let application;
     const setPolicy = (...change) => execFileSync(
-        join(dirname(engineHost), 'reword_browser_policy_fixture'),
+        join(dirname(engineHost), 'reword_browser_policy_fixture' + (windows ? '.exe' : '')),
         [join(root, 'reword'), application, ...change], {timeout: 5000});
     if (engineHost) {
         const {processInfo} = await call('SystemInfo.getProcessInfo');
         const parent = processInfo.find(process => process.type === 'browser');
         browserPid = parent.id;
-        application = await readlink('/proc/' + parent.id + '/exe');
+        application = windows ? execFileSync('pwsh.exe', ['-NoProfile', '-NonInteractive', '-Command',
+            '(Get-Process -Id ' + Number(browserPid) + ').Path'], {encoding: 'utf8', timeout: 10000}).trim() :
+            await readlink('/proc/' + parent.id + '/exe');
         setPolicy('rule', 'allow');
     }
     const {targetId} = await call('Target.createTarget', {url: origin});
@@ -291,8 +311,26 @@ try {
         };
         await configureSite('registerSite');
         await call('Page.navigate', {url: origin + '/?enabled'}, sessionId);
+        if (windows) {
+            const sendHost = async payload => (await call('Runtime.evaluate', {
+                expression: `new Promise(resolve => sendNative(${JSON.stringify(payload)}, resolve))`,
+                awaitPromise: true, returnByValue: true,
+            }, workerSession)).result?.value;
+            const policy = await sendHost({policy: true});
+            result.windowsHostPolicy = typeof policy?.revision === 'string';
+            if (!result.windowsHostPolicy) {
+                result.windowsHostError = policy?.error;
+                throw new Error('Chrome could not exchange policy with the Windows host');
+            }
+            // 26 bytes puts the Windows text-mode EOF character in the binary frame header.
+            const control = {ignored: '012345678901'};
+            const controlReply = await sendHost(control);
+            result.windowsBinaryControlByte = Buffer.byteLength(JSON.stringify(control)) === 26 &&
+                JSON.stringify(controlReply) === '{}';
+            if (!result.windowsBinaryControlByte) throw new Error('The Windows pipe did not preserve a binary header');
+        }
         if (!await waitFor(async () => await evaluate('location.search === "?enabled" && document.readyState === "complete"') &&
-            result.nativeHostStages.includes(3), 7000)) {
+            (windows || result.nativeHostStages.includes(3)), 7000)) {
             throw new Error('The registered extension did not connect to the native host');
         }
         await focus('undo', 7);
@@ -643,5 +681,11 @@ try {
     if (browser && browser.exitCode === null && browser.signalCode === null) browser.kill();
     if (gui && gui.exitCode === null && gui.signalCode === null) gui.kill();
     server.close();
+    if (windowsRegistered) {
+        const cleanup = spawnSync(hostPath, ['--unregister-browser', 'chrome'],
+            {timeout: 5000, env: hostEnvironment});
+        result.windowsRegistrationRemoved = cleanup.status === 0;
+        if (!result.windowsRegistrationRemoved) process.exitCode = 1;
+    }
     await writeJSON(join(output, 'report.json'), result);
 }

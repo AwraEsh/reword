@@ -2,10 +2,14 @@
 
 #include <QCoreApplication>
 #include <QFileInfo>
+#ifndef _WIN32
 #include <sys/stat.h>
+#endif
 
 int main(int argc, char **argv) {
+#ifndef _WIN32
     umask(0077);
+#endif
     QCoreApplication app(argc, argv);
     const auto args = app.arguments();
     if (args.size() != 5)

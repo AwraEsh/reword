@@ -1,5 +1,29 @@
 # Current handoff — 2026-11-09
 
+## Windows browser native messaging host
+
+`REWORD_BROWSER_HOST=ON` builds the development host on Windows. Its
+`--register-browser chrome` and `--unregister-browser chrome` commands use
+the existing per-user registry and manifest code. Chromium uses `chromium`
+as the argument. The host verifies the fixed extension origin, verifies
+that the two Windows pipe servers belong to the same live Chrome or
+Chromium process, and opens standard input and output in binary mode.
+The browser executable path matches the app identity used by Reword's
+native Windows adapter. The shared correction engine handles the requests.
+[Chrome native messaging protocol](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging#native-messaging-protocol).
+
+The Windows CI probe uses a disposable user, a fresh Chrome profile, and
+the real extension on a loopback test page. It checks that an untrusted
+launch exits before opening storage, registers the host, tests live
+correction and the extension's Undo without the desktop GUI, and removes
+the temporary registry value. The result is published as
+`Reword-Windows-Chrome-Report`.
+
+The Windows GUI still owns the global Undo shortcut. Routing that shortcut
+to an active browser correction and bundling the host in the Windows
+installer are separate acceptance steps. The installed build still uses the
+native Windows adapter for direct editing.
+
 ## Windows browser registration groundwork
 
 The Windows registration code writes a per-user native messaging entry for
@@ -11,15 +35,15 @@ and another browser's manifest retain their own lifecycle. A foreign default
 value or manifest stops the operation.
 
 The Windows CTest target `windows_browser_registration` remaps HKCU for its
-own process to a temporary key. Its cases cover both registry views, a
+own process to a temporary key. It passed on Windows in run 42684316278.
+Its cases cover both registry views, a
 Unicode executable path, re-registration, interrupted registration recovery,
 unregistering, and collision handling. See the Windows job for the result.
 The Linux registration CTest target checks the shared manifest identity.
 [Chromium native messaging registry](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging#native-messaging-host-location).
 
-The Windows installer and browser host still need wiring. The next step is
-to authenticate the Chrome process on Windows, use binary pipe I/O, and
-test real browser correction and Undo together with Reword's global shortcut.
+The browser host now calls the registry code. The Windows installer still
+needs wiring and a real test alongside Reword's global shortcut.
 
 ## Debian IBus component for GNOME Text Editor
 

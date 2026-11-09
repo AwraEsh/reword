@@ -10,13 +10,20 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
-#include <cerrno>
 #include <cstdio>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#include <memory>
+#include <windows.h>
+#else
+#include <cerrno>
 #include <poll.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include "x11_ibus_undo_route.h"
 #include <X11/extensions/XRes.h>
+#endif
 
 namespace {
 constexpr quint32 MaxFrameBytes = 4096;
@@ -38,15 +45,61 @@ void trace(Stage stage) {
 }
 
 QString browserApplication() {
+#ifdef _WIN32
+    // Chrome owns the two pipe servers even when Windows starts the host
+    // through cmd.exe. Both channels must identify the same live browser.
+    ULONG inputServer = 0, outputServer = 0;
+    if (!GetNamedPipeServerProcessId(GetStdHandle(STD_INPUT_HANDLE), &inputServer) ||
+        !GetNamedPipeServerProcessId(GetStdHandle(STD_OUTPUT_HANDLE), &outputServer) ||
+        !inputServer || inputServer != outputServer || inputServer == GetCurrentProcessId())
+        return {};
+    std::unique_ptr<void, decltype(&CloseHandle)> process(
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, inputServer),
+        CloseHandle);
+    if (!process || WaitForSingleObject(process.get(), 0) != WAIT_TIMEOUT)
+        return {};
+    FILETIME browserCreated{}, hostCreated{}, exited{}, kernel{}, user{};
+    if (!GetProcessTimes(process.get(), &browserCreated, &exited, &kernel, &user) ||
+        !GetProcessTimes(GetCurrentProcess(), &hostCreated, &exited, &kernel, &user) ||
+        CompareFileTime(&browserCreated, &hostCreated) > 0)
+        return {};
+    wchar_t image[32768];
+    DWORD length = 32768;
+    if (!QueryFullProcessImageNameW(process.get(), 0, image, &length))
+        return {};
+    const auto path = QString::fromWCharArray(image, length);
+    const auto name = QFileInfo(path).fileName().toLower();
+    if (name == "chrome.exe" || name == "chromium.exe")
+        return path;
+#else
     const auto path = QFileInfo(QString("/proc/%1/exe").arg(getppid())).symLinkTarget();
     const auto name = QFileInfo(path).fileName();
     if (name == "helium" || name == "chrome" || name == "chromium")
         return path;
+#endif
     return {};
 }
 
-bool allowedOrigin(const QString &origin) {
-    return origin == QLatin1StringView(reword::BrowserExtensionOrigin);
+bool allowedInvocation(const QStringList &arguments) {
+#ifdef _WIN32
+    constexpr auto windowOption = u"--parent-window=";
+    if (arguments.size() != 3 || !arguments[2].startsWith(windowOption))
+        return false;
+    bool valid = false;
+    QStringView(arguments[2]).sliced(QStringView(windowOption).size()).toLongLong(&valid);
+    if (!valid)
+        return false;
+#else
+    if (arguments.size() != 2)
+        return false;
+#endif
+    return arguments[1] == QLatin1StringView(reword::BrowserExtensionOrigin);
+}
+
+QString dataDirectory() {
+    const auto directory = qEnvironmentVariable("REWORD_DATA_DIR");
+    return directory.isEmpty() ?
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/reword" : directory;
 }
 
 bool writeResponse(const QJsonObject &response) {
@@ -56,6 +109,7 @@ bool writeResponse(const QJsonObject &response) {
            std::fwrite(payload.constData(), 1, size, stdout) == size && std::fflush(stdout) == 0;
 }
 
+#ifndef _WIN32
 class BrowserUndoRoute {
     Display *display_ = nullptr;
     Window owner_ = None, browserWindow_ = None;
@@ -133,6 +187,7 @@ class BrowserUndoRoute {
         return true;
     }
 };
+#endif
 
 class BrowserCorrection {
     const QString application_;
@@ -144,8 +199,10 @@ class BrowserCorrection {
     QElapsedTimer clock_;
     quint64 lastOffer_ = 0;
     qint64 lastOfferRevision_ = -1;
+#ifndef _WIN32
     bool offerCanClaimUndo_ = false;
     BrowserUndoRoute route_;
+#endif
 
     bool permitted() const {
         return !store_.paused() && store_.allowed(application_) &&
@@ -158,6 +215,7 @@ class BrowserCorrection {
         clock_.start();
     }
 
+#ifndef _WIN32
     bool maintainRoute() {
         if (route_.attempt.isEmpty())
             return false;
@@ -167,23 +225,31 @@ class BrowserCorrection {
         route_.clear();
         return false;
     }
+#endif
 
     QJsonObject suggest(const QByteArray &payload) {
         const QDeadlineTimer deadline(MaximumSuggestionAgeMs, Qt::PreciseTimer);
         const auto revision = store_.value("configRevision", 0).toLongLong();
         if (!permitted()) {
+#ifndef _WIN32
             route_.clear();
+#endif
             trace(Stage::Blocked);
             return {};
         }
         const auto request = QJsonDocument::fromJson(payload).object();
         if (request.size() == 1 && request.value("releaseUndo").isString()) {
+#ifndef _WIN32
             if (route_.attempt == request.value("releaseUndo").toString())
                 route_.clear();
+#endif
             return {};
         }
         const auto expectedRevision = QString::number(revision);
         if (request.size() == 2 && request.value("claimUndo").isString()) {
+#ifdef _WIN32
+            return {{"claimed", false}};
+#else
             const auto attempt = request.value("claimUndo").toString();
             const bool claimed = offerCanClaimUndo_ && lastOfferRevision_ == revision &&
                 request.value("revision").toString() == expectedRevision &&
@@ -191,6 +257,7 @@ class BrowserCorrection {
             if (claimed)
                 offerCanClaimUndo_ = false;
             return {{"claimed", claimed}};
+#endif
         }
         if (request.size() == 1 && request.value("policy").toBool()) {
             const auto undo = store_.value("undoShortcut", "Ctrl+Alt+Z").toString();
@@ -240,7 +307,9 @@ class BrowserCorrection {
         const auto wordKey = QString::fromLatin1(
             QCryptographicHash::hash(word->token.toUtf8(), QCryptographicHash::Sha256).toHex());
         const bool apply = retry_.shouldCorrect(application_, word->start, wordKey, clock_.elapsed());
+#ifndef _WIN32
         offerCanClaimUndo_ = apply;
+#endif
         lastOfferRevision_ = revision;
         QJsonObject response{{"start", word->start}, {"length", word->token.size()},
                              {"attempt", QString::number(++lastOffer_)}};
@@ -254,11 +323,26 @@ class BrowserCorrection {
 }
 
 int main(int argc, char **argv) {
+#ifndef _WIN32
     umask(0077);
+#endif
     trace(Stage::Started);
     qInstallMessageHandler([](QtMsgType, const QMessageLogContext &, const QString &) {});
     QCoreApplication app(argc, argv);
     const auto args = app.arguments();
+#ifdef _WIN32
+    if (args.size() == 3 && (args[1] == "--register-browser" || args[1] == "--unregister-browser")) {
+        const bool remove = args[1] == "--unregister-browser";
+        try {
+            reword::registerWindowsBrowserHost(args[2], dataDirectory(), app.applicationFilePath(), remove);
+            std::puts(remove ? "Reword browser registration removed." : "Reword browser host registered.");
+            return 0;
+        } catch (const std::exception &error) {
+            std::fprintf(stderr, "%s\n", error.what());
+            return 1;
+        }
+    }
+#else
     const bool packaged = args.size() == 5 && args[1] == "--register-browser" &&
                           args[3] == "--launcher";
     if (packaged || (args.size() == 3 &&
@@ -285,18 +369,23 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
-    const auto application = browserApplication();
-    if (application.isEmpty() || args.size() != 2 || !allowedOrigin(args[1]))
+#endif
+    if (!allowedInvocation(args))
         return 2;
+    const auto application = browserApplication();
+    if (application.isEmpty())
+        return 2;
+#ifdef _WIN32
+    if (_setmode(_fileno(stdin), _O_BINARY) == -1 || _setmode(_fileno(stdout), _O_BINARY) == -1)
+        return 2;
+#endif
     trace(Stage::Verified);
-    auto directory = qEnvironmentVariable("REWORD_DATA_DIR");
-    if (directory.isEmpty())
-        directory = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/reword";
     try {
-        BrowserCorrection correction(application, directory);
+        BrowserCorrection correction(application, dataDirectory());
         std::setvbuf(stdin, nullptr, _IONBF, 0);
         trace(Stage::Ready);
         for (;;) {
+#ifndef _WIN32
             if (correction.maintainRoute()) {
                 pollfd input{STDIN_FILENO, POLLIN, 0};
                 const auto ready = poll(&input, 1, 150);
@@ -305,6 +394,7 @@ int main(int argc, char **argv) {
                 if (ready < 0)
                     return 2;
             }
+#endif
             quint32 size = 0;
             const auto header = std::fread(&size, 1, sizeof size, stdin);
             if (!header && std::feof(stdin))
