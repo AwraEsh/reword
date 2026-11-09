@@ -1,5 +1,26 @@
 # Current handoff — 2026-11-09
 
+## Windows browser registration groundwork
+
+The Windows registration code writes a per-user native messaging entry for
+Chrome or Chromium. Each browser has a separate manifest in Reword's private
+data directory. The manifests use the same host name and extension origin as
+Linux. A reinstall can update the executable path in place. Unregistering
+removes the matching default registry value and manifest, while named values
+and another browser's manifest retain their own lifecycle. A foreign default
+value or manifest stops the operation.
+
+The Windows CTest target `windows_browser_registration` remaps HKCU for its
+own process to a temporary key. Its cases cover both registry views, a
+Unicode executable path, re-registration, interrupted registration recovery,
+unregistering, and collision handling. See the Windows job for the result.
+The Linux registration CTest target checks the shared manifest identity.
+[Chromium native messaging registry](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging#native-messaging-host-location).
+
+The Windows installer and browser host still need wiring. The next step is
+to authenticate the Chrome process on Windows, use binary pipe I/O, and
+test real browser correction and Undo together with Reword's global shortcut.
+
 ## Debian IBus component for GNOME Text Editor
 
 Debian packages built with `REWORD_IBUS=ON` ship the `Reword (X11)` input
