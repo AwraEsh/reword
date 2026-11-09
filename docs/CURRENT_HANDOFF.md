@@ -1,5 +1,26 @@
 # Current handoff — 2026-11-09
 
+## Windows browser Undo with the desktop app
+
+The Windows Chrome fixture now runs with the Reword GUI and sends real
+Windows keyboard events to the verified foreground process. The baseline
+at `b6bff8e` reproduced the failure in run 42687472773. Chrome corrected the
+word, then Reword received the global Undo chord and the browser text stayed
+corrected. The diagnostic report is `.deps/windows-undo-red-b6bff8e/report.json`.
+
+The host now reserves the Undo chord before editing when the desktop app
+is running. The local Windows message carries the browser window and process
+identity. The receiver checks the foreground target, the sibling host path
+and process lifetime, and the data-directory scope. It releases only the Undo
+shortcut and restores it on release, focus change, process exit or expiry.
+The host also releases on policy changes. The browser rechecks the field
+after reserving the chord and before changing text.
+
+The Windows CI report covers default and custom Undo in Chrome, Pause during
+an active reservation, and the return of native correction and Undo after
+focusing a Win32 editor. Normal desktop setup and the Windows installer
+integration remain separate acceptance steps.
+
 ## Windows browser native messaging host
 
 `REWORD_BROWSER_HOST=ON` builds the development host on Windows. Its
@@ -16,13 +37,12 @@ The Windows CI probe uses a disposable user, a fresh Chrome profile, and
 the real extension on a loopback test page. It checks that an untrusted
 launch exits before opening storage, registers the host, tests live
 correction and the extension's Undo without the desktop GUI, and removes
-the temporary registry value. The result is published as
-`Reword-Windows-Chrome-Report`.
+the temporary registry value. The standalone host passed in run 42685982030.
+The result is published as `Reword-Windows-Chrome-Report`.
 
-The Windows GUI still owns the global Undo shortcut. Routing that shortcut
-to an active browser correction and bundling the host in the Windows
-installer are separate acceptance steps. The installed build still uses the
-native Windows adapter for direct editing.
+The Windows installer still uses the native Windows adapter for direct
+editing. The browser host remains an opt-in development build pending installer
+integration.
 
 ## Windows browser registration groundwork
 

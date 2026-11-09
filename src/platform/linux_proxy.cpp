@@ -141,7 +141,7 @@ class LinuxProxy final : public Adapter {
         return request({{"operation", "action"}})["action"].toString();
     }
 };
-std::unique_ptr<Adapter> createAdapter() {
+std::unique_ptr<Adapter> createAdapter(const QString &) {
     return std::make_unique<LinuxProxy>();
 }
 } // namespace reword

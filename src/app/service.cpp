@@ -65,7 +65,7 @@ void Service::start() {
         store_ = std::make_unique<Store>(directory_);
         engine_ = std::make_unique<Engine>();
         if (!adapter_)
-            adapter_ = createAdapter();
+            adapter_ = createAdapter(directory_);
         wayland_ = qEnvironmentVariable("XDG_SESSION_TYPE") == "wayland";
         timer_ = new QTimer(this);
         connect(timer_, &QTimer::timeout, this, &Service::tick);

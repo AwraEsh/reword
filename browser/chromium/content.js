@@ -205,6 +205,7 @@ function startRewordContent({send, report = () => {}, engine = true, route = tru
             return;
         }
         let shortcut;
+        let reserveUndo = false;
         if (engine) {
             const permission = await send(field, {policy: true});
             if (permission?.revision !== revision || !unchanged() || field.value !== expected) {
@@ -212,6 +213,7 @@ function startRewordContent({send, report = () => {}, engine = true, route = tru
                 return;
             }
             shortcut = permission.undoShortcut;
+            reserveUndo = route && permission.undoBeforeEdit === true;
         }
         const start = engine ? reply.start : caret - 4;
         if (!Number.isInteger(start) || start < 0 || start >= caret - 1 ||
@@ -224,8 +226,22 @@ function startRewordContent({send, report = () => {}, engine = true, route = tru
         const segment = (skipped ? word : reply.corrected) + boundary;
         if (!skipped) {
             const end = caret - 1;
+            const isCurrent = () => unchanged() && field.value === expected;
+            const releaseReservation = () => {
+                if (reserveUndo) void send(field, {route: {releaseUndo: reply.attempt}});
+            };
+            if (reserveUndo) {
+                const claim = await send(field, {route: {claimUndo: reply.attempt, revision}});
+                if (!claim?.claimed || typeof shortcut !== 'string' || !isCurrent()) {
+                    if (claim?.claimed) releaseReservation();
+                    clearRetry();
+                    report(field, 'outcome', 'undo-unavailable');
+                    return;
+                }
+            }
             if (!replaceRange(field, {start, end, replacement: reply.corrected, inputType: 'insertReplacementText'},
-                              () => unchanged() && field.value === expected)) {
+                              isCurrent)) {
+                releaseReservation();
                 clearRetry();
                 report(field, 'outcome', 'declined');
                 return;
@@ -234,6 +250,7 @@ function startRewordContent({send, report = () => {}, engine = true, route = tru
             const newCaret = caret + reply.corrected.length - word.length;
             if (target !== targetRevision || inputRevisions.get(field) !== inputRevision ||
                 !eligible(field) || field.value !== after || !caretAt(field, newCaret)) {
+                releaseReservation();
                 clearRetry();
                 report(field, 'outcome', 'changed');
                 return;
@@ -243,7 +260,9 @@ function startRewordContent({send, report = () => {}, engine = true, route = tru
                         original: word, start, end: start + reply.corrected.length, revision, shortcut,
                         attempt: reply.attempt};
                 undoTimer = setTimeout(clearUndo, 30000);
-                if (route) {
+                if (reserveUndo) {
+                    report(field, 'undoRoute', 'claimed');
+                } else if (route) {
                     const record = undo;
                     const claim = await send(field, {route: {claimUndo: record.attempt, revision}});
                     if (undo !== record) return;

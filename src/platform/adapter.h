@@ -46,7 +46,7 @@ class Adapter {
         return false;
     }
 };
-std::unique_ptr<Adapter> createAdapter();
+std::unique_ptr<Adapter> createAdapter(const QString &dataDirectory = {});
 #ifndef _WIN32
 std::unique_ptr<Adapter> createNativeAdapter();
 #endif

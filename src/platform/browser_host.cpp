@@ -16,6 +16,7 @@
 #include <io.h>
 #include <memory>
 #include <windows.h>
+#include "windows_browser_undo.h"
 #else
 #include <cerrno>
 #include <poll.h>
@@ -44,7 +45,12 @@ void trace(Stage stage) {
     }
 }
 
-QString browserApplication() {
+struct BrowserPeer {
+    QString application;
+    quint32 pid = 0;
+};
+
+BrowserPeer browserApplication() {
 #ifdef _WIN32
     // Chrome owns the two pipe servers even when Windows starts the host
     // through cmd.exe. Both channels must identify the same live browser.
@@ -70,12 +76,13 @@ QString browserApplication() {
     const auto path = QString::fromWCharArray(image, length);
     const auto name = QFileInfo(path).fileName().toLower();
     if (name == "chrome.exe" || name == "chromium.exe")
-        return path;
+        return {path, quint32(inputServer)};
 #else
-    const auto path = QFileInfo(QString("/proc/%1/exe").arg(getppid())).symLinkTarget();
+    const auto pid = getppid();
+    const auto path = QFileInfo(QString("/proc/%1/exe").arg(pid)).symLinkTarget();
     const auto name = QFileInfo(path).fileName();
     if (name == "helium" || name == "chrome" || name == "chromium")
-        return path;
+        return {path, quint32(pid)};
 #endif
     return {};
 }
@@ -109,7 +116,72 @@ bool writeResponse(const QJsonObject &response) {
            std::fwrite(payload.constData(), 1, size, stdout) == size && std::fflush(stdout) == 0;
 }
 
-#ifndef _WIN32
+#ifdef _WIN32
+class BrowserUndoRoute {
+    const std::wstring endpoint_;
+    HWND owner_ = nullptr, receiver_ = nullptr, target_ = nullptr;
+    DWORD browserPid_ = 0;
+    ULONGLONG issued_ = 0;
+
+    bool notify(HWND target) const {
+        reword::WindowsBrowserUndoMessage request{GetTickCount64(), ULONG_PTR(target), browserPid_};
+        COPYDATASTRUCT message{reword::BrowserUndoCopyTag, DWORD(sizeof request), &request};
+        DWORD_PTR accepted = FALSE;
+        return SendMessageTimeoutW(receiver_, WM_COPYDATA, WPARAM(owner_), LPARAM(&message),
+                                   SMTO_ABORTIFHUNG | SMTO_BLOCK, reword::BrowserUndoMessageTimeoutMs,
+                                   &accepted) && accepted;
+    }
+
+    HWND receiver() const {
+        return FindWindowExW(HWND_MESSAGE, nullptr, reword::WindowsHotkeyWindowClass, endpoint_.c_str());
+    }
+
+  public:
+    QString attempt;
+    qint64 revision = -1;
+
+    explicit BrowserUndoRoute(const QString &directory) : endpoint_(reword::windowsUndoEndpoint(directory)) {}
+    ~BrowserUndoRoute() { clear(); }
+
+    bool requiresLease() const { return receiver() != nullptr; }
+
+    void clear() {
+        if (!owner_)
+            return;
+        notify(nullptr);
+        DestroyWindow(owner_);
+        owner_ = nullptr;
+        attempt.clear();
+    }
+
+    bool current() const {
+        return owner_ && GetTickCount64() - issued_ < reword::BrowserUndoLifetimeMs &&
+               target_ == GetForegroundWindow() && reword::windowProcess(target_) == browserPid_ &&
+               receiver_ == receiver();
+    }
+
+    bool claim(quint32 browserPid, const QString &offeredAttempt, qint64 offeredRevision) {
+        clear();
+        receiver_ = receiver();
+        target_ = GetForegroundWindow();
+        if (!receiver_ || !target_ || reword::windowProcess(target_) != browserPid)
+            return false;
+        browserPid_ = browserPid;
+        owner_ = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                 GetModuleHandleW(nullptr), nullptr);
+        if (!owner_)
+            return false;
+        issued_ = GetTickCount64();
+        if (!notify(target_) || !current()) {
+            clear();
+            return false;
+        }
+        attempt = offeredAttempt;
+        revision = offeredRevision;
+        return true;
+    }
+};
+#else
 class BrowserUndoRoute {
     Display *display_ = nullptr;
     Window owner_ = None, browserWindow_ = None;
@@ -119,6 +191,8 @@ class BrowserUndoRoute {
   public:
     QString attempt;
     qint64 revision = -1;
+
+    explicit BrowserUndoRoute(const QString &) {}
 
     ~BrowserUndoRoute() {
         if (display_)
@@ -191,6 +265,7 @@ class BrowserUndoRoute {
 
 class BrowserCorrection {
     const QString application_;
+    const quint32 browserPid_;
     reword::Store store_;
     reword::Engine engine_;
     reword::Options options_;
@@ -199,10 +274,8 @@ class BrowserCorrection {
     QElapsedTimer clock_;
     quint64 lastOffer_ = 0;
     qint64 lastOfferRevision_ = -1;
-#ifndef _WIN32
     bool offerCanClaimUndo_ = false;
     BrowserUndoRoute route_;
-#endif
 
     bool permitted() const {
         return !store_.paused() && store_.allowed(application_) &&
@@ -210,12 +283,11 @@ class BrowserCorrection {
     }
 
   public:
-    BrowserCorrection(const QString &application, const QString &directory)
-        : application_(application), store_(directory, 0) {
+    BrowserCorrection(const BrowserPeer &peer, const QString &directory)
+        : application_(peer.application), browserPid_(peer.pid), store_(directory, 0), route_(directory) {
         clock_.start();
     }
 
-#ifndef _WIN32
     bool maintainRoute() {
         if (route_.attempt.isEmpty())
             return false;
@@ -225,45 +297,45 @@ class BrowserCorrection {
         route_.clear();
         return false;
     }
-#endif
 
     QJsonObject suggest(const QByteArray &payload) {
         const QDeadlineTimer deadline(MaximumSuggestionAgeMs, Qt::PreciseTimer);
         const auto revision = store_.value("configRevision", 0).toLongLong();
         if (!permitted()) {
-#ifndef _WIN32
             route_.clear();
-#endif
             trace(Stage::Blocked);
             return {};
         }
         const auto request = QJsonDocument::fromJson(payload).object();
         if (request.size() == 1 && request.value("releaseUndo").isString()) {
-#ifndef _WIN32
             if (route_.attempt == request.value("releaseUndo").toString())
                 route_.clear();
-#endif
             return {};
         }
         const auto expectedRevision = QString::number(revision);
         if (request.size() == 2 && request.value("claimUndo").isString()) {
-#ifdef _WIN32
-            return {{"claimed", false}};
-#else
             const auto attempt = request.value("claimUndo").toString();
-            const bool claimed = offerCanClaimUndo_ && lastOfferRevision_ == revision &&
+            bool claimed = offerCanClaimUndo_ && lastOfferRevision_ == revision &&
                 request.value("revision").toString() == expectedRevision &&
-                attempt == QString::number(lastOffer_) && route_.claim(getppid(), attempt, revision);
-            if (claimed)
+                attempt == QString::number(lastOffer_) && route_.claim(browserPid_, attempt, revision);
+            if (claimed) {
                 offerCanClaimUndo_ = false;
+                if (!permitted() || store_.value("configRevision", 0).toLongLong() != revision) {
+                    route_.clear();
+                    claimed = false;
+                }
+            }
             return {{"claimed", claimed}};
-#endif
         }
         if (request.size() == 1 && request.value("policy").toBool()) {
             const auto undo = store_.value("undoShortcut", "Ctrl+Alt+Z").toString();
             if (store_.value("configRevision", 0).toLongLong() != revision)
                 return {};
-            return {{"revision", expectedRevision}, {"undoShortcut", undo}};
+            QJsonObject policy{{"revision", expectedRevision}, {"undoShortcut", undo}};
+#ifdef _WIN32
+            policy.insert("undoBeforeEdit", route_.requiresLease());
+#endif
+            return policy;
         }
         const auto text = request.value("text").toString();
         const auto caret = request.value("caret").toInt(-1);
@@ -307,9 +379,7 @@ class BrowserCorrection {
         const auto wordKey = QString::fromLatin1(
             QCryptographicHash::hash(word->token.toUtf8(), QCryptographicHash::Sha256).toHex());
         const bool apply = retry_.shouldCorrect(application_, word->start, wordKey, clock_.elapsed());
-#ifndef _WIN32
         offerCanClaimUndo_ = apply;
-#endif
         lastOfferRevision_ = revision;
         QJsonObject response{{"start", word->start}, {"length", word->token.size()},
                              {"attempt", QString::number(++lastOffer_)}};
@@ -372,8 +442,8 @@ int main(int argc, char **argv) {
 #endif
     if (!allowedInvocation(args))
         return 2;
-    const auto application = browserApplication();
-    if (application.isEmpty())
+    const auto peer = browserApplication();
+    if (peer.application.isEmpty())
         return 2;
 #ifdef _WIN32
     if (_setmode(_fileno(stdin), _O_BINARY) == -1 || _setmode(_fileno(stdout), _O_BINARY) == -1)
@@ -381,20 +451,28 @@ int main(int argc, char **argv) {
 #endif
     trace(Stage::Verified);
     try {
-        BrowserCorrection correction(application, dataDirectory());
+        BrowserCorrection correction(peer, dataDirectory());
         std::setvbuf(stdin, nullptr, _IONBF, 0);
         trace(Stage::Ready);
         for (;;) {
-#ifndef _WIN32
             if (correction.maintainRoute()) {
+#ifdef _WIN32
+                DWORD bytes = 0;
+                if (!PeekNamedPipe(GetStdHandle(STD_INPUT_HANDLE), nullptr, 0, nullptr, &bytes, nullptr))
+                    return GetLastError() == ERROR_BROKEN_PIPE ? 0 : 2;
+                if (!bytes) {
+                    Sleep(30);
+                    continue;
+                }
+#else
                 pollfd input{STDIN_FILENO, POLLIN, 0};
                 const auto ready = poll(&input, 1, 150);
                 if (!ready || (ready < 0 && errno == EINTR))
                     continue;
                 if (ready < 0)
                     return 2;
-            }
 #endif
+            }
             quint32 size = 0;
             const auto header = std::fread(&size, 1, sizeof size, stdin);
             if (!header && std::feof(stdin))

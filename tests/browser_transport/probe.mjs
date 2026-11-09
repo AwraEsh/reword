@@ -116,7 +116,7 @@ const x11 = (pid, action) => spawnSync(python, [join(fixture, 'x11_input.py'),
     root, String(pid), action], {stdio: 'ignore', timeout: 3500}).status === 0;
 const nativeFixture = windowsGui ? join(dirname(engineHost), 'reword_win_fixture.exe') : null;
 const windowsInput = (pid, action) => spawnSync(nativeFixture, ['--input', String(pid), action],
-    {stdio: 'ignore', timeout: 3500}).status === 0;
+    {stdio: 'ignore', windowsHide: true, timeout: 3500}).status === 0;
 const policyFor = (application, ...change) => execFileSync(
     join(dirname(engineHost), 'reword_browser_policy_fixture' + (windows ? '.exe' : '')),
     [join(root, 'reword'), application, ...change], {encoding: 'utf8', timeout: 5000}).trim();
@@ -327,6 +327,17 @@ try {
             }, workerSession);
             if (reply.exceptionDetails) throw new Error('The extension site registration failed');
         };
+        const prepareWindowsCorrection = async tag => {
+            await call('Page.navigate', {url: origin + '/?' + tag}, sessionId);
+            if (!await waitFor(() => evaluate(`location.search === '?${tag}' && document.readyState === 'complete'`)))
+                return false;
+            await focus('undo', 7);
+            await typeWord();
+            return waitFor(async () => {
+                const current = await status('undo');
+                return current.value === 'prefix the suffix' && current.pageEvent === 'insertReplacementText';
+            });
+        };
         await configureSite('registerSite');
         await call('Page.navigate', {url: origin + '/?enabled'}, sessionId);
         if (windows) {
@@ -359,7 +370,6 @@ try {
         }));
         if (windowsGui) {
             result.stage = 'physical-browser-undo';
-            await sleep(180);
             if (!windowsInput(browserPid, 'undo')) throw new Error('Windows Undo chord could not be sent');
         } else {
             await pressKey('z', 90, 3, 'KeyZ');
@@ -373,15 +383,22 @@ try {
             if (!result.enabledSiteUndo || result.guiInterceptedBrowserUndo)
                 throw new Error('The desktop Undo shortcut intercepted the browser Undo chord');
             setPolicy('undoShortcut', 'Ctrl+Alt+K');
-            await call('Page.navigate', {url: origin + '/?custom'}, sessionId);
-            if (!await waitFor(() => evaluate('location.search === "?custom" && document.readyState === "complete"')))
-                throw new Error('Chrome did not load the custom Undo fixture');
-            await focus('undo', 7);
-            await typeWord();
-            const customCorrected = await waitFor(async () => (await status('undo')).value === 'prefix the suffix');
-            result.windowsCustomUndo = Boolean(customCorrected && windowsInput(browserPid, 'custom-undo') &&
-                await waitFor(async () => (await status('undo')).value === 'prefix teh suffix'));
+            result.windowsCustomUndo = Boolean(await prepareWindowsCorrection('custom') &&
+                windowsInput(browserPid, 'custom-undo') && await waitFor(async () => {
+                    const current = await status('undo');
+                    return current.value === 'prefix teh suffix' && current.pageEvent === 'historyUndo';
+                }));
             if (!result.windowsCustomUndo) throw new Error('The custom Windows browser Undo chord did not restore text');
+            result.windowsPauseDuringLease = Boolean(await prepareWindowsCorrection('pause') &&
+                windowsInput(browserPid, 'pause') && await waitFor(isPaused));
+            if (!result.windowsPauseDuringLease) throw new Error('Browser Undo prevented the Windows Pause chord');
+            await sleep(180);
+            const beforePauseUndo = guiUndoRequests;
+            result.windowsPauseRestoredUndo = windowsInput(browserPid, 'custom-undo') &&
+                await waitFor(() => guiUndoRequests > beforePauseUndo) &&
+                (await status('undo')).value === 'prefix the suffix';
+            if (!result.windowsPauseRestoredUndo || !windowsInput(browserPid, 'pause') ||
+                !await waitFor(() => !isPaused())) throw new Error('Windows Undo did not recover during Pause');
         }
         result.noFixtureMarkers = await evaluate(
             "!document.documentElement.dataset.rewordProbeReady && !document.getElementById('undo').dataset.outcome");
@@ -396,6 +413,12 @@ try {
         if (!result.siteStartsDisabled || !result.enabledSiteCorrected || !result.enabledSiteUndo ||
             !result.noFixtureMarkers || !result.disabledSiteUntouched) {
             throw new Error('The unpacked extension site gate failed');
+        }
+        if (windowsGui) {
+            await configureSite('registerSite');
+            result.windowsFocusChangeStartedWithCorrection = Boolean(await prepareWindowsCorrection('focus'));
+            if (!result.windowsFocusChangeStartedWithCorrection)
+                throw new Error('The focus-change fixture did not create a browser correction');
         }
     } else {
         for (const field of ['plain', 'multiline']) {
