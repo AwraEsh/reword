@@ -1,5 +1,36 @@
 # Current handoff — 2026-11-09
 
+## Unpacked browser extension and site opt-in
+
+The Chromium extension now has its own files under `browser/chromium/`.
+The isolated probes use the same content editing and native transport
+code through thin test adapters. The normal extension has an English
+site toggle. It asks for a browser host permission only after the user
+enables a site. The worker requires both the permission and an active
+site registration. Reword's application rule and Pause still apply.
+The native host accepts the fixed unpacked extension origin. The public
+key fixes the development identity and carries no signing private key.
+[Manifest key](https://developer.chrome.com/docs/extensions/reference/manifest/key).
+
+Helium and Chrome temporary profiles passed the unpacked extension
+probe. An unregistered site kept the original text, a registered site
+corrected and restored it, and removing the registration stopped host
+requests from the page already open. The fixture grants loopback
+permission ahead of time. The permission prompt itself was outside
+this probe. The shared physical X11 Undo and fixed-response controls
+also passed. Reports are `.deps/browser-extension-helium/report.json`,
+`.deps/browser-extension-chrome/report.json`,
+`.deps/browser-extension-shared-x11/report.json` and
+`.deps/browser-extension-shared-fixed/report.json`.
+
+The optional CMake install includes the host and the unpacked extension.
+The staged host was executable and the staged extension matched the source
+file for file. Rebuild the host after enabling the CMake option before
+running the install step.
+Per-profile host registration, AppImage and Debian packaging, extension
+signing and the Windows native host remain open. The installed Preview
+and normal browser profiles were outside this test.
+
 ## X11 browser Undo routing
 
 An opt-in browser host now claims only Undo after a confirmed browser

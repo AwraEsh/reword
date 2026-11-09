@@ -11,6 +11,7 @@ This table describes tested fixtures, not blanket support for applications.
 | Private Debian X11 / browser native messaging | Helium 0.12.4.1 and Google Chrome 151.0.7922.173 carried a local request and applied a guarded range edit in a plain input and textarea. The fixture discarded late replies after typing or focus changes and excluded password and read-only controls. | Fixed-response transport fixture. Browser correction with the Reword engine, rich web editors and installed browser profiles are still unverified. |
 | Private Debian X11 / compiled Reword browser host | Helium and Chrome corrected English and Persian, passed alternating in-place retries, notified the form of range changes, honored page vetoes and restored a correction with the configured Undo shortcut. | Opt-in Linux host with a fixture extension. Desktop global shortcut delivery, ordinary browser profiles, rich fields and Windows registration remain open. |
 | Private Debian X11 / physical browser Undo | The opt-in Helium and Chrome fixtures restored text using physical default and custom Undo while the GUI ran. The GUI retained Pause and regained Undo after restore or Pause. | Temporary browser profiles. Ordinary browser profiles, packaged host registration and the Windows route remain open. |
+| Private Debian X11 / unpacked Chromium extension | Helium and Chrome kept a site unchanged before registration, corrected and restored a word after registration, and stopped forwarding requests when the site was disabled. | Temporary profiles with the loopback test permission pre-granted. The browser permission prompt and normal profile installation are separate checks. |
 | Debian X11 / YukiGram 7.1.5.0 (Flatpak) | The user reported live correction did not run with Automatic selected. | The message field has no confirmed writable native path. |
 | Private Debian X11 / IBus 1.5.32 | A fixed-word test engine corrected text in GNOME Text Editor 48.3 and preserved the reference text. In Helium, the test engine corrected its own preedit composition before committing it. The HTML password control kept its original text. | Diagnostic engine only. Helium sent key events and accepted composition but did not send surrounding text or report field purpose to the engine during the test. YukiGram and the production correction policies remain unverified on this path. |
 | Private Debian X11 / compiled Reword IBus engine and GUI | GNOME Text Editor 48.3 corrected English and Persian. Independent language switches, alternating retry, Pause and Resume, per-app denial, 25 ms English key spacing, and live Undo passed. The native Undo also worked in a GTK single-line control before and after the editor. | Opt-in development target. Undo requires a current surrounding-text observation. Selected-text correction, live editing in Helium and YukiGram, and normal-desktop installation remain open. |
@@ -114,9 +115,15 @@ python3 scripts/test-native-linux.py --browser google-chrome --browser-engine --
 ~~~
 
 The fixture registers the host only in its own temporary profile and
-uses a temporary Reword store. The compiled host is excluded from
-installers. Live correction in this experiment is limited to plain
+uses a temporary Reword store. An opt-in CMake installation stages the
+host and extension. The release installers still need browser host
+registration. Live correction in this experiment is limited to plain
 inputs and textareas of at most 384 UTF-16 code units.
+
+~~~sh
+cmake --install build --component Browser --prefix /path/to/staging
+python3 scripts/test-native-linux.py --browser-engine --browser-extension --browser-output ./local-browser-extension
+~~~
 
 To exercise the physical X11 shortcut, build the GUI with the browser
 host option enabled and run both modes in the private desktop.

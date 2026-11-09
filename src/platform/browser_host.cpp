@@ -1,4 +1,5 @@
 #include "core/store.h"
+#include "browser_extension_origin.h"
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -7,7 +8,6 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QRegularExpression>
 #include <QStandardPaths>
 #include <cerrno>
 #include <cstdio>
@@ -45,9 +45,7 @@ QString browserApplication() {
 }
 
 bool allowedOrigin(const QString &origin) {
-    static const QRegularExpression extensionOrigin(R"(\Achrome-extension://[a-p]{32}/\z)");
-    return extensionOrigin.match(origin).hasMatch() &&
-           origin == qEnvironmentVariable("REWORD_BROWSER_ORIGIN");
+    return origin == QLatin1StringView(reword::BrowserExtensionOrigin);
 }
 
 bool writeResponse(const QJsonObject &response) {

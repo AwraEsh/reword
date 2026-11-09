@@ -40,11 +40,15 @@ def main():
                         help="Use the compiled Reword browser host")
     parser.add_argument("--browser-x11", choices=("control", "gui"),
                         help="Exercise the browser Undo chord through the owned X server")
+    parser.add_argument("--browser-extension", action="store_true",
+                        help="Run the unpacked extension with a pre-granted private test site")
     args = parser.parse_args()
     if (args.browser or args.browser_engine) and not args.browser_output:
         parser.error("Browser options need --browser-output.")
     if args.browser_x11 and not args.browser_engine:
         parser.error("--browser-x11 needs --browser-engine.")
+    if args.browser_extension and (not args.browser_engine or args.browser_x11):
+        parser.error("--browser-extension needs --browser-engine and runs separately from --browser-x11.")
     if args.browser_output:
         if args.ibus_output or args.fixture_timing_only or args.active_app or args.active_output:
             parser.error("The browser fixture runs separately from other private probes.")
@@ -80,6 +84,8 @@ def main():
                         command.append("--browser-engine")
                     if args.browser_x11:
                         command.extend(["--browser-x11", args.browser_x11])
+                    if args.browser_extension:
+                        command.append("--browser-extension")
                 if args.ibus_output:
                     command.extend(["--ibus-output", args.ibus_output])
                     if args.ibus_engine:
@@ -208,6 +214,7 @@ def main():
                     command.append(str(ROOT / "build/reword-browser-host"))
                 if args.browser_x11:
                     command.extend([args.browser_x11, sys.executable])
+                env["REWORD_PROBE_EXTENSION"] = "1" if args.browser_extension else "0"
                 driver = spawn(command, "browser-probe")
                 result = driver.wait(timeout=65 if args.browser_x11 else 55)
                 print("PASS: private browser transport fixture." if result == 0 else
