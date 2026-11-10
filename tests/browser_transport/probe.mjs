@@ -429,19 +429,37 @@ try {
         }
         result.noFixtureMarkers = await evaluate(
             "!document.documentElement.dataset.rewordProbeReady && !document.getElementById('undo').dataset.outcome");
+        result.stage = 'disabled-site';
         await configureSite('unregisterSite');
-        await evaluate("document.getElementById('undo').value = 'prefix suffix'");
+        const previousPageEdits = await evaluate(`(() => {
+            const field = document.getElementById('undo');
+            field.value = 'prefix suffix';
+            return Number(field.dataset.pageEvents ?? 0);
+        })()`);
         await focus('undo', 7);
         const frames = result.nativeHostStages.length;
         await typeWord();
         await sleep(400);
-        result.disabledSiteUntouched = (await status('undo')).value === 'prefix teh suffix' &&
+        const disabledSite = await status('undo');
+        result.disabledSiteUntouched = disabledSite.value === 'prefix teh suffix' &&
+            disabledSite.pageEvents === previousPageEdits &&
             result.nativeHostStages.length === frames;
+        if (!result.disabledSiteUntouched) {
+            result.disabledSiteObservation = {
+                inputUnchanged: disabledSite.value === 'prefix suffix',
+                expectedInput: disabledSite.value === 'prefix teh suffix',
+                correctedInput: disabledSite.value === 'prefix the suffix',
+                pageEditEvents: disabledSite.pageEvents - previousPageEdits,
+                fieldFocused: await evaluate("document.activeElement?.id === 'undo'"),
+                documentFocused: await evaluate('document.hasFocus()'),
+            };
+        }
         if (!result.siteStartsDisabled || !result.enabledSiteCorrected || !result.enabledSiteUndo ||
             !result.noFixtureMarkers || !result.disabledSiteUntouched) {
             throw new Error('The unpacked extension site gate failed');
         }
         if (windowsGui) {
+            result.stage = 'windows-focus-correction';
             await configureSite('registerSite');
             result.windowsFocusChangeStartedWithCorrection = Boolean(await prepareWindowsCorrection('focus'));
             if (!result.windowsFocusChangeStartedWithCorrection)

@@ -184,6 +184,17 @@ keystrokes from a correction despite revocation. Capture the fixed expected
 outcome and focus flags in the next Windows run. [Push run](https://github.com/AwraEsh/reword/actions/runs/42893203705)
 and [PR run](https://github.com/AwraEsh/reword/actions/runs/42893211529).
 
+At `6b7a161`, both hosted Linux jobs passed. The Windows push and PR jobs
+both passed the initial correction, Undo and Pause cases, then failed the
+disabled-site assertion. The push reached the installed fixture. The PR
+failed on the development fixture before installer testing. The probe now
+reports fixed flags for the input outcome and focus on failure, and checks
+that no replacement or Undo event occurred after site revocation.
+The stricter assertion passed in a private Helium profile with the compiled
+Linux host. The Windows evidence is still pending for this version of the probe.
+[Push run](https://github.com/AwraEsh/reword/actions/runs/42894910920)
+and [PR run](https://github.com/AwraEsh/reword/actions/runs/42894920422).
+
 ## Windows browser Undo with the desktop app
 
 The Windows Chrome fixture now runs with the Reword GUI and sends real
