@@ -145,3 +145,53 @@ Final integrated local verification at 116ad51: complete build and all eight
 CTest suites pass in 46.32s, including the process sampler integrated from PR #16.
 The final footer and existing consent/modal checks pass. Final branch CI must
 still confirm this integrated source on both operating systems.
+
+## Windows capture inspection — 2026-10-20
+
+Downloaded `Reword-Windows-UI-Review` from hosted run 39395053416 at f495be3
+into ignored `.deps/ui-windows-f495be3`. Inspected these actual 880×620 captures:
+light Overview, Correction, Applications and History; dark Languages, Insights
+and Privacy; dark Saved correction and Practice; light Pause and long consent.
+
+The inspected captures show readable English labels, visible selected navigation
+and switch states, bounded long consent wrapping, visible No/Not now/Yes actions,
+and legible mixed Persian/English content. History detail keeps its two copy
+actions and Close visible while long text scrolls. No clipping of the sampled
+primary actions or unreadable theme contrast was observed in these images.
+This is a sample of software-rendered Windows Qt output, not normal desktop,
+DPI, screen-reader, tray or complete interaction acceptance.
+
+Applications and Insights are empty in this fixture. The lower personal-word
+and replacement lists are below the captured viewport. Their populated/long-data
+coverage is still open. Source inspection finds labels without width/wrapping
+constraints in application names, replacement rows and insight words; capture
+these cases and reproduce any actual overflow before changing layout. Do not
+mark populated-list acceptance from empty-state images.
+
+Impeccable visual-review guidance was consulted. Its context launcher could not
+execute (permission denied); existing product requirements, QML and this evidence
+record supplied the context. Its web/mobile detectors do not establish Qt desktop
+quality, so no detector score or complete Impeccable audit is claimed.
+
+## Populated lists and long Practice question — 2026-10-20
+
+Source cba5167 passes the complete Linux/Windows workflow
+[39400869152](https://github.com/AwraEsh/reword/actions/runs/39400869152).
+Its Linux UI JUnit contains 29 cases with zero failures, errors or skips; the
+retained diagnostics contain no binding-loop, assignment, ReferenceError or
+TypeError warning. The populated-list and long-question regressions were first
+observed failing; see the [execution record](superpowers/plans/2026-10-20-populated-list-review.md).
+
+Downloaded both actual UI artifacts to ignored .deps/populated-cba5167-linux
+and .deps/populated-cba5167-windows. Inspected the long Practice question in
+both themes on both platforms, Windows dark Applications, Linux light Insights,
+Linux dark personal words and Windows light replacements. Full long values wrap
+inside their available width; permission, Practice, Remove and Close controls
+remain in bounds. Scrolled lists can naturally show partial neighboring rows.
+Dark ComboBox arrows now use the theme's muted foreground and pass the 3:1
+indicator contrast check. The Practice answer and stored list values are not
+truncated. Independent static review found no actionable issue in these fixes.
+
+This closes the sampled synthetic long-data layout defects. Software-rendered
+880×620 captures do not establish physical display scaling, screen-reader,
+normal Windows desktop, tray or full keyboard interaction acceptance.

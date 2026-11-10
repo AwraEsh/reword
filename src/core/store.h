@@ -2,24 +2,45 @@
 #include "core.h"
 #include <QSqlDatabase>
 #include <QVariantList>
+class QSqlQuery;
 namespace reword {
+enum class ApplicationMode { Disabled, Automatic, ShortcutOnly };
+struct ShortcutSettings {
+    QStringList keys;
+    qint64 revision = 0;
+};
+struct NativePolicy {
+    ApplicationMode mode;
+    bool paused;
+    bool browsers;
+    qint64 revision;
+};
+
 class Store {
     QSqlDatabase db_;
     QString connection_;
     void exec(const QString &sql);
+    void updateSetting(const QString &, const QVariant &, bool invalidateCorrection);
+    void changeCorrectionConfiguration(QSqlQuery &query);
 
   public:
-    explicit Store(const QString &directory);
+    explicit Store(const QString &directory, int busyTimeoutMs = 1000);
     ~Store();
     QVariant value(const QString &, const QVariant &fallback = {}) const;
     void setValue(const QString &, const QVariant &);
+    void setCorrectionOption(const QString &, const QVariant &);
     Options options() const;
-    QStringList shortcuts() const;
+    ShortcutSettings shortcutSettings() const;
     bool restoreShortcuts(const QStringList &expected, qint64 revision,
                           const QStringList &previous);
     void discover(const QString &id, const QString &name, bool restricted = false);
     void decide(const QString &id, const QString &decision, QDate today = QDate::currentDate());
-    bool allowed(const QString &) const;
+    void removeApplication(const QString &id);
+    ApplicationMode applicationMode(const QString &id) const;
+    NativePolicy nativePolicy(const QString &id,
+                              qint64 now = QDateTime::currentSecsSinceEpoch()) const;
+    bool allowed(const QString &id) const;
+    bool selectionAllowed(const QString &id) const;
     bool shouldAsk(const QString &, QDate today = QDate::currentDate()) const;
     QVariantList applications() const;
     void history(const QString &original, const QString &corrected, const Options &,
@@ -29,7 +50,7 @@ class Store {
     QVariantMap historyDetail(qint64 id) const;
     void deleteHistory(qint64 id);
     void clearHistory();
-    void count(const QString &, const QString &, const Options &);
+    bool count(const QString &, const QString &, const Options &);
     QVariantList statistics() const;
     void clearStatistics();
     void addWord(const QString &);

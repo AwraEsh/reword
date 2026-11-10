@@ -1,5 +1,6 @@
 """Read only the owned synthetic database; never put its text into reports."""
 import sqlite3
+from contextlib import closing
 
 from stability_evidence import WorkloadFailure
 
@@ -9,7 +10,7 @@ class HistoryCheck:
         self.database, self.evidence = database, evidence
 
     def _read(self):
-        with sqlite3.connect(f'file:{self.database}?mode=ro', uri=True, timeout=.5) as connection:
+        with closing(sqlite3.connect(f'file:{self.database}?mode=ro', uri=True, timeout=.5)) as connection:
             count, size = connection.execute('SELECT COUNT(*),COALESCE(SUM(bytes),0) FROM history').fetchone()
             self.evidence.history(count, size)
             if connection.execute('SELECT COUNT(*) FROM statistics').fetchone()[0]:

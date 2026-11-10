@@ -1,0 +1,57 @@
+# Fcitx original recovery before write
+
+The selected original must already be copyable when a native write happens,
+including when the frontend never confirms the write. Reuse authenticated
+same-account RecoveryClient/Server and their existing acknowledgement; do not
+add network access, clipboard fallback or a blocking wait on the input loop.
+
+- [x] Real owned Fcitx/Store/recovery regression: accept the shortcut and lock,
+  substitute the worker-result boundary, and observe native commit ordering.
+  Original/result must reach recovery before commit. Disconnect, permission,
+  Pause, changed selection and expiry after receipt must prevent a write.
+  History stays empty without confirmation and inserts once after confirmation.
+  Observe local RED under one-job resource bounds.
+- [x] Hold the prepared job and operation lock while awaiting recovery ACK.
+  Accept a selection only when the client has no prior queued delivery. Recheck
+  policy, identity, selection, cancellation and the same acceptance deadline
+  after ACK before committing. Ignore stale ACKs after cancellation and keep
+  futures owned until reaped. No duplicate submission at confirmation.
+- [x] Verify local focused and full tests within safe resource bounds and obtain
+  independent static review. Record exact source and checks.
+- [x] Run required Windows CI without repeated large artifact downloads.
+  Ordinary Wayland and GUI IPC Cancel remain separate acceptance work.
+
+Design choice: waiting for the existing client ACK proves the GUI-side passage
+receiver ran before write. Merely submitting then committing cannot prove this.
+Restricting this addon to one delivery until ACK avoids correlating an old ACK
+with a new job without changing the established wire protocol. Generic recovery
+clients retain their existing bounded queue behavior. Cancellation after receipt
+may leave an explicit session-recovery original, but never persistent history
+for an unconfirmed write.
+
+Local RED: the six new rows fail as expected on the actual accepted shortcut
+path. The normal control writes before recovery delivery; disconnect/deny/Pause/
+selection/expiry controls also write. Actual JUnit: 8 cases including init/cleanup,
+6 failures, zero errors/skips, 2.901 s; ignored receipt .deps/fcitx-recovery-red.xml.
+Built serially under 1 GiB address-space/90 CPU seconds with existing dependencies,
+ran under 512 MiB/20 CPU seconds in a private D-Bus session. Core also passes.
+Fcitx reports disabled keyboard/input-method addons because the fixture deliberately
+has no real desktop frontend; these warnings do not skip assertions.
+
+Implementation waits asynchronously for the existing client ACK, holding the
+prepared job/lock and the original acceptance deadline. A ready() guard refuses
+new selection while an older frame may still acknowledge. Recovery delivery
+rechecks exact selection and policy before native commit; confirmed history no
+longer submits a duplicate. Added Cancel/password/older-ACK controls. Local
+core/recovery/Fcitx suites pass in 22.69 s; Fcitx JUnit: 22 cases, zero failures,
+errors or skips. The complete source build succeeds at 611be89 under a serial
+1200 MiB aggregate/no-swap/80% CPU scope. All 12 registered CTest targets pass
+with software rendering in 178.04 s. Independent static review found no important
+finding. This local run is not Windows CI or ordinary Wayland desktop acceptance.
+
+Draft PR28 is stacked on PR27. Hosted run 39575913891 at 6b76ae4 succeeds on
+Linux and Windows in 3m20s. Windows passes build/tests, dependency metadata,
+installer creation, install/launch/uninstall without developer dependencies and
+the native field/shortcut probe. Linux passes build/CTest, UI launch,
+foreign-account recovery rejection and controlled GTK probes. The packaged
+two-hour workload is intentionally skipped for an ordinary pull-request run.

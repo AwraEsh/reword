@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+launcher=$(readlink -f -- "$0")
+bin=${launcher%/*}
+prefix=${bin%/*}
+export LD_LIBRARY_PATH="$prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export QT_PLUGIN_PATH="$prefix/plugins"
+exec "$bin/reword-ibus" "$@"

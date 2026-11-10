@@ -81,6 +81,14 @@ int main(int argc, char **argv) {
     if (g_getenv("REWORD_FIXTURE_MAXIMIZE"))
         gtk_window_maximize(GTK_WINDOW(window));
     gtk_widget_show_all(window);
+    if (g_getenv("REWORD_FIXTURE_NAMESPACE_PID")) {
+        const gulong namespacePid = 2;
+        gdk_property_change(gtk_widget_get_window(window),
+                            gdk_atom_intern_static_string("_NET_WM_PID"),
+                            gdk_atom_intern_static_string("CARDINAL"), 32,
+                            GDK_PROP_MODE_REPLACE,
+                            reinterpret_cast<const guchar *>(&namespacePid), 1);
+    }
     gtk_window_present(GTK_WINDOW(window));
     gtk_widget_grab_focus(entry);
     g_timeout_add(

@@ -5,6 +5,151 @@ using namespace reword;
 class CoreTest : public QObject {
     Q_OBJECT
   private slots:
+    void inputMethodBoundarySharesTextProtections() {
+        const auto text = QString::fromUtf8("🙂 teh rest");
+        const auto english = wordBeforeBoundary(text, 6, u' ');
+        QVERIFY(english);
+        QCOMPARE(english->token, QString("teh"));
+        QCOMPARE(english->start, 3);
+        const auto persian = wordBeforeBoundary(QString::fromUtf8("سلام"), 4, u'،');
+        QVERIFY(persian);
+        QCOMPARE(persian->token, QString::fromUtf8("سلام"));
+        QVERIFY(!wordBeforeBoundary(text, 1, u' '));
+        QVERIFY(!wordBeforeBoundary(QString("https://example.com"), 19, u' '));
+        QVERIFY(!wordBeforeBoundary(QString("teh"), 3, u'x'));
+    }
+    void shortcutDecisionPersistsWithoutEnablingLegacyLiveAccess() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        writer.discover("/synthetic-app", "Synthetic app");
+        const auto before = reader.value("configRevision", 0).toLongLong();
+        writer.decide("/synthetic-app", "shortcut");
+        QCOMPARE(reader.applications().first().toMap()["decision"].toString(), QString("shortcut"));
+        QCOMPARE(reader.applicationMode("/synthetic-app"), ApplicationMode::ShortcutOnly);
+        QVERIFY(reader.selectionAllowed("/synthetic-app"));
+        QVERIFY(!reader.allowed("/synthetic-app"));
+        QVERIFY(!reader.shouldAsk("/synthetic-app"));
+        QVERIFY(reader.value("configRevision", 0).toLongLong() > before);
+        Store reopened(data.path());
+        QCOMPARE(reopened.applicationMode("/synthetic-app"), ApplicationMode::ShortcutOnly);
+        writer.decide("/synthetic-app", "deny");
+        QCOMPARE(reader.applicationMode("/synthetic-app"), ApplicationMode::Disabled);
+        QVERIFY(!reader.selectionAllowed("/synthetic-app"));
+        writer.decide("/synthetic-app", "allow");
+        QCOMPARE(reader.applicationMode("/synthetic-app"), ApplicationMode::Automatic);
+        const auto beforeRemove = reader.value("configRevision", 0).toLongLong();
+        writer.removeApplication("/synthetic-app");
+        QVERIFY(reader.applications().isEmpty());
+        QVERIFY(!reader.selectionAllowed("/synthetic-app"));
+        QCOMPARE(reader.value("configRevision", 0).toLongLong(), beforeRemove + 1);
+        reader.discover("/synthetic-app", "Synthetic app");
+        QVERIFY(reader.shouldAsk("/synthetic-app"));
+        QVERIFY(!reader.allowed("/synthetic-app"));
+    }
+    void shortcutSettingsPairKeysWithCurrentRevision() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        const auto initial = reader.shortcutSettings();
+        QCOMPARE(initial.keys, (QStringList{"Ctrl+Alt+R", "Ctrl+Alt+Z", "Ctrl+Alt+Shift+P"}));
+        QCOMPARE(initial.revision, 0);
+        writer.setCorrectionOption("undoShortcut", "Ctrl+Alt+K");
+        const auto changed = reader.shortcutSettings();
+        QCOMPARE(changed.keys, (QStringList{"Ctrl+Alt+R", "Ctrl+Alt+K", "Ctrl+Alt+Shift+P"}));
+        QCOMPARE(changed.revision, initial.revision + 1);
+        QVERIFY(!reader.restoreShortcuts(changed.keys, initial.revision, initial.keys));
+        QVERIFY(reader.restoreShortcuts(changed.keys, changed.revision, initial.keys));
+        const auto restored = writer.shortcutSettings();
+        QCOMPARE(restored.keys, initial.keys);
+        QCOMPARE(restored.revision, changed.revision + 1);
+    }
+    void nativePolicyObservesCrossConnectionChanges() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        const QString app = "/synthetic-browser";
+        constexpr qint64 now = 1000;
+        auto policy = reader.nativePolicy(app, now);
+        QCOMPARE(policy.mode, ApplicationMode::Disabled);
+        QCOMPARE(policy.revision, 0);
+        QVERIFY(policy.browsers);
+        QVERIFY(!policy.paused);
+        writer.discover(app, "Synthetic browser");
+        writer.decide(app, "shortcut");
+        writer.setCorrectionOption("browsers", false);
+        writer.setCorrectionOption("pauseUntil", now + 1);
+        policy = reader.nativePolicy(app, now);
+        QCOMPARE(policy.mode, ApplicationMode::ShortcutOnly);
+        QCOMPARE(policy.revision, 3);
+        QVERIFY(!policy.browsers);
+        QVERIFY(policy.paused);
+        QVERIFY(!reader.nativePolicy(app, now + 1).paused);
+        writer.pause(-1);
+        writer.decide(app, "allow");
+        policy = reader.nativePolicy(app, now);
+        QCOMPARE(policy.mode, ApplicationMode::Automatic);
+        QVERIFY(policy.paused);
+        writer.removeApplication(app);
+        policy = reader.nativePolicy(app, now);
+        QCOMPARE(policy.mode, ApplicationMode::Disabled);
+        QCOMPARE(policy.revision, 6);
+    }
+    void optionsObserveOtherConnectionChangesWithoutCaching() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        QVERIFY(reader.options().english);
+        writer.setValue("english", false);
+        writer.setValue("persian", false);
+        writer.setValue("historyCount", 999999);
+        writer.setValue("maxCharacters", 999999);
+        auto options = reader.options();
+        QVERIFY(!options.english);
+        QVERIFY(!options.persian);
+        QCOMPARE(options.historyCount, 500);
+        QCOMPARE(options.maxCharacters, MaxPassageCharacters);
+        writer.setValue("english", true);
+        writer.setValue("historyCount", 0);
+        QVERIFY(reader.options().english);
+        QCOMPARE(reader.options().historyCount, 1);
+    }
+    void personalDictionaryChangesInvalidatePreparedCorrections() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        const auto revision = [&] { return reader.value("configRevision", 0).toLongLong(); };
+        const auto initial = revision();
+        writer.addWord("Teh");
+        QVERIFY(reader.words().contains("teh"));
+        QCOMPARE(revision(), initial + 1);
+        writer.addWord("teh");
+        QCOMPARE(revision(), initial + 1);
+        writer.removeWord("teh");
+        QCOMPARE(revision(), initial + 2);
+        writer.replacement("teh", "that");
+        QCOMPARE(reader.replacements().value("teh"), QString("that"));
+        QCOMPARE(revision(), initial + 3);
+        writer.replacement("teh", "that");
+        QCOMPARE(revision(), initial + 3);
+        writer.replacement("teh", "");
+        QVERIFY(!reader.replacements().contains("teh"));
+        QCOMPARE(revision(), initial + 4);
+        writer.setCorrectionOption("english", false);
+        QVERIFY(!reader.options().english);
+        QCOMPARE(revision(), initial + 5);
+        writer.setCorrectionOption("english", false);
+        QCOMPARE(revision(), initial + 5);
+    }
+    void pauseAndResumeInvalidatePreparedCorrections() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        const auto revision = [&] { return reader.value("configRevision", 0).toLongLong(); };
+        const auto initial = revision();
+        writer.pause(-1);
+        QVERIFY(reader.paused());
+        QCOMPARE(revision(), initial + 1);
+        writer.pause(-1);
+        QCOMPARE(revision(), initial + 1);
+        writer.pause(0);
+        QVERIFY(!reader.paused());
+        QCOMPARE(revision(), initial + 2);
+    }
     void oversizedOptionsDoNotBypassOperationCeiling() {
         Engine engine;
         Options options;

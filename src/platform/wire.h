@@ -2,6 +2,9 @@
 #include "adapter.h"
 #include <QJsonObject>
 namespace reword {
+inline constexpr int NativeRequestTimeoutMs = 2000;
+inline constexpr int NativeWriteChecks = 2;
+
 inline QJsonObject encodeField(const Field &f) {
     return {{"app", f.app},
             {"id", f.id},

@@ -3,6 +3,14 @@ $Root = Split-Path -Parent $PSScriptRoot
 $Stage = Join-Path $Root 'dist/windows'
 New-Item -ItemType Directory -Force $Stage | Out-Null
 Copy-Item "$Root/build/Release/reword.exe" $Stage
+$BrowserHost = Join-Path $Root 'build/Release/reword-browser-host.exe'
+if (!(Test-Path -LiteralPath $BrowserHost -PathType Leaf)) {
+    throw 'Build the Windows package with REWORD_BROWSER_HOST=ON.'
+}
+Copy-Item -LiteralPath $BrowserHost -Destination $Stage
+$Browser = Join-Path $Stage 'browser'
+New-Item -ItemType Directory -Force $Browser | Out-Null
+Copy-Item -LiteralPath "$Root/browser/chromium" -Destination $Browser -Recurse -Force
 windeployqt --release --no-translations --qmldir "$Root/qml" "$Stage/reword.exe"
 if ($LASTEXITCODE -ne 0) { throw 'Qt deployment failed' }
 # Store explicitly uses QSQLITE. Do not ship unused database clients whose
@@ -26,7 +34,7 @@ Copy-Item "$($Crt.FullName)/*.dll" $Stage
 # Keep material evidence outside the installer stage until source/notice mapping is complete.
 $QtRoot = Split-Path -Parent (Split-Path -Parent (Get-Command windeployqt).Source)
 $Materials = Join-Path $Root 'dist/windows-materials'
-python "$PSScriptRoot/package_windows_audit.py" --stage $Stage --application "$Root/build/Release/reword.exe" --vendor "qt=$QtRoot" --vendor "vcpkg=$env:VCPKG_INSTALLATION_ROOT/installed" --vendor "vc-runtime=$($Crt.FullName)" --system-directory "$env:WINDIR/System32" --output $Materials
+python "$PSScriptRoot/package_windows_audit.py" --stage $Stage --application "$Root/build/Release/reword.exe" --additional-application $BrowserHost --vendor "qt=$QtRoot" --vendor "vcpkg=$env:VCPKG_INSTALLATION_ROOT/installed" --vendor "vc-runtime=$($Crt.FullName)" --system-directory "$env:WINDIR/System32" --output $Materials
 if ($LASTEXITCODE -ne 0) { throw 'Windows material audit failed' }
 $QtVersion = & "$QtRoot/bin/qmake.exe" -query QT_VERSION
 if ($LASTEXITCODE -ne 0) { throw 'Qt SDK version query failed' }

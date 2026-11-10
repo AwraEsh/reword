@@ -1,0 +1,44 @@
+#include "core/store.h"
+
+#include <QCoreApplication>
+#include <QFileInfo>
+#include <cstdio>
+#ifndef _WIN32
+#include <sys/stat.h>
+#endif
+
+int main(int argc, char **argv) {
+#ifndef _WIN32
+    umask(0077);
+#endif
+    QCoreApplication app(argc, argv);
+    const auto args = app.arguments();
+    if (args.size() != 5)
+        return 2;
+    const auto application = args[2];
+    const auto key = args[3];
+    const auto value = args[4];
+    try {
+        reword::Store store(args[1]);
+        if (key == "rule" && value == "remove") {
+            store.removeApplication(application);
+        } else if (key == "rule" && (value == "allow" || value == "shortcut" || value == "deny")) {
+            store.discover(application, QFileInfo(application).fileName());
+            store.decide(application, value);
+        } else if ((key == "english" || key == "persian" || key == "browsers") &&
+                   (value == "true" || value == "false")) {
+            store.setCorrectionOption(key, value == "true");
+        } else if (key == "undoShortcut" && (value == "Ctrl+Alt+Z" || value == "Ctrl+Alt+K")) {
+            store.setCorrectionOption(key, value);
+        } else if (key == "pauseUntil" && (value == "-1" || value == "0")) {
+            store.pause(value.toInt());
+        } else if (key == "pauseUntil" && value == "get") {
+            std::puts(store.paused() ? "paused" : "running");
+        } else {
+            return 2;
+        }
+    } catch (...) {
+        return 1;
+    }
+    return 0;
+}

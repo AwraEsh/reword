@@ -1,0 +1,55 @@
+# Retain bounded Windows build metadata
+
+Goal: make the existing vendor audit inspectable for final source/ABI matching.
+The current report records hashes of Qt/vcpkg build metadata but retains only
+notice contents. Hashes alone cannot reveal the cached package's recorded source
+or ABI inputs. This remains development evidence, not redistribution approval.
+
+Reuse the clean storage-access managed worktree on codex/windows-build-metadata,
+based on the verified native-guard branch. Keep the UI changes isolated in PR22.
+No local build, GUI or heavy test. Tiny Python fixtures may run under 256 MiB and
+10 CPU seconds; full integration and actual Windows materials run on hosted CI.
+
+- Add functional RED cases requiring exact retained metadata bytes at their safe
+  relative vendor names; altered input must not leave a partial successful audit.
+- Bound metadata independently: 1 MiB per file and 8 MiB total. Continue accepting
+  only the existing explicit metadata filename whitelist and ordinary vendor
+  files. Refuse symlink/junction/non-regular inputs and existing output roots.
+- Retain metadata under build-metadata alongside notices. Verify each copied file
+  against its recorded size/hash; clean owned output on any failure. Do not copy
+  arbitrary vendor files, environments, credentials or runtime/user data.
+- Verify tiny RED/GREEN, full hosted tests, real Windows audit and independent
+  review. Inspect the retained vcpkg SPDX/ABI and Qt metadata before asserting any
+  cache/source binding. Checkout identity and an SPDX record alone do not prove
+  the compiled payload matches authenticated source.
+- Update the handoff with actual identities and remaining notices/source gates.
+  No product release or local installation follows from this task alone.
+
+Observed local RED under 256 MiB/10 CPU seconds: 12 functional fixtures in
+0.090 seconds, eight existing controls pass and four new cases fail as expected
+(no retained metadata, no per-file/aggregate cap, no changed-input rejection).
+Failure log is ignored at .deps/windows-metadata-red.log. No C++ build or GUI ran.
+
+Local GREEN: all 12 Windows-audit fixtures pass in 0.186 seconds under 256 MiB
+and 10 CPU seconds. Metadata is retained under build-metadata with the existing
+safe vendor-relative names and exact recorded hashes. Per-file and aggregate
+bounds reject before output publication; changed copies remove the owned partial
+audit. The releaseReady/source-authentication fields remain unchanged and false.
+Full hosted tests and real Windows material inspection are still pending.
+
+Full push/PR runs 39399260940/39399290932 pass at db871eb. Actual artifact:
+158 metadata files, 186,979 bytes, all copied hashes/sizes match. The Hunspell
+SPDX DLL hash matches the stage; recipe/patch hashes and source SHA512 match
+previously acquired frozen inputs; ABI-record hash matches its package ID.
+Safe relative-only receipt is committed in docs/evidence. Independent static
+review found no important issue. Remaining libiconv/Qt/graphics/VC runtime and
+final-package source/notice work stays open; this task does not prove a fully
+reproducible upstream build or product readiness.
+
+Follow-up source acquisition verifies GNU libiconv 1.19's archive SHA512 and
+all seven recipe input SHA256 values against the retained SPDX. The ABI record
+hash equals its cached package ID and the Hunspell ABI dependency names that
+same ID. A relative-only receipt records this correspondence. No archive was
+executed/extracted; source/recipe candidates remain ignored. No independent
+rebuild, GNU signature authentication or proof of DLL inclusion is claimed.
+Documentation revision 4e73a33 also passes full hosted runs 39400501572/39400507867.

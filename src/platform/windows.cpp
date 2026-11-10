@@ -4,8 +4,13 @@
 #include <UIAutomation.h>
 #include <wrl/client.h>
 #include "adapter.h"
+#include "windows_browser_undo.h"
+#include <QCoreApplication>
+#include <QDeadlineTimer>
+#include <QDir>
 #include <QKeySequence>
 #include <QFileInfo>
+#include <cstring>
 #include <vector>
 using Microsoft::WRL::ComPtr;
 namespace reword {
@@ -15,6 +20,75 @@ class WindowsAdapter final : public Adapter {
     bool com_ = false;
     HWND window_ = nullptr;
     QString pending_;
+    UINT undoModifiers_ = 0, undoKey_ = 0;
+    bool undoGrabbed_ = false;
+    HWND undoOwner_ = nullptr, undoTarget_ = nullptr;
+    DWORD undoBrowserPid_ = 0;
+    ULONGLONG undoUntil_ = 0, nextUndoRetry_ = 0;
+    std::unique_ptr<void, decltype(&CloseHandle)> undoPeer_{nullptr, CloseHandle};
+
+    void updateUndoGrab() {
+        const auto now = GetTickCount64();
+        if (undoPeer_) {
+            if (now < undoUntil_ && GetForegroundWindow() == undoTarget_ &&
+                windowProcess(undoTarget_) == undoBrowserPid_ &&
+                windowProcess(undoOwner_) == GetProcessId(undoPeer_.get()) &&
+                WaitForSingleObject(undoPeer_.get(), 0) == WAIT_TIMEOUT)
+                return;
+            undoPeer_.reset();
+        }
+        if (undoKey_ && !undoGrabbed_ && now >= nextUndoRetry_) {
+            undoGrabbed_ = RegisterHotKey(window_, 2, undoModifiers_, undoKey_);
+            nextUndoRetry_ = now + 250;
+        }
+    }
+
+    LRESULT browserUndo(HWND owner, const COPYDATASTRUCT *data) {
+        if (!owner || !data || data->dwData != BrowserUndoCopyTag ||
+            data->cbData != sizeof(WindowsBrowserUndoMessage) || !data->lpData)
+            return FALSE;
+        WindowsBrowserUndoMessage request{};
+        std::memcpy(&request, data->lpData, sizeof request);
+        const auto now = GetTickCount64();
+        if (now - request.issued > BrowserUndoMessageTimeoutMs)
+            return FALSE;
+        if (!request.target) {
+            if (undoPeer_ && undoOwner_ == owner && windowProcess(owner) == GetProcessId(undoPeer_.get())) {
+                undoPeer_.reset();
+                nextUndoRetry_ = 0;
+                updateUndoGrab();
+            }
+            return TRUE;
+        }
+        const auto target = reinterpret_cast<HWND>(ULONG_PTR(request.target));
+        if (target != GetForegroundWindow() || !request.browserPid ||
+            windowProcess(target) != request.browserPid)
+            return FALSE;
+        std::unique_ptr<void, decltype(&CloseHandle)> peer(
+            OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE,
+                        windowProcess(owner)), CloseHandle);
+        wchar_t image[32768];
+        DWORD length = 32768;
+        const auto sibling = QDir::toNativeSeparators(QCoreApplication::applicationDirPath() +
+                                                      "/reword-browser-host.exe");
+        if (!peer || !QueryFullProcessImageNameW(peer.get(), 0, image, &length) ||
+            sibling.compare(QString::fromWCharArray(image, length), Qt::CaseInsensitive) != 0 ||
+            WaitForSingleObject(peer.get(), 0) != WAIT_TIMEOUT || GetForegroundWindow() != target)
+            return FALSE;
+        if (undoGrabbed_ && !UnregisterHotKey(window_, 2))
+            return FALSE;
+        undoGrabbed_ = false;
+        if (pending_ == "undo")
+            pending_.clear();
+        undoPeer_ = std::move(peer);
+        undoOwner_ = owner;
+        undoTarget_ = target;
+        undoBrowserPid_ = DWORD(request.browserPid);
+        undoUntil_ = now + BrowserUndoLifetimeMs;
+        nextUndoRetry_ = 0;
+        return TRUE;
+    }
+
     static LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM w, LPARAM l) {
         if (message == WM_NCCREATE) {
             auto create = reinterpret_cast<CREATESTRUCTW *>(l);
@@ -22,8 +96,11 @@ class WindowsAdapter final : public Adapter {
                               reinterpret_cast<LONG_PTR>(create->lpCreateParams));
         }
         auto self = reinterpret_cast<WindowsAdapter *>(GetWindowLongPtrW(window, GWLP_USERDATA));
+        if (message == WM_COPYDATA && self)
+            return self->browserUndo(reinterpret_cast<HWND>(w), reinterpret_cast<const COPYDATASTRUCT *>(l));
         if (message == WM_HOTKEY && self) {
-            self->pending_ = w == 1 ? "fix" : w == 2 ? "undo" : "pause";
+            if (w != 2 || self->undoGrabbed_)
+                self->pending_ = w == 1 ? "fix" : w == 2 ? "undo" : "pause";
             return 0;
         }
         return DefWindowProcW(window, message, w, l);
@@ -94,7 +171,7 @@ class WindowsAdapter final : public Adapter {
     }
 
   public:
-    WindowsAdapter() {
+    explicit WindowsAdapter(const QString &dataDirectory) {
         com_ = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
         if (com_)
             CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
@@ -107,9 +184,10 @@ class WindowsAdapter final : public Adapter {
         WNDCLASSW cls{};
         cls.lpfnWndProc = windowProc;
         cls.hInstance = GetModuleHandleW(nullptr);
-        cls.lpszClassName = L"RewordHotkeyWindow";
+        cls.lpszClassName = WindowsHotkeyWindowClass;
         RegisterClassW(&cls);
-        window_ = CreateWindowExW(0, cls.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+        const auto title = windowsUndoEndpoint(dataDirectory);
+        window_ = CreateWindowExW(0, cls.lpszClassName, title.c_str(), 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                   cls.hInstance, this);
     }
     ~WindowsAdapter() override {
@@ -123,9 +201,25 @@ class WindowsAdapter final : public Adapter {
             CoUninitialize();
     }
     QString description() const override {
-        return "Windows · UI Automation and native plain edit fields";
+        if (undoKey_ && !undoGrabbed_ && !undoPeer_)
+            return "Windows · Undo shortcut unavailable";
+        return "Windows · native text fields · Chrome and Chromium use the browser extension";
+    }
+    bool supportsNativeLiveCorrection(const QString &application) const override {
+        return !windowsChromiumExtensionApp(application);
     }
     Field inspect(bool read) override {
+        return snapshot(read, nullptr);
+    }
+    Field readExpected(const Field &expected) override {
+        if (expected.app.isEmpty() || expected.id.isEmpty()) {
+            validated_.Reset();
+            return {};
+        }
+        return snapshot(true, &expected);
+    }
+  private:
+    Field snapshot(bool read, const Field *expected) {
         validated_.Reset();
         Field f;
         if (!automation_)
@@ -159,6 +253,8 @@ class WindowsAdapter final : public Adapter {
             }
             SafeArrayDestroy(runtime);
         }
+        if (expected && (f.id != expected->id || f.app != expected->app))
+            return {};
         BOOL password = TRUE, enabled = FALSE, focused = FALSE;
         CONTROLTYPEID type = 0;
         if (FAILED(e->get_CurrentIsPassword(&password)) ||
@@ -241,24 +337,33 @@ class WindowsAdapter final : public Adapter {
         validated_ = e;
         return f;
     }
-    bool replace(const Field &expected, const QString &text, int caret) override {
-        if (!sameTarget(expected, inspect(true)))
-            return false;
+  public:
+    WriteResult replace(const Field &expected, const QString &text, int caret,
+                 const WriteAuthorization &authorize) override {
+        if (!authorize || !sameTarget(expected, readExpected(expected)))
+            return {};
         auto e = validated_;
         ComPtr<IUIAutomationValuePattern> v;
         BOOL password = TRUE, focused = FALSE;
         if (!e || FAILED(e->get_CurrentIsPassword(&password)) || password ||
             FAILED(e->get_CurrentHasKeyboardFocus(&focused)) || !focused || !unlocked() ||
             FAILED(e->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&v))))
-            return false;
-        BSTR replacement =
-            SysAllocStringLen(reinterpret_cast<const OLECHAR *>(text.utf16()), UINT(text.size()));
-        if (!replacement)
-            return false;
-        HRESULT written = v->SetValue(replacement);
-        SysFreeString(replacement);
+            return {};
+        const auto authorizeFresh = [&] {
+            const QDeadlineTimer window(WriteAuthorizationBudgetMs, Qt::PreciseTimer);
+            return authorize() && !window.hasExpired();
+        };
+        if (!authorizeFresh() || !sameTarget(expected, readExpected(expected)))
+            return {};
+        std::unique_ptr<OLECHAR, decltype(&SysFreeString)> replacement(
+            SysAllocStringLen(reinterpret_cast<const OLECHAR *>(text.utf16()), UINT(text.size())),
+            &SysFreeString);
+        if (!replacement || !authorizeFresh())
+            return {};
+        HRESULT written = v->SetValue(replacement.get());
+        replacement.reset();
         if (FAILED(written))
-            return false;
+            return {};
         ComPtr<IUIAutomationTextPattern> p;
         ComPtr<IUIAutomationTextRange> r;
         HWND native = nullptr;
@@ -275,14 +380,15 @@ class WindowsAdapter final : public Adapter {
                                   text.left(caret).toUcs4().size(), &moved);
             r->Select();
         }
-        auto after = inspect(true);
-        return after.id == expected.id && after.text == text;
+        return {true, readExpected(expected)};
     }
     bool shortcuts(const QString &fix, const QString &undo, const QString &pause) override {
         if (!window_)
             return false;
         for (int i = 1; i <= 3; ++i)
             UnregisterHotKey(window_, i);
+        undoGrabbed_ = false;
+        undoKey_ = 0;
         int id = 0;
         for (auto s : {fix, undo, pause}) {
             ++id;
@@ -304,18 +410,29 @@ class WindowsAdapter final : public Adapter {
                 !RegisterHotKey(window_, id, mods, UINT(k.key()))) {
                 for (int i = 1; i <= 3; ++i)
                     UnregisterHotKey(window_, i);
+                undoGrabbed_ = false;
+                undoKey_ = 0;
                 return false;
             }
+            if (id == 2) {
+                undoModifiers_ = mods;
+                undoKey_ = UINT(k.key());
+                undoGrabbed_ = true;
+            }
         }
+        if (undoPeer_ && undoGrabbed_ && UnregisterHotKey(window_, 2))
+            undoGrabbed_ = false;
+        updateUndoGrab();
         return true;
     }
     QString takeAction() override {
+        updateUndoGrab();
         auto result = pending_;
         pending_.clear();
         return result;
     }
 };
-std::unique_ptr<Adapter> createAdapter() {
-    return std::make_unique<WindowsAdapter>();
+std::unique_ptr<Adapter> createAdapter(const QString &dataDirectory) {
+    return std::make_unique<WindowsAdapter>(dataDirectory);
 }
 } // namespace reword

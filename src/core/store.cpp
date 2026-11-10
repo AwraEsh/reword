@@ -8,18 +8,27 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QUuid>
+#include <algorithm>
 #include <stdexcept>
 namespace reword {
+static const QStringList shortcutKeys{"fixShortcut", "undoShortcut", "pauseShortcut"};
 static void checked(QSqlQuery &q) {
     if (!q.exec())
         throw std::runtime_error("Local database operation failed.");
+}
+static QVariant decodeSetting(const QByteArray &json, const QVariant &fallback) {
+    const auto values = QJsonDocument::fromJson(json).array();
+    return values.isEmpty() ? fallback : values.first().toVariant();
+}
+static bool pauseActive(qint64 until, qint64 now) {
+    return until == -1 || until > now;
 }
 void Store::exec(const QString &sql) {
     QSqlQuery q(db_);
     q.prepare(sql);
     checked(q);
 }
-Store::Store(const QString &directory) {
+Store::Store(const QString &directory, int busyTimeoutMs) {
     validateStorageLocation(directory);
     if (QFileInfo(directory).isSymLink())
         throw std::runtime_error("Unsafe data directory.");
@@ -46,7 +55,7 @@ Store::Store(const QString &directory) {
         if (!db_.open())
             throw std::runtime_error("Cannot open local database.");
         restrictStoragePath(path, false);
-        exec("PRAGMA busy_timeout=1000");
+        exec(QString("PRAGMA busy_timeout=%1").arg(std::clamp(busyTimeoutMs, 0, 1000)));
         exec("PRAGMA secure_delete=ON");
         exec("CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
         exec("CREATE TABLE IF NOT EXISTS applications(id TEXT PRIMARY KEY,name TEXT NOT "
@@ -79,22 +88,45 @@ QVariant Store::value(const QString &key, const QVariant &fallback) const {
     checked(q);
     if (!q.next())
         return fallback;
-    auto a = QJsonDocument::fromJson(q.value(0).toByteArray()).array();
-    return a.isEmpty() ? fallback : a.first().toVariant();
+    return decodeSetting(q.value(0).toByteArray(), fallback);
 }
 void Store::setValue(const QString &key, const QVariant &value) {
+    updateSetting(key, value, false);
+}
+void Store::setCorrectionOption(const QString &key, const QVariant &value) {
+    updateSetting(key, value, true);
+}
+void Store::updateSetting(const QString &key, const QVariant &value, bool invalidateCorrection) {
     QSqlQuery q(db_);
     q.prepare(
-        "INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
+        "INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value "
+        "WHERE settings.value<>excluded.value");
     q.addBindValue(key);
     q.addBindValue(QString::fromUtf8(
         QJsonDocument(QJsonArray::fromVariantList({value})).toJson(QJsonDocument::Compact)));
-    checked(q);
+    if (invalidateCorrection)
+        changeCorrectionConfiguration(q);
+    else
+        checked(q);
 }
-QStringList Store::shortcuts() const {
-    return {value("fixShortcut", "Ctrl+Alt+R").toString(),
-            value("undoShortcut", "Ctrl+Alt+Z").toString(),
-            value("pauseShortcut", "Ctrl+Alt+Shift+P").toString()};
+ShortcutSettings Store::shortcutSettings() const {
+    ShortcutSettings settings{{"Ctrl+Alt+R", "Ctrl+Alt+Z", "Ctrl+Alt+Shift+P"}};
+    QSqlQuery query(db_);
+    query.prepare("SELECT key,value FROM settings WHERE key IN "
+                  "('fixShortcut','undoShortcut','pauseShortcut','configRevision')");
+    checked(query);
+    while (query.next()) {
+        const auto key = query.value(0).toString();
+        const auto array = QJsonDocument::fromJson(query.value(1).toByteArray()).array();
+        if (array.isEmpty())
+            continue;
+        const auto value = array.first().toVariant();
+        if (key == "configRevision")
+            settings.revision = value.toLongLong();
+        else if (const auto index = shortcutKeys.indexOf(key); index >= 0)
+            settings.keys[index] = value.toString();
+    }
+    return settings;
 }
 bool Store::restoreShortcuts(const QStringList &expected, qint64 revision,
                              const QStringList &previous) {
@@ -103,14 +135,14 @@ bool Store::restoreShortcuts(const QStringList &expected, qint64 revision,
     if (!db_.transaction())
         throw std::runtime_error("Cannot begin shortcut settings transaction.");
     try {
-        if (shortcuts() != expected || value("configRevision", 0).toLongLong() != revision) {
+        const auto settings = shortcutSettings();
+        if (settings.keys != expected || settings.revision != revision) {
             db_.rollback();
             return false;
         }
-        const QStringList keys{"fixShortcut", "undoShortcut", "pauseShortcut"};
-        for (int index = 0; index < keys.size(); ++index)
-            setValue(keys[index], previous[index]);
-        setValue("configRevision", value("configRevision", 0).toLongLong() + 1);
+        for (int index = 0; index < shortcutKeys.size(); ++index)
+            setValue(shortcutKeys[index], previous[index]);
+        setValue("configRevision", revision + 1);
         if (!db_.commit())
             throw std::runtime_error("Cannot restore shortcut settings.");
         return true;
@@ -120,6 +152,24 @@ bool Store::restoreShortcuts(const QStringList &expected, qint64 revision,
     }
 }
 Options Store::options() const {
+    QHash<QString, QVariant> settings;
+    QSqlQuery q(db_);
+    q.prepare("SELECT key,value FROM settings WHERE key IN ("
+              "'english','persian','spelling','abbreviations','capitalization',"
+              "'normalizePersian','halfSpace','periods','commas','spacing',"
+              "'paragraphPeriods','introductoryCommas','questionMarks','exclamationMarks',"
+              "'semicolons','colons','history','statistics','notifications','browsers',"
+              "'sensitivity','historyCount','historyMiB','historyDays','maxCharacters')");
+    checked(q);
+    while (q.next()) {
+        const auto array = QJsonDocument::fromJson(q.value(1).toByteArray()).array();
+        if (!array.isEmpty())
+            settings.insert(q.value(0).toString(), array.first().toVariant());
+    }
+    // Fresh on every call: policy changes from other connections remain visible.
+    const auto value = [&settings](const QString &key, const QVariant &fallback) {
+        return settings.value(key, fallback);
+    };
     Options o;
 #define BOOL(k) o.k = value(#k, o.k).toBool()
     BOOL(english);
@@ -162,21 +212,74 @@ void Store::discover(const QString &id, const QString &name, bool restricted) {
     checked(q);
 }
 void Store::decide(const QString &id, const QString &decision, QDate today) {
-    if (decision != "allow" && decision != "deny" && decision != "later")
+    if (decision != "allow" && decision != "shortcut" && decision != "deny" && decision != "later")
         return;
+    const auto remind = decision == "later" ? today.addDays(1).toString(Qt::ISODate) : QString("");
     QSqlQuery q(db_);
-    q.prepare("UPDATE applications SET decision=?,remind=? WHERE id=?");
+    q.prepare("UPDATE applications SET decision=?,remind=? WHERE id=? "
+              "AND (decision<>? OR COALESCE(remind,'')<>?)");
     q.addBindValue(decision);
-    q.addBindValue(decision == "later" ? today.addDays(1).toString(Qt::ISODate) : QString(""));
+    q.addBindValue(remind);
     q.addBindValue(id);
-    checked(q);
+    q.addBindValue(decision);
+    q.addBindValue(remind);
+    changeCorrectionConfiguration(q);
 }
-bool Store::allowed(const QString &id) const {
+void Store::removeApplication(const QString &id) {
+    QSqlQuery q(db_);
+    q.prepare("DELETE FROM applications WHERE id=?");
+    q.addBindValue(id);
+    changeCorrectionConfiguration(q);
+}
+void Store::changeCorrectionConfiguration(QSqlQuery &q) {
+    if (!db_.transaction())
+        throw std::runtime_error("Cannot begin correction configuration transaction.");
+    try {
+        checked(q);
+        if (q.numRowsAffected() > 0)
+            setValue("configRevision", value("configRevision", 0).toLongLong() + 1);
+        if (!db_.commit())
+            throw std::runtime_error("Cannot commit correction configuration transaction.");
+    } catch (...) {
+        db_.rollback();
+        throw;
+    }
+}
+static ApplicationMode modeForDecision(const QString &decision) {
+    if (decision == "allow")
+        return ApplicationMode::Automatic;
+    if (decision == "shortcut")
+        return ApplicationMode::ShortcutOnly;
+    return ApplicationMode::Disabled;
+}
+ApplicationMode Store::applicationMode(const QString &id) const {
     QSqlQuery q(db_);
     q.prepare("SELECT decision FROM applications WHERE id=?");
     q.addBindValue(id);
     checked(q);
-    return q.next() && q.value(0) == "allow";
+    return q.next() ? modeForDecision(q.value(0).toString()) : ApplicationMode::Disabled;
+}
+NativePolicy Store::nativePolicy(const QString &id, qint64 now) const {
+    // All four values come from the same SQLite snapshot, including the revision.
+    QSqlQuery q(db_);
+    q.prepare("SELECT (SELECT decision FROM applications WHERE id=?),"
+              "(SELECT value FROM settings WHERE key='pauseUntil'),"
+              "(SELECT value FROM settings WHERE key='browsers'),"
+              "(SELECT value FROM settings WHERE key='configRevision')");
+    q.addBindValue(id);
+    checked(q);
+    if (!q.next())
+        throw std::runtime_error("Cannot read native correction policy.");
+    return {modeForDecision(q.value(0).toString()),
+            pauseActive(decodeSetting(q.value(1).toByteArray(), 0).toLongLong(), now),
+            decodeSetting(q.value(2).toByteArray(), Options{}.browsers).toBool(),
+            decodeSetting(q.value(3).toByteArray(), 0).toLongLong()};
+}
+bool Store::allowed(const QString &id) const {
+    return applicationMode(id) == ApplicationMode::Automatic;
+}
+bool Store::selectionAllowed(const QString &id) const {
+    return applicationMode(id) != ApplicationMode::Disabled;
 }
 bool Store::shouldAsk(const QString &id, QDate today) const {
     QSqlQuery q(db_);
@@ -273,10 +376,10 @@ void Store::clearHistory() {
     exec("DELETE FROM history");
     exec("VACUUM");
 }
-void Store::count(const QString &a, const QString &b, const Options &o) {
+bool Store::count(const QString &a, const QString &b, const Options &o) {
     if (!o.statistics || a == b || a.size() > 64 || b.size() > 64 || a.contains(' ') ||
         b.contains(' '))
-        return;
+        return false;
     QSqlQuery q(db_);
     q.prepare("INSERT INTO statistics VALUES(?,?,1) ON CONFLICT(original,corrected) DO UPDATE SET "
               "count=count+1");
@@ -286,6 +389,7 @@ void Store::count(const QString &a, const QString &b, const Options &o) {
     // Bound unusual vocabulary growth independently of history retention.
     exec("DELETE FROM statistics WHERE rowid IN (SELECT rowid FROM statistics ORDER BY count "
          "DESC,rowid DESC LIMIT -1 OFFSET 10000)");
+    return true;
 }
 QVariantList Store::statistics() const {
     QVariantList rows;
@@ -306,13 +410,13 @@ void Store::addWord(const QString &w) {
     QSqlQuery q(db_);
     q.prepare("INSERT OR IGNORE INTO words VALUES(?)");
     q.addBindValue(w.toLower());
-    checked(q);
+    changeCorrectionConfiguration(q);
 }
 void Store::removeWord(const QString &w) {
     QSqlQuery q(db_);
     q.prepare("DELETE FROM words WHERE word=?");
     q.addBindValue(w.toLower());
-    checked(q);
+    changeCorrectionConfiguration(q);
 }
 QSet<QString> Store::words() const {
     QSet<QString> result;
@@ -330,11 +434,11 @@ void Store::replacement(const QString &a, const QString &b) {
         q.addBindValue(a.toLower());
     } else {
         q.prepare("INSERT INTO replacements VALUES(?,?) ON CONFLICT(original) DO UPDATE SET "
-                  "corrected=excluded.corrected");
+                  "corrected=excluded.corrected WHERE replacements.corrected<>excluded.corrected");
         q.addBindValue(a.toLower());
         q.addBindValue(b);
     }
-    checked(q);
+    changeCorrectionConfiguration(q);
 }
 QHash<QString, QString> Store::replacements() const {
     QHash<QString, QString> r;
@@ -344,13 +448,12 @@ QHash<QString, QString> Store::replacements() const {
     return r;
 }
 bool Store::paused(qint64 now) const {
-    auto until = value("pauseUntil", 0).toLongLong();
-    return until == -1 || until > now;
+    return pauseActive(value("pauseUntil", 0).toLongLong(), now);
 }
 void Store::pause(int minutes) {
-    setValue("pauseUntil", minutes < 0    ? qint64(-1)
-                           : minutes == 0 ? qint64(0)
-                                          : QDateTime::currentSecsSinceEpoch() +
-                                                qint64(std::clamp(minutes, 1, 10080)) * 60);
+    setCorrectionOption("pauseUntil", minutes < 0    ? qint64(-1)
+                                      : minutes == 0 ? qint64(0)
+                                                     : QDateTime::currentSecsSinceEpoch() +
+                                                           qint64(std::clamp(minutes, 1, 10080)) * 60);
 }
 } // namespace reword

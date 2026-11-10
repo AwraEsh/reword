@@ -1,0 +1,131 @@
+# Fcitx transient-state guard implementation plan
+
+> Execute inline with superpowers:executing-plans; use hosted CI for all C++ work.
+
+**Goal:** apply the approved unsafe-field buffer and cancellation requirements to
+the independent Wayland addon, without treating Service tests as addon coverage.
+
+**Architecture:** retain the existing Fcitx event integration. Consolidate unsafe
+observation invalidation only after reproducing retained job text. A worker's
+cooperative cancellation remains distinct from clearing the owner's job record.
+
+**Spec:** docs/REQUIREMENTS.md, privacy and selection-operation sections.
+**Files:** src/platform/fcitx_addon.cpp; tests/fcitx_addon_test.cpp; CMakeLists.txt;
+this record and docs/CURRENT_HANDOFF.md. No new runtime dependency.
+
+- [x] Add a real Fcitx-core/RecoveryServer/Store fixture using temporary data.
+  A friend peer may inspect owned text, matching the Service privacy tests; do
+  not add production test-only cleanup methods. Exercise password, sensitive,
+  absent surrounding-text capability, denied permission, Pause and focus loss.
+  Seed only synthetic pending/job text. Require cancellation and immediate
+  release of owner-held text on the actual unsafe event paths. Positive control:
+  the same focused permitted context is authorized before each unsafe change.
+- [x] Observe hosted RED before changing production behavior. A compile/setup
+  error is not RED; repair the fixture separately until assertions run.
+- [x] Centralize the demonstrated invalidation boundary and use it on unsafe
+  observation, focus/session loss, invalid text and exceptions. Keep confirmed
+  recovery/history separate and do not erase user-authorized saved originals.
+- [x] Cover timer-only Pause/denial/lock changes while a future is outstanding;
+  observe RED, then cancel and release owner state without waiting for completion.
+- [x] Run the complete hosted Linux/Windows workflow; inspect exact results,
+  request independent static review and record evidence. No local GUI/compiler.
+
+Review focus: callback ordering on focus loss; retained asynchronous job text;
+worker cancellation not being reset while it still runs; unsafe observations
+never confirming history/statistics; fail-closed session/lock behavior. A later
+deadline audit must cover addon acceptance/worker/completion, not only Engine's
+own timer. Broader GNOME/application compatibility remains a separate gate.
+
+## Paused checkpoint
+
+The user requested a temporary pause. Test-only source 104482e failed compilation
+in run 39482104028 because CapabilityFlag enums require an explicit flags wrapper
+for operator|. Fixture follow-up f478026 is pushed. No behavioral RED has yet
+been verified, and no production guard change was made. Inspect that run before
+continuing; a compile error does not establish the suspected retention defect.
+
+## Resumed — 2026-10-21
+
+Run 39482540531 at f478026 compiles, then aborts before assertions because
+inputStateFactory is not registered. The fixture omitted Instance::initialize().
+The upstream 5.1.7 [implementation](https://github.com/fcitx/fcitx5/blob/5.1.7/src/lib/fcitx/instance.cpp)
+registers the property there. Initialize the owned instance with all addons
+disabled; keep its Fcitx config path temporary. This is fixture repair, not a
+behavioral RED or production fix. The other 11 Linux suites passed in that run.
+
+Hosted RED 39538586697 at d1e70c7 executes all six cases and fails their owner
+text retention assertion: password, sensitive, no surrounding-text capability,
+denied permission, paused and focus loss. Cancellation and pending reset already
+pass; job_.before/after/original/corrected remain populated. The other 11 Linux
+suites pass. Log retained under ignored .deps/fcitx-d1e70c7.log.
+
+Consolidate existing unsafe resets so they cancel and clear job/pending text,
+retry prefix, observation metadata and deletion correlation together. Preserve
+the future's lifetime; cancellation is cooperative and worker copies can outlive
+the owner record until the worker returns. Persisted recovery/history are not
+modified. Hosted GREEN and independent review are pending. Fixture follow-up
+also resets GNU getopt between instances (logs showed only the first instance
+received --disable all) and retains one temporary Fcitx config path for all rows.
+
+Static review of d1e70c7..7ad9a99 found no important issue in the scoped reset.
+It explicitly leaves worker-cancellation timing and timer-only policy changes
+open. Add a real private D-Bus lock provider and require the safe baseline to
+be unlocked. With an outstanding promise-backed future and no pending Undo,
+change Pause, permission or lock state without input events, then run the actual
+Fcitx timer for 160 ms. Require cancellation and empty owner text before allowing
+the future to finish. This should expose the timer's current early return while
+the future is not ready. Observe hosted assertions before changing that policy.
+
+The scoped reset at 7ad9a99 passes full Linux/Windows run 39539160624. It does
+not close timer-only policy or deadline coverage. Follow-up fixture 575b4d6 uses
+dbus-run-session (test-only host tooling already present in CI) and a local Qt
+lock object; run 39539553700 is pending. PR25 is a draft stacked on PR23.
+
+Actual timer RED in run 39539553700 at 575b4d6: all six unsafe-observation
+cases pass with a verified unlocked baseline; Pause, denial and lock timer cases
+each fail cancellation after the 160 ms real event-loop interval. No pending
+Undo or input event is involved. This confirms the timer calls completed(),
+which returns early for a non-ready future, then checks only pending Undo.
+Log retained in ignored .deps/fcitx-timer-575b4d6.log.
+
+Before consuming a future, each timer tick now checks the outstanding job's
+metadata-only focus/capability/application/pause/session policy and invalidates
+owner state when unsafe. Preserve the future/lock and cancellation lifetime.
+Full hosted GREEN and follow-up review are required; no deadline change is
+included in this step.
+
+Run 39540021916 at db4ce64 passes Pause but fails denial/lock; do not claim a
+full GREEN. Diagnostic fixture 36fa33f/run 39540582782 shows why the later cases
+are not yet valid timer evidence: deadline fires but the independent 10 ms
+witness receives zero callbacks (192 ms elapsed), while Pause gets two in 285 ms.
+Fcitx 5.1.7's sd-event backend forwards accuracy unchanged. Per the
+[systemd timer API](https://www.freedesktop.org/software/systemd/man/257/sd_event_add_time.html),
+zero requests the default 250 ms coalescing window, not precise timing.
+Give only the fixture witness/deadline explicit 1 microsecond accuracy and log
+the addon's actual accuracy. Preserve the 160 ms cancellation check and all
+policy assertions; production timer precision is unchanged until this correctly
+controlled test runs. The isolated loops do dispatch and exit successfully;
+the hypothesis of a reused stopped loop is not supported by the diagnostics.
+
+## Verified scoped result
+
+Full push/PR runs 39540890991/39540896152 pass Linux and Windows at cc13055.
+Actual downloaded Fcitx JUnit contains 11 cases, zero failures/errors/skips.
+Each controlled timer case runs 160 ms with 16 witness callbacks. The addon's
+reported accuracy remains 250,000 microseconds; production scheduling was not
+changed. The witness drives loop wakeups, so this proves invalidation on timer
+dispatch, not a production 160 ms cancellation guarantee.
+
+Negative proof branch codex/fcitx-timer-red-proof at 93326bf removes only the
+six-line timer policy guard from cc13055. Run 39541257155 then fails exactly
+Pause/denial/lock cancellation, with the same 160 ms/16-tick controls; all six
+unsafe-observation cases and the other Linux suites pass. This validates the
+corrected fixture's regression sensitivity without weakening assertions. It is
+an evidence-only branch and must never be merged. The feature remains at the
+correct implementation; log is ignored at .deps/fcitx-timer-proof-93326bf.log.
+
+Independent static reviews found no important issue in the reset, timer guard
+or corrected fixture, and explicitly confirmed the timing scope limitation.
+The task is complete for owner-state invalidation and timer policy checking.
+Worker deadline enforcement, UI cancel coordination, scheduling/resource and
+ordinary Wayland desktop acceptance remain open parts of the product goal.

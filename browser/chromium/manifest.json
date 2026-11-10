@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Reword",
+  "version": "0.1.0",
+  "description": "Offline spelling correction for sites you enable.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxajvxhCEaMJLABsTctpVLc1NV+m6xZ5GfAabt8TzjRh+min+MWQ5XMUdqs3ZlSUYyC/G5rPuULugYv8DIdxKHRUX5r+eMpTfwt7UUeInD7jjUB4miH5tRnwFfpEGL1hb4zJuTttHPJ9LJX5owfx2wcvTxFvCWVFgiAjS4fvLKEJXuzJ5LaSqUAv6PMXpzqBUjVpoCBQ+p9CYASkRHuSsGD5aLYYxbDc+eFvKCaOqoQWKrmNG5dwKmR3vDC1HU+/n0Ix5bBEmuwuj4Hjjsels0ZSiy0VocsyFkWpv3aLobCoGDpzvaBiKUAJgJzfF4eH7x7hD7aHOspZNKcPfh5rvCQIDAQAB",
+  "permissions": [
+    "activeTab",
+    "nativeMessaging",
+    "scripting"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "worker.js"
+  },
+  "action": {
+    "default_title": "Reword",
+    "default_popup": "popup.html"
+  }
+}

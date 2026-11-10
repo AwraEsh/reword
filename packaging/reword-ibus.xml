@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component>
+    <name>org.freedesktop.IBus.Reword</name>
+    <description>Reword X11 input method</description>
+    <exec>/opt/reword/usr/bin/reword-ibus-launcher --ibus</exec>
+    <version>0.1.0</version>
+    <author>Reword contributors</author>
+    <engines>
+        <engine>
+            <name>reword-x11</name>
+            <longname>Reword (X11)</longname>
+            <description>Offline English and Persian typing correction</description>
+            <language>en</language>
+            <layout>default</layout>
+            <icon>reword</icon>
+        </engine>
+    </engines>
+</component>

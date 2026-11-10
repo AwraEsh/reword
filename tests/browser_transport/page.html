@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Reword browser transport fixture</title>
+<label>Text <input id="plain" spellcheck="false" value="prefix suffix"></label>
+<label>Multiline <textarea id="multiline" spellcheck="false">prefix suffix</textarea></label>
+<label>Changed text <input id="stale" spellcheck="false"></label>
+<label>Changed focus <input id="blur" spellcheck="false"></label>
+<label>Password <input id="password" type="password"></label>
+<label>Read-only <input id="readonly" readonly></label>
+<label>One-time code <input id="otp" autocomplete="one-time-code"></label>
+<label>Policy probe <input id="policy" spellcheck="false"></label>
+<label>Policy change during correction <input id="revoke" spellcheck="false"></label>
+<label>Pause and resume during correction <input id="pause-cycle" spellcheck="false"></label>
+<label>Caret movement during correction <input id="pending-caret" spellcheck="false"></label>
+<label>Rewrite in place <input id="retry" spellcheck="false" value="prefix suffix"></label>
+<form id="observed-form">
+    <label>Undo <input id="undo" spellcheck="false" value="prefix suffix"></label>
+    <label>Page veto <input id="veto" spellcheck="false" value="prefix suffix"></label>
+</form>
+<script src="/form-observer.js" defer></script>

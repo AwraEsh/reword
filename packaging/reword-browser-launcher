@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+launcher=$(readlink -f -- "$0")
+bin=${launcher%/*}
+prefix=${bin%/*}
+export LD_LIBRARY_PATH="$prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export QT_PLUGIN_PATH="$prefix/plugins"
+case "${1:-}" in
+    --register-browser)
+        exec "$bin/reword-browser-host" "$@" --launcher "$launcher"
+        ;;
+    *)
+        exec "$bin/reword-browser-host" "$@"
+        ;;
+esac

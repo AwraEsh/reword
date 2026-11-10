@@ -4,6 +4,7 @@
 #include <QSet>
 #include <QHash>
 #include <memory>
+#include <optional>
 #include <atomic>
 #include <functional>
 
@@ -31,6 +32,7 @@ struct CompletedWord {
     int start = 0;
 };
 QVector<CompletedWord> completedWords(const Field &before, const Field &after);
+std::optional<CompletedWord> wordBeforeBoundary(const QString &text, int caret, QChar boundary);
 struct Access {
     bool allowed = false;
     bool browser = false;

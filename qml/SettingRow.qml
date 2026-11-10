@@ -7,6 +7,7 @@ RowLayout {
     property string title
     property string detail
     property string settingKey
+    required property var settingsSnapshot
     Layout.fillWidth: true
     spacing: 24
     ColumnLayout {
@@ -29,7 +30,7 @@ RowLayout {
     }
     Switch {
         id: control
-        checked: Boolean(Backend.settings[row.settingKey])
+        checked: Boolean(row.settingsSnapshot[row.settingKey])
         Accessible.name: row.title
         onToggled: Backend.set(row.settingKey, checked)
         indicator: Rectangle {
