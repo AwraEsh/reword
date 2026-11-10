@@ -1,4 +1,35 @@
-# Current handoff — 2026-11-10
+# Current handoff — 2026-11-11
+
+## Linux helper polling
+
+The service now asks the Linux helper for the native shortcut and field
+change in one request. A pending or ready shortcut takes priority without
+consuming the dirty flag. The service still asks for shortcuts separately
+if an accessibility snapshot fails while Undo is available. The poll
+interval and native write deadlines are unchanged.
+
+The isolated helper comparison sent 6,000 requests for 3,000 polls before
+the change and 3,000 requests afterward. The helper used 276.764 ms and
+176.447 ms of CPU respectively. The Python driver's CPU was 167.655 ms and
+99.446 ms. The comparison had a private D-Bus session with no display.
+Both helpers reported one dirty observation. See
+`.deps/linux-native-poll/profile.json` and the accompanying `profile.py`.
+
+The controlled GTK/X11 cycle passed foreground consent, overlapping
+shortcuts, live first/second/third correction, Undo and password exclusion.
+The service suite passed, including the new shortcut-priority check.
+The owned AppDir run completed the 120-second active phase and both
+selection-size checks with 40 live retry/Undo sequences and 150 selected
+edits. History pruning and protected fields passed. App CPU averaged
+10.34% and helper CPU 5.75%, compared with 10.87% and 6.31% in the previous
+20 ms quota-period run. Word p95 was at most 58.9 ms over 80 samples.
+CPU and latency remain above the release targets. Receipt
+`.deps/linux-native-poll/report-20ms/report.json`. No forced cleanup.
+
+Profile the cost of the UI update after live correction next. The controller
+currently rereads notification settings and refreshes bindings even when
+notifications and statistics are off. Check that optional statistics and
+training notifications still refresh when enabled.
 
 ## Native policy snapshot and final authorization timing
 

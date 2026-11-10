@@ -94,8 +94,9 @@ class LinuxProxy final : public Adapter {
                                     {"app", expected.app},
                                     {"id", expected.id}})["field"].toObject());
     }
-    bool changed() override {
-        return request({{"operation", "changed"}})["changed"].toBool();
+    AdapterPoll poll() override {
+        const auto response = request({{"operation", "poll"}});
+        return {response["action"].toString(), response["changed"].toBool()};
     }
     InputMethodTarget inputMethodTarget() override {
         const auto target = request({{"operation", "input-method-target"}});

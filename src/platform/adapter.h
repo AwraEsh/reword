@@ -2,6 +2,7 @@
 #include "core/core.h"
 #include <functional>
 #include <memory>
+#include <utility>
 namespace reword {
 using WriteAuthorization = std::function<bool()>;
 inline constexpr int WriteAuthorizationBudgetMs = 50;
@@ -41,6 +42,11 @@ struct InputMethodTarget {
     quint32 window = 0;
 };
 
+struct AdapterPoll {
+    QString action;
+    bool changed = false;
+};
+
 class Adapter {
   public:
     virtual ~Adapter() = default;
@@ -65,6 +71,12 @@ class Adapter {
     // Callers must avoid text observation until an action or an empty result.
     virtual QString takeAction() {
         return {};
+    }
+    virtual AdapterPoll poll() {
+        auto action = takeAction();
+        // A shortcut must not consume a pending field change.
+        const bool fieldChanged = action.isEmpty() && changed();
+        return {std::move(action), fieldChanged};
     }
     virtual bool shortcuts(const QString &, const QString &, const QString &) {
         return false;

@@ -86,9 +86,10 @@ int main(int argc, char **argv) {
                     const auto target = adapter->inputMethodTarget();
                     result = {{"app", target.app}, {"field", target.field},
                               {"window", qint64(target.window)}};
-                } else if (operation == "changed")
-                    result = {{"changed", adapter->changed()}};
-                else if (operation == "replace-observed") {
+                } else if (operation == "poll") {
+                    const auto update = adapter->poll();
+                    result = {{"action", update.action}, {"changed", update.changed}};
+                } else if (operation == "replace-observed") {
                     auto text = o["text"].toString();
                     int caret = o["caret"].toInt(-1);
                     bool bounded = text.size() <= 200000 && text.toUcs4().size() <= 100000 &&

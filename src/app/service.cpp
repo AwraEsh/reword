@@ -140,8 +140,7 @@ bool Service::policyCurrent(const Field &field, qint64 revision, quint64 cancell
     return fieldAllowed(field, policy, purpose) && revision == policy.revision &&
            cancellation == cancellationRevision_.load();
 }
-bool Service::pollNativeAction() {
-    const auto name = adapter_->takeAction();
+bool Service::handleNativeAction(const QString &name) {
     if (name.isEmpty())
         return false;
     if (name != "pending") {
@@ -215,9 +214,8 @@ void Service::tick() {
                 emit state(description, shortcutsHealthy_);
             }
         }
-        if (pollNativeAction())
-            return;
-        if (!adapter_->changed())
+        const auto update = adapter_->poll();
+        if (handleNativeAction(update.action) || !update.changed)
             return;
         Field jobTarget;
         jobTarget.app = nativeJobApp_;
@@ -228,7 +226,7 @@ void Service::tick() {
         if (f.id.isEmpty()) {
             // The grab may have begun after the first shortcut poll, while
             // the provider was answering. Check before discarding Undo.
-            if (!undoBefore_.isEmpty() && pollNativeAction())
+            if (!undoBefore_.isEmpty() && handleNativeAction(adapter_->takeAction()))
                 return;
             cancelNativeJob();
             resetObservation(5);
@@ -254,7 +252,7 @@ void Service::tick() {
             // between those reads. Reapply field and privacy guards as usual.
             f = permitted(&f, ReadPurpose::Live);
             if (f.id.isEmpty()) {
-                if (!undoBefore_.isEmpty() && pollNativeAction())
+                if (!undoBefore_.isEmpty() && handleNativeAction(adapter_->takeAction()))
                     return;
                 cancelNativeJob();
                 resetObservation(5);

@@ -40,6 +40,7 @@ class FixtureAdapter final : public Adapter {
         onTakeAction;
     bool metadataBlurred = false;
     bool quiet = false;
+    int changePolls = 0;
     QString pendingAction;
     QString takeAction() override {
         if (auto callback = std::exchange(onTakeAction, {}))
@@ -47,6 +48,7 @@ class FixtureAdapter final : public Adapter {
         return pendingAction;
     }
     bool changed() override {
+        ++changePolls;
         return !quiet;
     }
     FixtureAdapter() {
@@ -515,6 +517,25 @@ class ServiceTest : public QObject {
         h.service.action("undo");
         QCOMPARE(h.adapter->field.text, QString("the "));
         QCOMPARE(h.adapter->writes, 1);
+    }
+    void nativePollPreservesChangeWhenShortcutTakesPriority() {
+        FixtureAdapter adapter;
+        for (const auto &action : {QString("pending"), QString("fix")}) {
+            adapter.pendingAction = action;
+            const auto update = adapter.poll();
+            QCOMPARE(update.action, action);
+            QVERIFY(!update.changed);
+        }
+        QCOMPARE(adapter.changePolls, 0);
+        adapter.pendingAction.clear();
+        auto update = adapter.poll();
+        QVERIFY(update.action.isEmpty());
+        QVERIFY(update.changed);
+        QCOMPARE(adapter.changePolls, 1);
+        adapter.quiet = true;
+        update = adapter.poll();
+        QVERIFY(update.action.isEmpty());
+        QVERIFY(!update.changed);
     }
     void pendingShortcutPreservesUndoAcrossGrabFocusLoss() {
         Harness h;
