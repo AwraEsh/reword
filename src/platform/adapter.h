@@ -6,9 +6,32 @@ namespace reword {
 using WriteAuthorization = std::function<bool()>;
 inline constexpr int WriteAuthorizationBudgetMs = 50;
 
+// Fixed retry trace codes. Only this enum crosses the helper boundary on rejection.
+enum class WriteRejection {
+    None = 0,
+    RequestFailed = 33,
+    InvalidRequest = 34,
+    TargetChanged = 35,
+    InterfacesUnavailable = 36,
+    AuthorizationDenied = 37,
+    AuthorizationExpired = 38,
+    LockUnverified = 39,
+    EligibilityChanged = 40,
+    RecheckExpired = 41,
+    RecheckFieldEvent = 42,
+    RecheckBacklog = 43,
+    FinalCheckExpired = 44,
+    FinalFieldEvent = 45,
+    FinalBacklog = 46,
+    ProviderError = 47,
+    ProviderRejected = 48,
+    AuthorizationIncomplete = 49,
+};
+
 struct WriteResult {
     bool accepted = false; // The provider acknowledged the edit.
     Field after;          // Observed at the original target, if still readable.
+    WriteRejection rejection = WriteRejection::None;
     explicit operator bool() const { return accepted; }
 };
 

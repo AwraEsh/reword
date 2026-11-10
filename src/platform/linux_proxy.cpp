@@ -118,8 +118,19 @@ class LinuxProxy final : public Adapter {
                                        {"text", text},
                                        {"caret", caret}},
                                       recheck);
-        if (grants != NativeWriteChecks || !response["accepted"].toBool())
+        if (response.isEmpty())
+            return {false, {}, WriteRejection::RequestFailed};
+        if (!response["accepted"].toBool()) {
+            const int code = response["rejection"].toInt();
+            if (code >= int(WriteRejection::InvalidRequest) &&
+                code <= int(WriteRejection::ProviderRejected))
+                return {false, {}, WriteRejection(code)};
+            if (grants != NativeWriteChecks)
+                return {false, {}, WriteRejection::AuthorizationIncomplete};
             return {};
+        }
+        if (grants != NativeWriteChecks)
+            return {false, {}, WriteRejection::AuthorizationIncomplete};
         return {true, decodeField(response["after"].toObject())};
     }
     QString description() const override {

@@ -24,10 +24,11 @@ class RetryDiagnosticsTest(unittest.TestCase):
         diagnostic.feed(b'x' * 20000)
         self.assertEqual(diagnostic.pending, b'')
 
-    def test_selected_correction_stages_have_a_bounded_numeric_range(self):
+    def test_native_write_and_confirmation_have_a_bounded_numeric_range(self):
         diagnostic = RetryDiagnostics()
-        diagnostic.feed(b'RTRY 12 23 -1\nRTRY 13 32 -1\nRTRY 14 33 -1\nRTRY 15 26 private\n')
-        self.assertEqual([event['reason'] for event in diagnostic.events], [23, 32])
+        diagnostic.feed(b'RTRY 12 23 -1\nRTRY 13 33 -1\nRTRY 14 53 0\n'
+                        b'RTRY 15 54 -1\nRTRY 16 46 private\n')
+        self.assertEqual([event['reason'] for event in diagnostic.events], [23, 33, 53])
 
 
 if __name__ == '__main__':

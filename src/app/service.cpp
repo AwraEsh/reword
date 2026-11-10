@@ -325,6 +325,8 @@ void Service::tick() {
                 return !denied;
             });
             if (!edit.accepted) {
+                if (edit.rejection != WriteRejection::None)
+                    traceRetry(int(edit.rejection));
                 traceRetry(denied ? 16 : 17);
                 retry_ = savedRetry;
                 break;
@@ -485,6 +487,8 @@ void Service::runText(QString input, bool native, Field field) {
                     const int caret = field.selectionStart + change.corrected.size();
                     const auto edit = adapter_->replace(field, updated, caret, authorize);
                     if (!edit.accepted) {
+                        if (edit.rejection != WriteRejection::None)
+                            traceRetry(int(edit.rejection));
                         traceRetry(27);
                         resetObservation();
                         emit message(
@@ -592,6 +596,8 @@ void Service::undo() {
     const auto edit = adapter_->replace(
         f, undoBefore_, undoCaret_, [&] { return policyCurrent(f, revision, cancellation, purpose); });
     if (!edit.accepted) {
+        if (edit.rejection != WriteRejection::None)
+            traceRetry(int(edit.rejection));
         traceRetry(20);
         emit message("Undo was not confirmed. Check the application's text.");
         return;
@@ -599,6 +605,14 @@ void Service::undo() {
     const auto &after = edit.after;
     if (!confirmedEdit(f, after, undoBefore_, undoCaret_) ||
         !policyCurrent(after, revision, cancellation, purpose)) {
+        if (after.id != f.id || after.app != f.app)
+            traceRetry(50);
+        else if (after.text != undoBefore_)
+            traceRetry(51);
+        else if (after.caret != undoCaret_ || after.selectionStart >= 0 || after.selectionEnd >= 0)
+            traceRetry(52);
+        else
+            traceRetry(53);
         traceRetry(21);
         resetObservation();
         emit message("The field changed after Undo. Check the application's text.");

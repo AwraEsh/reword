@@ -59,9 +59,35 @@ Format: `RTRY <monotonic milliseconds> <reason> <word start offset>`.
 | 30 | Selected job could not start, including a conflicting active operation |
 | 31 | Selected correction hit an exception |
 | 32 | Selected job submitted to the worker |
+| 33 | Linux helper request failed before returning a result |
+| 34 | Linux helper rejected the request bounds or framing |
+| 35 | Linux helper could not revalidate the expected target snapshot |
+| 36 | Linux target lacks required accessibility text interfaces |
+| 37 | Linux write authorization was denied |
+| 38 | Initial Linux authorization reply arrived after its deadline |
+| 39 | Linux helper could not verify the screen was unlocked |
+| 40 | Linux target was no longer eligible at the metadata recheck |
+| 41 | Linux provider recheck exceeded its deadline |
+| 42 | Linux field event invalidated the provider recheck |
+| 43 | Native events remained queued after the Linux provider recheck |
+| 44 | Final Linux authorization or event check exceeded its deadline |
+| 45 | Linux field event invalidated the final check |
+| 46 | Native events remained queued after the final Linux check |
+| 47 | Linux provider returned an error from the write call |
+| 48 | Linux provider returned false from the write call |
+| 49 | Linux proxy did not complete the expected two authorization grants |
+| 50 | Undo write was accepted but the target could not be confirmed |
+| 51 | Undo write was accepted but the observed text differed |
+| 52 | Undo write was accepted but the caret or selection differed |
+| 53 | Undo write was accepted and observed but the policy check failed |
 
 Reasons 13/14 describe a later metadata observation, not proof of the original
 failure's cause. They never authorize text access or replacement.
+
+Reasons 33–49 refine the next write rejection event (16, 17, 20 or 27).
+The helper returns a fixed code on rejection. Its stderr remains discarded.
+Reasons 50–53 refine reason 21 using the returned observation and the same
+policy check. They do not request a new snapshot or retry the write.
 
 Earlier diagnostic run stopped in `live-undo` at 47.864 seconds after a
 post-write reset (then undifferentiated reason 10). That separate failure is

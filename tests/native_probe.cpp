@@ -51,16 +51,20 @@ int main(int argc, char **argv) {
     auto stale = f;
     stale.text = "stale";
     const auto allow = [] { return true; };
-    if (adapter->replace(stale, "WRONG", 5, allow))
-        return fail("Stale transaction was accepted.");
+    const auto staleEdit = adapter->replace(stale, "WRONG", 5, allow);
+    if (staleEdit || staleEdit.rejection != reword::WriteRejection::TargetChanged)
+        return fail("Stale transaction was not rejected at target validation.");
     bool asked = false;
-    if (adapter->replace(f, "WRONG", 5, [&] { asked = true; return false; }) ||
+    const auto deniedEdit = adapter->replace(f, "WRONG", 5, [&] { asked = true; return false; });
+    if (deniedEdit || deniedEdit.rejection != reword::WriteRejection::AuthorizationDenied ||
         !asked || !reword::sameTarget(f, adapter->readExpected(f)))
         return fail("Native authorization denial did not preserve the field.");
-    if (adapter->replace(f, "WRONG", 5, [] {
-            QThread::msleep(2 * reword::WriteAuthorizationBudgetMs);
-            return true;
-        }) || !reword::sameTarget(f, adapter->readExpected(f)))
+    const auto lateEdit = adapter->replace(f, "WRONG", 5, [] {
+        QThread::msleep(2 * reword::WriteAuthorizationBudgetMs);
+        return true;
+    });
+    if (lateEdit || lateEdit.rejection != reword::WriteRejection::AuthorizationExpired ||
+        !reword::sameTarget(f, adapter->readExpected(f)))
         return fail("Late authorization did not preserve the field.");
     int policyChecks = 0;
     if (adapter->replace(f, "WRONG", 5, [&] { return ++policyChecks == 1; }) ||

@@ -1,5 +1,32 @@
 # Current handoff — 2026-11-10
 
+## Linux native write witness
+
+Native write rejection now carries a fixed code from the helper through the
+proxy to the opt-in workload trace. Accepted writes still require the same
+two authorization grants. The Undo trace separately identifies mismatches
+in the post-write observation and policy. See [retry diagnostics](RETRY_DIAGNOSTICS.md).
+The rebuilt native GTK probe verified the target-mismatch, denied-authorization
+and expired-authorization codes through the actual helper pipe. One controlled
+X11 cycle and the `service` and `retry_diagnostics` CTest targets passed.
+
+An owned X11 rerun with the rebuilt GUI and helper reached the same
+`selected-result` timeout after 32.944 seconds and 58 successful selected
+edits and history inserts. The live correction and Undo sequence passed.
+Reasons 23, 32, 44 and 27 identify the final 50 ms authorization/check window
+as the rejection point. The current code 44 covers both the authorization
+reply and the event drain immediately after it. The trace does not isolate
+which consumed the window or explain the earlier Undo confirmation mismatch.
+The failure was in the history burst before sustained resource sampling.
+Cleanup completed without force. Receipt
+`.deps/linux-write-witness/report/report.json`.
+
+Next, measure the final authorization exchange and the event drain
+separately. The current authorization path reads per-app mode, pause,
+all correction options and configuration revision, although this decision
+only uses the browser toggle from the options. Measure that work before
+choosing a correction. Keep target and policy revalidation in place.
+
 ## Debian active workload and shortcut settings
 
 The freshly staged Linux build at `88badcd` stopped at `selected-result`
@@ -69,6 +96,14 @@ kept the browser registrations and data. Uninstall removed both registered
 manifests and preserved the data stores and a user-added file. The local
 report is `.deps/windows-installer-50cc14d/report.json`.
 [Windows installer artifact](https://github.com/AwraEsh/reword/actions/runs/42889442845/artifacts/13798187035).
+
+At `e96d90a`, the push run passed both jobs. The PR run passed Linux and
+failed the installed Windows Chrome probe. Chrome corrected and undid with
+the default and custom chords, passed the Pause checks and left the disabled
+site unchanged. After re-enabling the site, the next page failed to produce
+the correction that starts the focus-change scenario. The log does not
+establish why it failed. [Push run](https://github.com/AwraEsh/reword/actions/runs/42891981811)
+and [PR run](https://github.com/AwraEsh/reword/actions/runs/42891998118).
 
 ## Windows browser Undo with the desktop app
 

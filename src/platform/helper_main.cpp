@@ -93,11 +93,13 @@ int main(int argc, char **argv) {
                     int caret = o["caret"].toInt(-1);
                     bool bounded = text.size() <= 200000 && text.toUcs4().size() <= 100000 &&
                                    caret >= 0 && caret <= text.size();
-                    reword::WriteResult edit;
+                    reword::WriteResult edit{false, {}, reword::WriteRejection::InvalidRequest};
                     if (bounded && pending.isEmpty())
                         edit = adapter->replace(reword::decodeField(o["expected"].toObject()),
                                                 text, caret, requestAuthorization);
                     result = {{"accepted", edit.accepted}, {"after", reword::encodeField(edit.after)}};
+                    if (!edit.accepted)
+                        result.insert("rejection", int(edit.rejection));
                 } else if (operation == "shortcuts")
                     result = {{"ok", adapter->shortcuts(o["fix"].toString(), o["undo"].toString(),
                                                         o["pause"].toString())}};
