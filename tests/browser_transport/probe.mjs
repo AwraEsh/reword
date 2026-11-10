@@ -1,6 +1,7 @@
 // Runs in an owned X11 session or a disposable Windows CI account.
 import {execFileSync, spawn, spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
+import {once} from 'node:events';
 import {existsSync} from 'node:fs';
 import {chmod, copyFile, cp, mkdir, readFile, readlink, writeFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
@@ -20,7 +21,9 @@ if (!root || !output || !supported) {
 }
 const fixture = fileURLToPath(new URL('.', import.meta.url));
 const packagedHost = process.env.REWORD_PROBE_BROWSER_HOST;
-const extensionSources = packagedHost ? join(dirname(packagedHost), '../share/reword/browser/chromium') :
+const installedWindows = windows && Boolean(packagedHost);
+const extensionSources = packagedHost ? join(dirname(packagedHost),
+    windows ? 'browser/chromium' : '../share/reword/browser/chromium') :
     fileURLToPath(new URL('../../browser/chromium/', import.meta.url));
 const extension = join(root, 'extension');
 const profile = join(root, 'profile');
@@ -28,9 +31,20 @@ const hostName = engineHost ? 'org.reword.browser' : 'org.reword.transport_probe
 const hostPath = packagedHost || engineHost || join(root, 'native-host');
 const hostEnvironment = {...process.env, REWORD_DATA_DIR: join(root, 'reword')};
 if (packagedHost) {
-    for (const key of ['LD_LIBRARY_PATH', 'QT_PLUGIN_PATH', 'QML_IMPORT_PATH', 'REWORD_DICTIONARY_DIR']) {
+    for (const key of ['LD_LIBRARY_PATH', 'QT_PLUGIN_PATH', 'QML_IMPORT_PATH', 'QML2_IMPORT_PATH',
+        'REWORD_DICTIONARY_DIR', 'REWORD_PROBE_WINDOWS_FIXTURE_PATH', 'REWORD_PROBE_PWSH']) {
         delete hostEnvironment[key];
     }
+}
+const fixtureEnvironment = installedWindows ? {...process.env} : process.env;
+if (installedWindows) {
+    if (!process.env.REWORD_PROBE_WINDOWS_FIXTURE_PATH || !process.env.REWORD_PROBE_PWSH) {
+        throw new Error('The installed Windows test needs an explicit fixture PATH and PowerShell path');
+    }
+    for (const key of Object.keys(fixtureEnvironment)) {
+        if (key.toLowerCase() === 'path') delete fixtureEnvironment[key];
+    }
+    fixtureEnvironment.PATH = process.env.REWORD_PROBE_WINDOWS_FIXTURE_PATH;
 }
 const hostLog = join(root, 'host-cases');
 const extensionManifest = JSON.parse(await readFile(join(extensionSources, 'manifest.json'), 'utf8'));
@@ -116,10 +130,10 @@ const x11 = (pid, action) => spawnSync(python, [join(fixture, 'x11_input.py'),
     root, String(pid), action], {stdio: 'ignore', timeout: 3500}).status === 0;
 const nativeFixture = windowsGui ? join(dirname(engineHost), 'reword_win_fixture.exe') : null;
 const windowsInput = (pid, action) => spawnSync(nativeFixture, ['--input', String(pid), action],
-    {stdio: 'ignore', windowsHide: true, timeout: 3500}).status === 0;
+    {stdio: 'ignore', windowsHide: true, timeout: 3500, env: fixtureEnvironment}).status === 0;
 const policyFor = (application, ...change) => execFileSync(
     join(dirname(engineHost), 'reword_browser_policy_fixture' + (windows ? '.exe' : '')),
-    [join(root, 'reword'), application, ...change], {encoding: 'utf8', timeout: 5000}).trim();
+    [join(root, 'reword'), application, ...change], {encoding: 'utf8', timeout: 5000, env: fixtureEnvironment}).trim();
 await mkdir(output, {mode: 0o700});
 try {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -153,14 +167,19 @@ try {
         if (windows) {
             const key = 'HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\org.reword.browser';
             const existing = spawnSync('reg.exe', ['query', key, '/ve'], {timeout: 5000});
-            if (existing.error || existing.status !== 1) throw new Error('Expected an unused Windows test registry entry');
+            if (existing.error || existing.status !== (installedWindows ? 0 : 1))
+                throw new Error('The Windows test registry entry did not match the setup mode');
             const rejected = spawnSync(hostPath, [extensionOrigin, '--parent-window=0'],
                 {timeout: 5000, env: hostEnvironment, input: Buffer.from([2, 0, 0, 0, 123, 125])});
             result.untrustedLaunchRejected = rejected.status === 2 && !rejected.stdout.length &&
-                !existsSync(hostEnvironment.REWORD_DATA_DIR);
+                !existsSync(join(hostEnvironment.REWORD_DATA_DIR, 'reword.sqlite'));
             if (!result.untrustedLaunchRejected) throw new Error('A non-browser process reached the native host');
-            execFileSync(hostPath, ['--register-browser', 'chrome'], {timeout: 5000, env: hostEnvironment});
-            windowsRegistered = true;
+            if (installedWindows) {
+                result.windowsRegistrationFromInstaller = true;
+            } else {
+                execFileSync(hostPath, ['--register-browser', 'chrome'], {timeout: 5000, env: hostEnvironment});
+                windowsRegistered = true;
+            }
         } else {
             execFileSync(hostPath, ['--register-browser', profile], {timeout: 5000, env: hostEnvironment});
         }
@@ -179,8 +198,8 @@ try {
     if (x11Mode === 'gui') {
         result.stage = 'desktop-gui';
         if (windowsGui) policyFor(normalize(executable), 'rule', 'allow');
-        gui = spawn(join(dirname(engineHost), windowsGui ? 'reword.exe' : 'reword'), [], {
-            env: {...process.env, REWORD_DATA_DIR: join(root, 'reword'),
+        gui = spawn(join(dirname(installedWindows ? hostPath : engineHost), windowsGui ? 'reword.exe' : 'reword'), [], {
+            env: {...hostEnvironment,
                   QT_QPA_PLATFORM: windowsGui ? 'windows' : 'xcb', QT_QUICK_BACKEND: 'software',
                   REWORD_RETRY_DIAGNOSTICS: '1'},
             stdio: ['ignore', 'ignore', 'pipe'],
@@ -232,7 +251,7 @@ try {
         const {processInfo} = await call('SystemInfo.getProcessInfo');
         const parent = processInfo.find(process => process.type === 'browser');
         browserPid = parent.id;
-        application = windows ? execFileSync('pwsh.exe', ['-NoProfile', '-NonInteractive', '-Command',
+        application = windows ? execFileSync(process.env.REWORD_PROBE_PWSH || 'pwsh.exe', ['-NoProfile', '-NonInteractive', '-Command',
             '(Get-Process -Id ' + Number(browserPid) + ').Path'], {encoding: 'utf8', timeout: 10000}).trim() :
             await readlink('/proc/' + parent.id + '/exe');
         setPolicy('rule', 'allow');
@@ -328,9 +347,17 @@ try {
             if (reply.exceptionDetails) throw new Error('The extension site registration failed');
         };
         const prepareWindowsCorrection = async tag => {
-            await call('Page.navigate', {url: origin + '/?' + tag}, sessionId);
+            const url = origin + '/?' + tag;
+            await call('Page.navigate', {url}, sessionId);
             if (!await waitFor(() => evaluate(`location.search === '?${tag}' && document.readyState === 'complete'`)))
                 return false;
+            const injection = await call('Runtime.evaluate', {expression: `(async () => {
+                const [tab] = (await chrome.tabs.query({})).filter(tab => tab.url === ${JSON.stringify(url)});
+                if (!tab) return false;
+                await chrome.scripting.executeScript({target: {tabId: tab.id}, files: rewordContentFiles});
+                return true;
+            })()`, awaitPromise: true, returnByValue: true}, workerSession);
+            if (injection.result?.value !== true) return false;
             await focus('undo', 7);
             await typeWord();
             return waitFor(async () => {
@@ -737,7 +764,7 @@ try {
     if (windowsGui) {
         result.stage = 'native-editor-undo';
         policyFor(nativeFixture, 'rule', 'allow');
-        nativeEditor = spawn(nativeFixture, [], {stdio: ['pipe', 'pipe', 'ignore']});
+        nativeEditor = spawn(nativeFixture, [], {stdio: ['pipe', 'pipe', 'ignore'], env: fixtureEnvironment});
         let observed = '', caret = -1;
         createInterface({input: nativeEditor.stdout}).on('line', line => {
             const snapshot = line.match(/^TEXT:(\d+):(.*)$/);
@@ -774,9 +801,13 @@ try {
     result.error = error.message;
     process.exitCode = 1;
 } finally {
-    if (browser && browser.exitCode === null && browser.signalCode === null) browser.kill();
-    if (gui && gui.exitCode === null && gui.signalCode === null) gui.kill();
-    if (nativeEditor && nativeEditor.exitCode === null && nativeEditor.signalCode === null) nativeEditor.kill();
+    await Promise.all([browser, gui, nativeEditor].map(async child => {
+        if (child?.pid && child.exitCode === null && child.signalCode === null) {
+            const exited = once(child, 'exit');
+            child.kill();
+            await Promise.race([exited, sleep(2000)]);
+        }
+    }));
     server.close();
     if (windowsRegistered) {
         const cleanup = spawnSync(hostPath, ['--unregister-browser', 'chrome'],

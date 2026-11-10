@@ -111,6 +111,29 @@ class WindowsAuditTest(unittest.TestCase):
         report = self.audit()
         self.assertEqual(report['unmatchedBinaries'], ['reword.exe'])
 
+    def test_declared_browser_host_matches_the_build(self):
+        import package_windows_audit
+        host = self.base / 'reword-browser-host.exe'
+        host.write_bytes(b'opaque browser host build')
+        (self.stage / host.name).write_bytes(host.read_bytes())
+        report = package_windows_audit.audit(self.stage, self.app, {'qt': self.vendor}, self.out,
+                                             additional_applications=[host])
+        self.assertEqual(report['binaries'][host.name]['matches'], ['application'])
+        self.assertEqual(report['unmatchedBinaries'], [])
+
+    def test_declared_browser_host_is_required_and_must_match_the_build(self):
+        import package_windows_audit
+        host = self.base / 'reword-browser-host.exe'
+        host.write_bytes(b'opaque browser host build')
+        with self.assertRaises(ValueError):
+            package_windows_audit.audit(self.stage, self.app, {'qt': self.vendor}, self.out,
+                                        additional_applications=[host])
+        (self.stage / host.name).write_bytes(b'changed browser host')
+        with self.assertRaises(ValueError):
+            package_windows_audit.audit(self.stage, self.app, {'qt': self.vendor}, self.out,
+                                        additional_applications=[host])
+        self.assertFalse(self.out.exists())
+
     def test_existing_output_is_preserved(self):
         self.out.mkdir()
         (self.out / 'keep').write_bytes(b'untouched')

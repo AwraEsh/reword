@@ -74,7 +74,7 @@ def metadata(path):
             (name.startswith('qt_lib_') and name.endswith('.pri')))
 
 
-def audit(stage, application, vendors, output, system=None):
+def audit(stage, application, vendors, output, system=None, additional_applications=()):
     stage, application, output = map(Path, (stage, application, output))
     if output.exists() or output.is_symlink():
         raise ValueError('Audit output already exists')
@@ -91,6 +91,16 @@ def audit(stage, application, vendors, output, system=None):
         by_name.setdefault(Path(name).name.lower(), []).append(name)
     if 'reword.exe' in binaries and all(binaries['reword.exe'][k] == app[k] for k in app):
         binaries['reword.exe']['matches'].append('application')
+    project_names = {'reword.exe'}
+    for source in map(Path, additional_applications):
+        name = source.name
+        if source.suffix.lower() != '.exe' or name.lower() in project_names:
+            raise ValueError('Additional project executables must have unique .exe names')
+        project_names.add(name.lower())
+        original = inventory(source)
+        if staged.get(name) != original:
+            raise ValueError('Staged project executable is missing or differs from its build')
+        binaries[name]['matches'].append('application')
     notices, build_metadata, notice_inputs, metadata_inputs = {}, {}, {}, {}
     missing, notice_bytes, metadata_bytes = [], 0, 0
     for vendor, location in sorted(vendors.items()):
@@ -183,6 +193,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--stage', type=Path, required=True)
     parser.add_argument('--application', type=Path, required=True)
+    parser.add_argument('--additional-application', type=Path, action='append', default=[])
     parser.add_argument('--vendor', action='append', required=True, metavar='NAME=PATH')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--system-directory', type=Path,
@@ -195,7 +206,8 @@ def main():
             parser.error('Each vendor needs a unique NAME=PATH')
         vendors[name] = Path(path)
     try:
-        report = audit(args.stage, args.application, vendors, args.output, system=args.system_directory)
+        report = audit(args.stage, args.application, vendors, args.output, system=args.system_directory,
+                       additional_applications=args.additional_application)
     except (OSError, ValueError) as error:
         parser.exit(1, 'Windows materials audit failed: ' + str(error) + '\n')
     print(json.dumps({'files': len(report['files']), 'binaries': len(report['binaries']),

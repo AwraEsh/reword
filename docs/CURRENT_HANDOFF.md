@@ -1,4 +1,20 @@
-# Current handoff — 2026-11-09
+# Current handoff — 2026-11-10
+
+## Windows installer browser integration
+
+The NSIS installer ships the native host and Chromium extension alongside
+Reword and its runtime. Browser registration is an optional setup action,
+with separate unchecked entries for Chrome and Chromium. The package audit
+requires the staged browser host to match its build executable. Reinstall
+uses the recorded location and preserves the registration and private store.
+Uninstall scopes browser cleanup to the executable named in the owned manifest.
+
+The hosted installer probe checks a default install, explicit registration,
+reinstall, installed Chrome correction and Undo on a clean PATH, and uninstall
+with data preservation. Browser and GUI processes use the installed runtime.
+The synthetic keyboard and policy fixtures have their own developer PATH.
+See the `Reword-Windows-Installed-Chrome-Report` CI artifact. Interactive
+setup, normal browser profiles and physical Windows 10/11 remain separate gates.
 
 ## Windows browser Undo with the desktop app
 

@@ -401,10 +401,12 @@ int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     const auto args = app.arguments();
 #ifdef _WIN32
-    if (args.size() == 3 && (args[1] == "--register-browser" || args[1] == "--unregister-browser")) {
-        const bool remove = args[1] == "--unregister-browser";
+    if (args.size() == 3 && (args[1] == "--register-browser" || args[1] == "--unregister-browser" ||
+                            args[1] == "--unregister-installed-browser")) {
+        const bool remove = args[1] != "--register-browser";
+        const auto executable = args[1] == "--unregister-browser" ? QString{} : app.applicationFilePath();
         try {
-            reword::registerWindowsBrowserHost(args[2], dataDirectory(), app.applicationFilePath(), remove);
+            reword::registerWindowsBrowserHost(args[2], dataDirectory(), executable, remove);
             std::puts(remove ? "Reword browser registration removed." : "Reword browser host registered.");
             return 0;
         } catch (const std::exception &error) {

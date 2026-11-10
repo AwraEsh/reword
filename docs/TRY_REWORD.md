@@ -11,6 +11,19 @@ run `Reword-Setup-0.1.0.exe`. GitHub may require sign-in and CI downloads expire
 The automated Windows checks cover installation, launch, uninstall and standard
 editing controls. Ordinary Windows 10/11 desktop use still needs broader testing.
 
+### Try live correction in Chrome or Chromium
+
+In a build with browser support, select **Register Chrome connection** or
+**Register Chromium connection** in setup. In the browser's extensions page,
+enable **Developer mode**, choose **Load unpacked**, and select the
+`browser\chromium` folder inside the Reword installation directory. The default
+installation is `%LOCALAPPDATA%\Programs\Reword`. Run Reword, allow the browser
+in **Applications**, then enable each site from the extension button.
+
+Quit Reword and the browser before running setup again. Setup reuses the
+recorded installation directory and keeps existing browser registrations.
+Remove the extension in the browser's extensions page when you no longer use it.
+
 ## Debian-based Linux
 
 Development packages are built into `dist`. The bundled GUI requires x86-64

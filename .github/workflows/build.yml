@@ -201,6 +201,11 @@ jobs:
         shell: pwsh
         run: ./scripts/test-windows-installer.ps1
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Reword-Windows-Installed-Chrome-Report
+          path: dist/windows-installed-chrome/report.json
+      - uses: actions/upload-artifact@v4
         with:
           name: Reword-Windows
           path: dist/Reword-Setup-0.1.0.exe

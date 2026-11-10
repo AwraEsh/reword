@@ -118,6 +118,11 @@ void reword::registerWindowsBrowserHost(const QString &browser, const QString &d
     auto identity = browserManifestIdentity();
     const auto oldExecutable = readOwnedManifest(path, identity);
     if (remove) {
+        if (!executable.isEmpty()) {
+            const auto installed = QDir::toNativeSeparators(QFileInfo(executable).canonicalFilePath());
+            if (installed.isEmpty() || oldExecutable != installed)
+                return;
+        }
         if (const auto latest = registeredManifest(key.get()); latest) {
             if (*latest != path)
                 throw std::runtime_error("The existing browser registration does not belong to Reword.");

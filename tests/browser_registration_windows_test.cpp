@@ -105,6 +105,10 @@ class BrowserRegistrationWindowsTest : public QObject {
         QCOMPARE(registryValue(chromeKey, nullptr), chromeManifest);
         QCOMPARE(manifest(chromeManifest).value("path").toString(),
                  QDir::toNativeSeparators(QFileInfo(next).canonicalFilePath()));
+        reword::registerWindowsBrowserHost("chrome", data.path(), first, true);
+        QCOMPARE(registryValue(chromeKey, nullptr), chromeManifest);
+        QCOMPARE(manifest(chromeManifest).value("path").toString(),
+                 QDir::toNativeSeparators(QFileInfo(next).canonicalFilePath()));
         QCOMPARE(manifest(chromiumManifest), initial);
         QVERIFY_EXCEPTION_THROWN(reword::registerWindowsBrowserHost("chrome", data.path(),
                                                                     data.filePath("missing.exe"), false),
@@ -116,7 +120,7 @@ class BrowserRegistrationWindowsTest : public QObject {
         reword::registerWindowsBrowserHost("chromium", data.path(), first, false);
         QCOMPARE(manifest(chromiumManifest), initial);
 
-        reword::registerWindowsBrowserHost("chrome", data.path(), {}, true);
+        reword::registerWindowsBrowserHost("chrome", data.path(), next, true);
         reword::registerWindowsBrowserHost("chrome", data.path(), {}, true);
         QVERIFY(registryValue(chromeKey, nullptr).isEmpty());
         QCOMPARE(registryValue(chromeKey, L"keep"), QString("existing setting"));
