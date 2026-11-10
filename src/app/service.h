@@ -80,6 +80,7 @@ class Service : public QObject {
     void message(QString message);
     void state(QString description, bool shortcutsOK);
     void corrected(QString original, QString corrected);
+    void statisticsChanged();
     void passageRecoveryAvailable(QString original, QString corrected);
 };
 } // namespace reword

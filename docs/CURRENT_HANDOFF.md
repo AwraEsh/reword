@@ -1,5 +1,30 @@
 # Current handoff — 2026-11-11
 
+## Optional feedback after live correction
+
+The service sends the original and corrected word to the controller only
+when training notifications are enabled. A successful statistics update has
+its own text-free signal. When both options are off, a live edit no longer
+causes the controller to reread notification settings or refresh QML
+bindings. The controller checks the current setting again before sending a
+queued tray notification.
+
+The focused service regression passed all four combinations of
+notifications and statistics, with correction and Undo in each case.
+The full core, UI and service suites passed, as did one controlled GTK/X11
+cycle with native correction and Undo.
+The owned AppDir run under the same 20 ms quota period completed the full
+120-second active phase, 40 live retry/Undo sequences, 150 selected edits,
+history pruning, and both size checks. App CPU averaged 9.06% and helper
+CPU 5.59%. The 10% CPU gate passed in this run. Word p95 was at most
+60.6 ms across 80 samples, which failed the 50 ms latency gate. The
+median was 24.9 ms. Cleanup completed without force. Receipt
+`.deps/linux-live-feedback/report-20ms/report.json`.
+
+For the latency investigation, separate the interval from the fixture's
+word boundary to the service's correction decision from the interval to
+the observed provider write. Keep the existing safety and latency gates.
+
 ## Linux helper polling
 
 The service now asks the Linux helper for the native shortcut and field
@@ -194,6 +219,20 @@ The stricter assertion passed in a private Helium profile with the compiled
 Linux host. The Windows evidence is still pending for this version of the probe.
 [Push run](https://github.com/AwraEsh/reword/actions/runs/42894910920)
 and [PR run](https://github.com/AwraEsh/reword/actions/runs/42894920422).
+
+At `e761bb6`, the Windows push passed the installed Chrome report, including
+site revocation and switching back to a native editor. The PR still failed
+after site revocation. Chrome kept both document and field focus and the
+field held the corrected fixture value. The page saw zero replacement or
+Undo events after revocation. The desktop UI Automation route can edit the
+same field based on app permission and has no site-grant check. This
+explains a competing route consistent with the observations. The next
+change should delegate live Chrome and Chromium editing on Windows to the
+site-aware extension while preserving application discovery and the
+explicit selection path. Add a test for zero native browser live reads.
+Installed push receipt `.deps/windows-e761bb6/report.json`.
+[Push run](https://github.com/AwraEsh/reword/actions/runs/42896505680)
+and [PR run](https://github.com/AwraEsh/reword/actions/runs/42896516190).
 
 ## Windows browser Undo with the desktop app
 

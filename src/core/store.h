@@ -50,7 +50,7 @@ class Store {
     QVariantMap historyDetail(qint64 id) const;
     void deleteHistory(qint64 id);
     void clearHistory();
-    void count(const QString &, const QString &, const Options &);
+    bool count(const QString &, const QString &, const Options &);
     QVariantList statistics() const;
     void clearStatistics();
     void addWord(const QString &);

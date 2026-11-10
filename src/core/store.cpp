@@ -376,10 +376,10 @@ void Store::clearHistory() {
     exec("DELETE FROM history");
     exec("VACUUM");
 }
-void Store::count(const QString &a, const QString &b, const Options &o) {
+bool Store::count(const QString &a, const QString &b, const Options &o) {
     if (!o.statistics || a == b || a.size() > 64 || b.size() > 64 || a.contains(' ') ||
         b.contains(' '))
-        return;
+        return false;
     QSqlQuery q(db_);
     q.prepare("INSERT INTO statistics VALUES(?,?,1) ON CONFLICT(original,corrected) DO UPDATE SET "
               "count=count+1");
@@ -389,6 +389,7 @@ void Store::count(const QString &a, const QString &b, const Options &o) {
     // Bound unusual vocabulary growth independently of history retention.
     exec("DELETE FROM statistics WHERE rowid IN (SELECT rowid FROM statistics ORDER BY count "
          "DESC,rowid DESC LIMIT -1 OFFSET 10000)");
+    return true;
 }
 QVariantList Store::statistics() const {
     QVariantList rows;

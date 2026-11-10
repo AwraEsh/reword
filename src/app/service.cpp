@@ -361,8 +361,10 @@ void Service::tick() {
             undoCaret_ = f.caret;
             undoAfter_ = after;
             previous_ = undoAfter_;
-            store_->count(token, correct, o);
-            emit corrected(token, correct);
+            if (store_->count(token, correct, o))
+                emit statisticsChanged();
+            if (o.notifications)
+                emit corrected(token, correct);
             f = undoAfter_;
             offset += correct.size() - token.size();
         }

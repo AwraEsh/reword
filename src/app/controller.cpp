@@ -76,11 +76,11 @@ Controller::Controller(const QString &directory, QObject *parent, std::unique_pt
         emit updated();
     });
     connect(service_, &Service::corrected, this, [this](QString a, QString b) {
-        if (read([&] { return store_.options(); }).notifications && tray_)
+        if (tray_ && read([&] { return store_.value("notifications", false).toBool(); }))
             tray_->showMessage("Spelling corrected", a + " → " + b, QSystemTrayIcon::Information,
                                3000);
-        emit updated();
     });
+    connect(service_, &Service::statisticsChanged, this, &Controller::updated);
     connect(service_, &Service::passageRecoveryAvailable, this,
             [this](QString original, QString corrected) { rememberPassage(original, corrected); });
     connect(

@@ -717,6 +717,33 @@ class ServiceTest : public QObject {
         h.adapter->type("teh recieve ");
         QTRY_COMPARE(h.adapter->field.text, QString("the receive "));
     }
+    void liveCorrectionReportsOnlyEnabledFeedback_data() {
+        QTest::addColumn<bool>("notifications");
+        QTest::addColumn<bool>("statistics");
+        QTest::newRow("default") << false << false;
+        QTest::newRow("notifications") << true << false;
+        QTest::newRow("statistics") << false << true;
+        QTest::newRow("both") << true << true;
+    }
+    void liveCorrectionReportsOnlyEnabledFeedback() {
+        QFETCH(bool, notifications);
+        QFETCH(bool, statistics);
+        Harness h;
+        h.store.setCorrectionOption("notifications", notifications);
+        h.store.setCorrectionOption("statistics", statistics);
+        QSignalSpy notices(&h.service, &Service::corrected);
+        QSignalSpy insightUpdates(&h.service, &Service::statisticsChanged);
+        QTRY_VERIFY(h.adapter->reads > 0);
+        h.adapter->type("teh ");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        QCOMPARE(notices.count(), int(notifications));
+        if (notifications)
+            QCOMPARE(notices.first(), (QList<QVariant>{QString("teh"), QString("the")}));
+        QCOMPARE(insightUpdates.count(), int(statistics));
+        QCOMPARE(h.store.statistics().size(), int(statistics));
+        h.service.action("undo");
+        QCOMPARE(h.adapter->field.text, QString("teh "));
+    }
     void liveBurstStopsWhenPolicyChanges_data() {
         QTest::addColumn<QString>("policy");
         for (auto policy : {"pause", "deny", "language", "cancel", "cancel-reset"})
@@ -725,6 +752,7 @@ class ServiceTest : public QObject {
     void liveBurstStopsWhenPolicyChanges() {
         QFETCH(QString, policy);
         Harness h;
+        h.store.setCorrectionOption("notifications", true);
         QTRY_VERIFY(h.adapter->reads > 0);
         QSignalSpy corrections(&h.service, &Service::corrected);
         connect(&h.service, &Service::corrected, &h.service, [&] {
