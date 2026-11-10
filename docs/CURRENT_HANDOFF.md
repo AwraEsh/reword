@@ -16,6 +16,14 @@ The synthetic keyboard and policy fixtures have their own developer PATH.
 See the `Reword-Windows-Installed-Chrome-Report` CI artifact. Interactive
 setup, normal browser profiles and physical Windows 10/11 remain separate gates.
 
+Run 42889442845 passed on Linux and Windows at `50cc14d`. Installed Chrome
+passed live correction, default and custom Undo, Pause and the switch to
+native Win32 editing with developer runtimes removed from its PATH. Reinstall
+kept the browser registrations and data. Uninstall removed both registered
+manifests and preserved the data stores and a user-added file. The local
+report is `.deps/windows-installer-50cc14d/report.json`.
+[Windows installer artifact](https://github.com/AwraEsh/reword/actions/runs/42889442845/artifacts/13798187035).
+
 ## Windows browser Undo with the desktop app
 
 The Windows Chrome fixture now runs with the Reword GUI and sends real
