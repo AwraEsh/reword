@@ -42,6 +42,37 @@ static int passageStartupProfile() {
 }
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
+    if (app.arguments().contains("--shortcut-read-profile")) {
+        QTemporaryDir data;
+        if (!data.isValid())
+            return 2;
+        reword::Store store(data.path());
+        const QStringList expected{"Ctrl+Alt+R", "Ctrl+Alt+K", "Ctrl+Alt+Shift+P"};
+        store.setValue("fixShortcut", expected[0]);
+        store.setValue("pauseShortcut", expected[2]);
+        store.setCorrectionOption("undoShortcut", expected[1]);
+        constexpr int samples = 2000;
+        bool correct = true;
+        const auto measure = [&](auto read) {
+            const auto started = std::clock();
+            for (int i = 0; i < samples; ++i) {
+                const auto settings = read();
+                correct = (settings.keys == expected && settings.revision == 1) && correct;
+            }
+            return 1000.0 * (std::clock() - started) / CLOCKS_PER_SEC;
+        };
+        const auto separate = measure([&] {
+            const auto revision = store.value("configRevision", 0).toLongLong();
+            return reword::ShortcutSettings{{store.value("fixShortcut").toString(),
+                                             store.value("undoShortcut").toString(),
+                                             store.value("pauseShortcut").toString()}, revision};
+        });
+        const auto combined = measure([&] { return store.shortcutSettings(); });
+        std::cout << QJsonDocument(QJsonObject{{"samples", samples}, {"correct", correct},
+                                             {"separateReadsCpuMs", separate}, {"singleReadCpuMs", combined}})
+                         .toJson(QJsonDocument::Indented).constData();
+        return correct ? 0 : 1;
+    }
     if (app.arguments().contains("--settings-read-profile")) {
         QTemporaryDir data;
         if (!data.isValid())

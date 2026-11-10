@@ -49,6 +49,16 @@ Format: `RTRY <monotonic milliseconds> <reason> <word start offset>`.
 | 20 | The adapter did not acknowledge the Undo write |
 | 21 | The write was acknowledged but the field or policy could not confirm Undo |
 | 22 | Undo was confirmed |
+| 23 | Selected correction shortcut reached the service |
+| 24 | Selection unavailable or outside the current policy |
+| 25 | Selected correction stopped before a write, due to policy, deadline or worker result |
+| 26 | Selected correction could not revalidate the original target |
+| 27 | Native provider did not acknowledge the selected replacement |
+| 28 | Selected replacement acknowledged, with confirmation or policy mismatch |
+| 29 | Selected replacement confirmed and history handling completed |
+| 30 | Selected job could not start, including a conflicting active operation |
+| 31 | Selected correction hit an exception |
+| 32 | Selected job submitted to the worker |
 
 Reasons 13/14 describe a later metadata observation, not proof of the original
 failure's cause. They never authorize text access or replacement.

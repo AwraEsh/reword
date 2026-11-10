@@ -5,6 +5,10 @@
 class QSqlQuery;
 namespace reword {
 enum class ApplicationMode { Disabled, Automatic, ShortcutOnly };
+struct ShortcutSettings {
+    QStringList keys;
+    qint64 revision = 0;
+};
 
 class Store {
     QSqlDatabase db_;
@@ -20,7 +24,7 @@ class Store {
     void setValue(const QString &, const QVariant &);
     void setCorrectionOption(const QString &, const QVariant &);
     Options options() const;
-    QStringList shortcuts() const;
+    ShortcutSettings shortcutSettings() const;
     bool restoreShortcuts(const QStringList &expected, qint64 revision,
                           const QStringList &previous);
     void discover(const QString &id, const QString &name, bool restricted = false);

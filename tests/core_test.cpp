@@ -46,6 +46,22 @@ class CoreTest : public QObject {
         QVERIFY(reader.shouldAsk("/synthetic-app"));
         QVERIFY(!reader.allowed("/synthetic-app"));
     }
+    void shortcutSettingsPairKeysWithCurrentRevision() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        const auto initial = reader.shortcutSettings();
+        QCOMPARE(initial.keys, (QStringList{"Ctrl+Alt+R", "Ctrl+Alt+Z", "Ctrl+Alt+Shift+P"}));
+        QCOMPARE(initial.revision, 0);
+        writer.setCorrectionOption("undoShortcut", "Ctrl+Alt+K");
+        const auto changed = reader.shortcutSettings();
+        QCOMPARE(changed.keys, (QStringList{"Ctrl+Alt+R", "Ctrl+Alt+K", "Ctrl+Alt+Shift+P"}));
+        QCOMPARE(changed.revision, initial.revision + 1);
+        QVERIFY(!reader.restoreShortcuts(changed.keys, initial.revision, initial.keys));
+        QVERIFY(reader.restoreShortcuts(changed.keys, changed.revision, initial.keys));
+        const auto restored = writer.shortcutSettings();
+        QCOMPARE(restored.keys, initial.keys);
+        QCOMPARE(restored.revision, changed.revision + 1);
+    }
     void optionsObserveOtherConnectionChangesWithoutCaching() {
         QTemporaryDir data;
         Store reader(data.path()), writer(data.path());

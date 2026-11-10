@@ -1,5 +1,51 @@
 # Current handoff — 2026-11-10
 
+## Debian active workload and shortcut settings
+
+The freshly staged Linux build at `88badcd` stopped at `selected-result`
+after 48.687 seconds. It had completed 104 selected corrections and history
+inserts and one complete live retry and Undo sequence. It stopped during
+the history burst, before the sustained 120-second measurement window.
+The receipt is `.deps/linux-stability-88badcd/report/report.json`.
+
+The service now reads the three shortcuts and configuration revision in a
+single SQLite statement. Restore uses the same snapshot inside its existing
+transaction. In 2,000 synthetic reads, the comparison measured 321.135 ms
+of CPU for separate statements and 140.945 ms for the combined statement.
+This measurement covers only those reads. Reproduce with
+`scripts/env.sh ./build/reword_performance_probe --shortcut-read-profile`.
+
+The opt-in workload trace now distinguishes shortcut delivery, job start,
+target revalidation, provider write, confirmation and history completion for
+selected correction. It retains bounded numeric events. See
+[retry diagnostics](RETRY_DIAGNOSTICS.md). Production tracing is off by default.
+
+The serial rebuild and the `core`, `service` and `retry_diagnostics` CTest
+targets passed. The follow-up used the same audited AppDir runtime with the
+rebuilt GUI and helper. It completed 34 live correction, retry and Undo
+sequences, 142 selected edits and history inserts, and 32 protected-field
+checks. The 100-entry history limit held. The run stopped at `selected-result`
+after 162.496 seconds overall, 116.995 seconds into the 120-second active
+phase. Trace reasons 23, 32 and 27 show that the shortcut reached the service,
+the worker was submitted, and the adapter returned without accepting the
+replacement. The earlier `88badcd` timeout lacked these events, so its cause
+is still unconfirmed.
+
+The follow-up exceeded the resource and latency targets. App CPU averaged
+10.31% and helper CPU averaged 5.50% over the last 116.14 seconds sampled.
+There was no swap or forced shutdown. Word correction p95 was at most 56.5 ms
+over 68 samples. The oversized-selection checks at the end did not run.
+See `.deps/linux-stability-shortcut-diagnostics/report/report.json` and the
+adjacent `.log`. The installed Preview was left unchanged.
+
+For the next probe, separate the causes of reason 27 in `LinuxProxy::replace`
+and `LinuxAdapter::replace`: proxy request or authorization count, target
+or eligibility change, provider event/deadline guard, and provider write
+result. The preceding live Undo emitted reason 21 even though the fixture
+observed the original text. Keep write acceptance and text confirmation
+separate and preserve the existing guards. Profile the 20 ms polling path
+separately before choosing another CPU optimization.
+
 ## Windows installer browser integration
 
 The NSIS installer ships the native host and Chromium extension alongside

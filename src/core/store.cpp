@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <stdexcept>
 namespace reword {
+static const QStringList shortcutKeys{"fixShortcut", "undoShortcut", "pauseShortcut"};
 static void checked(QSqlQuery &q) {
     if (!q.exec())
         throw std::runtime_error("Local database operation failed.");
@@ -102,10 +103,24 @@ void Store::updateSetting(const QString &key, const QVariant &value, bool invali
     else
         checked(q);
 }
-QStringList Store::shortcuts() const {
-    return {value("fixShortcut", "Ctrl+Alt+R").toString(),
-            value("undoShortcut", "Ctrl+Alt+Z").toString(),
-            value("pauseShortcut", "Ctrl+Alt+Shift+P").toString()};
+ShortcutSettings Store::shortcutSettings() const {
+    ShortcutSettings settings{{"Ctrl+Alt+R", "Ctrl+Alt+Z", "Ctrl+Alt+Shift+P"}};
+    QSqlQuery query(db_);
+    query.prepare("SELECT key,value FROM settings WHERE key IN "
+                  "('fixShortcut','undoShortcut','pauseShortcut','configRevision')");
+    checked(query);
+    while (query.next()) {
+        const auto key = query.value(0).toString();
+        const auto array = QJsonDocument::fromJson(query.value(1).toByteArray()).array();
+        if (array.isEmpty())
+            continue;
+        const auto value = array.first().toVariant();
+        if (key == "configRevision")
+            settings.revision = value.toLongLong();
+        else if (const auto index = shortcutKeys.indexOf(key); index >= 0)
+            settings.keys[index] = value.toString();
+    }
+    return settings;
 }
 bool Store::restoreShortcuts(const QStringList &expected, qint64 revision,
                              const QStringList &previous) {
@@ -114,14 +129,14 @@ bool Store::restoreShortcuts(const QStringList &expected, qint64 revision,
     if (!db_.transaction())
         throw std::runtime_error("Cannot begin shortcut settings transaction.");
     try {
-        if (shortcuts() != expected || value("configRevision", 0).toLongLong() != revision) {
+        const auto settings = shortcutSettings();
+        if (settings.keys != expected || settings.revision != revision) {
             db_.rollback();
             return false;
         }
-        const QStringList keys{"fixShortcut", "undoShortcut", "pauseShortcut"};
-        for (int index = 0; index < keys.size(); ++index)
-            setValue(keys[index], previous[index]);
-        setValue("configRevision", value("configRevision", 0).toLongLong() + 1);
+        for (int index = 0; index < shortcutKeys.size(); ++index)
+            setValue(shortcutKeys[index], previous[index]);
+        setValue("configRevision", revision + 1);
         if (!db_.commit())
             throw std::runtime_error("Cannot restore shortcut settings.");
         return true;

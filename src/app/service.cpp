@@ -166,8 +166,7 @@ void Service::tick() {
     if (!adapter_ || !store_)
         return;
     try {
-        auto revision = store_->value("configRevision", 0).toLongLong();
-        auto settings = store_->shortcuts();
+        const auto [settings, revision] = store_->shortcutSettings();
         if (settings != shortcutSettings_ ||
             (!wayland_ && !shortcutsHealthy_ && revision != shortcutRevision_)) {
             bool hadAttempt = !shortcutSettings_.isEmpty();
@@ -376,17 +375,22 @@ void Service::tick() {
 }
 void Service::runText(QString input, bool native, Field field) {
     if (jobRunning_) {
-        if (native)
+        if (native) {
+            traceRetry(30);
             emit message("A correction is already running.");
-        else
+        } else
             emit result(input, input, "A correction is already running.", false);
         return;
     }
     if (!store_) {
+        if (native)
+            traceRetry(30);
         emit result(input, input, "Correction engine is unavailable.", native);
         return;
     }
     if (store_->paused()) {
+        if (native)
+            traceRetry(25);
         emit result(input, input, "Reword is paused.", native);
         return;
     }
@@ -394,6 +398,8 @@ void Service::runText(QString input, bool native, Field field) {
     auto operationLock = std::make_unique<QLockFile>(directory_ + "/operation.lock");
     operationLock->setStaleLockTime(15000);
     if (!operationLock->tryLock(0)) {
+        if (native)
+            traceRetry(30);
         emit result(input, input, "Another correction is already running.", native);
         return;
     }
@@ -429,6 +435,8 @@ void Service::runText(QString input, bool native, Field field) {
                 if (deadline.hasExpired())
                     change.error = "Operation timed out. Nothing was replaced.";
                 if (!change.error.isEmpty()) {
+                    if (native)
+                        traceRetry(25);
                     emit result(input, input, change.error, native);
                     return;
                 }
@@ -437,12 +445,14 @@ void Service::runText(QString input, bool native, Field field) {
                     return;
                 }
                 if (!change.changed) {
+                    traceRetry(25);
                     emit message("No confident corrections found.");
                     return;
                 }
                 try {
                     auto current = permitted(&field);
                     if (!sameTarget(field, current)) {
+                        traceRetry(26);
                         emit message("The selection changed. Nothing was replaced.");
                         return;
                     }
@@ -454,6 +464,7 @@ void Service::runText(QString input, bool native, Field field) {
                                !deadline.hasExpired();
                     };
                     if (!authorize()) {
+                        traceRetry(25);
                         emit message(deadline.hasExpired()
                                          ? "Operation timed out. Nothing was replaced."
                                          : "Cancelled or settings changed. Nothing was replaced.");
@@ -464,6 +475,7 @@ void Service::runText(QString input, bool native, Field field) {
                     emit passageRecoveryAvailable(input, change.corrected);
                     // Signal delivery may synchronously revoke this operation.
                     if (!authorize()) {
+                        traceRetry(25);
                         resetObservation();
                         emit message(deadline.hasExpired()
                                          ? "Operation timed out. Nothing was replaced."
@@ -473,6 +485,7 @@ void Service::runText(QString input, bool native, Field field) {
                     const int caret = field.selectionStart + change.corrected.size();
                     const auto edit = adapter_->replace(field, updated, caret, authorize);
                     if (!edit.accepted) {
+                        traceRetry(27);
                         resetObservation();
                         emit message(
                             "Replacement was not confirmed. Check the text; its original is "
@@ -482,6 +495,7 @@ void Service::runText(QString input, bool native, Field field) {
                     const auto &after = edit.after;
                     if (!confirmedEdit(field, after, updated, caret) ||
                         !policyCurrent(after, revision, cancellation)) {
+                        traceRetry(28);
                         resetObservation();
                         emit message("The field changed after correction. Copy the original from "
                                      "session recovery; Undo is unavailable.");
@@ -493,12 +507,16 @@ void Service::runText(QString input, bool native, Field field) {
                     undoAfter_ = after;
                     previous_ = undoAfter_;
                     store_->history(input, change.corrected, store_->options());
+                    traceRetry(29);
                     emit result(input, change.corrected, {}, true);
                 } catch (...) {
+                    traceRetry(31);
                     resetObservation();
                     emit message("The operation stopped. Check the application's text before continuing.");
                 }
             } catch (...) {
+                if (native)
+                    traceRetry(31);
                 emit result(input, input, "Local storage is unavailable. The operation stopped.",
                             native);
             }
@@ -519,6 +537,8 @@ void Service::runText(QString input, bool native, Field field) {
             return Change{input, input, false, "Correction failed. The original is unchanged."};
         }
     }));
+    if (native)
+        traceRetry(32);
     emit operationActive(true);
 }
 void Service::processText(QString input) {
@@ -532,7 +552,9 @@ void Service::processText(QString input) {
     }
 }
 void Service::fixSelection() {
+    traceRetry(23);
     if (jobRunning_) {
+        traceRetry(30);
         emit message("A correction is already running.");
         return;
     }
@@ -540,6 +562,7 @@ void Service::fixSelection() {
     auto field = permitted();
     if (field.id.isEmpty() || field.selectionStart < 0 ||
         field.selectionEnd <= field.selectionStart) {
+        traceRetry(24);
         emit message("No supported, permitted text selection. Use the writing workspace instead.");
         return;
     }
@@ -591,8 +614,14 @@ void Service::action(QString name) {
     try {
         if (!adapter_ || !store_)
             return;
-        if (name == "fix")
-            fixSelection();
+        if (name == "fix") {
+            try {
+                fixSelection();
+            } catch (...) {
+                traceRetry(31);
+                throw;
+            }
+        }
         else if (name == "undo")
             undo();
         else if (name == "pause") {
