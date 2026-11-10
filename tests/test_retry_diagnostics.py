@@ -27,8 +27,8 @@ class RetryDiagnosticsTest(unittest.TestCase):
     def test_native_write_and_confirmation_have_a_bounded_numeric_range(self):
         diagnostic = RetryDiagnostics()
         diagnostic.feed(b'RTRY 12 23 -1\nRTRY 13 33 -1\nRTRY 14 53 0\n'
-                        b'RTRY 15 54 -1\nRTRY 16 46 private\n')
-        self.assertEqual([event['reason'] for event in diagnostic.events], [23, 33, 53])
+                        b'RTRY 15 54 -1\nRTRY 16 55 -1\nRTRY 17 46 private\n')
+        self.assertEqual([event['reason'] for event in diagnostic.events], [23, 33, 53, 54])
 
 
 if __name__ == '__main__':

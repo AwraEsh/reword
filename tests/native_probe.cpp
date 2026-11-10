@@ -70,6 +70,15 @@ int main(int argc, char **argv) {
     if (adapter->replace(f, "WRONG", 5, [&] { return ++policyChecks == 1; }) ||
         policyChecks != 2 || !reword::sameTarget(f, adapter->readExpected(f)))
         return fail("Final authorization denial did not preserve the field.");
+    policyChecks = 0;
+    const auto lateFinalEdit = adapter->replace(f, "WRONG", 5, [&] {
+        if (++policyChecks == 2)
+            QThread::msleep(2 * reword::WriteAuthorizationBudgetMs);
+        return true;
+    });
+    if (lateFinalEdit || lateFinalEdit.rejection != reword::WriteRejection::FinalAuthorizationExpired ||
+        policyChecks != 2 || !reword::sameTarget(f, adapter->readExpected(f)))
+        return fail("Late final authorization did not preserve the field.");
     auto fixtureSnapshot = [&](QByteArray command, QByteArray expected) {
         fixture.write(command + "\nsnapshot\n");
         return fixture.waitForReadyRead(300) && fixture.readLine().trimmed() == expected;

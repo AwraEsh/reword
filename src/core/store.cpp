@@ -16,6 +16,13 @@ static void checked(QSqlQuery &q) {
     if (!q.exec())
         throw std::runtime_error("Local database operation failed.");
 }
+static QVariant decodeSetting(const QByteArray &json, const QVariant &fallback) {
+    const auto values = QJsonDocument::fromJson(json).array();
+    return values.isEmpty() ? fallback : values.first().toVariant();
+}
+static bool pauseActive(qint64 until, qint64 now) {
+    return until == -1 || until > now;
+}
 void Store::exec(const QString &sql) {
     QSqlQuery q(db_);
     q.prepare(sql);
@@ -81,8 +88,7 @@ QVariant Store::value(const QString &key, const QVariant &fallback) const {
     checked(q);
     if (!q.next())
         return fallback;
-    auto a = QJsonDocument::fromJson(q.value(0).toByteArray()).array();
-    return a.isEmpty() ? fallback : a.first().toVariant();
+    return decodeSetting(q.value(0).toByteArray(), fallback);
 }
 void Store::setValue(const QString &key, const QVariant &value) {
     updateSetting(key, value, false);
@@ -239,19 +245,35 @@ void Store::changeCorrectionConfiguration(QSqlQuery &q) {
         throw;
     }
 }
-ApplicationMode Store::applicationMode(const QString &id) const {
-    QSqlQuery q(db_);
-    q.prepare("SELECT decision FROM applications WHERE id=?");
-    q.addBindValue(id);
-    checked(q);
-    if (!q.next())
-        return ApplicationMode::Disabled;
-    const auto decision = q.value(0).toString();
+static ApplicationMode modeForDecision(const QString &decision) {
     if (decision == "allow")
         return ApplicationMode::Automatic;
     if (decision == "shortcut")
         return ApplicationMode::ShortcutOnly;
     return ApplicationMode::Disabled;
+}
+ApplicationMode Store::applicationMode(const QString &id) const {
+    QSqlQuery q(db_);
+    q.prepare("SELECT decision FROM applications WHERE id=?");
+    q.addBindValue(id);
+    checked(q);
+    return q.next() ? modeForDecision(q.value(0).toString()) : ApplicationMode::Disabled;
+}
+NativePolicy Store::nativePolicy(const QString &id, qint64 now) const {
+    // All four values come from the same SQLite snapshot, including the revision.
+    QSqlQuery q(db_);
+    q.prepare("SELECT (SELECT decision FROM applications WHERE id=?),"
+              "(SELECT value FROM settings WHERE key='pauseUntil'),"
+              "(SELECT value FROM settings WHERE key='browsers'),"
+              "(SELECT value FROM settings WHERE key='configRevision')");
+    q.addBindValue(id);
+    checked(q);
+    if (!q.next())
+        throw std::runtime_error("Cannot read native correction policy.");
+    return {modeForDecision(q.value(0).toString()),
+            pauseActive(decodeSetting(q.value(1).toByteArray(), 0).toLongLong(), now),
+            decodeSetting(q.value(2).toByteArray(), Options{}.browsers).toBool(),
+            decodeSetting(q.value(3).toByteArray(), 0).toLongLong()};
 }
 bool Store::allowed(const QString &id) const {
     return applicationMode(id) == ApplicationMode::Automatic;
@@ -425,8 +447,7 @@ QHash<QString, QString> Store::replacements() const {
     return r;
 }
 bool Store::paused(qint64 now) const {
-    auto until = value("pauseUntil", 0).toLongLong();
-    return until == -1 || until > now;
+    return pauseActive(value("pauseUntil", 0).toLongLong(), now);
 }
 void Store::pause(int minutes) {
     setCorrectionOption("pauseUntil", minutes < 0    ? qint64(-1)

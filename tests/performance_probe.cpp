@@ -40,8 +40,43 @@ static int passageStartupProfile() {
     std::cout << QJsonDocument(metrics).toJson(QJsonDocument::Indented).constData();
     return correct ? 0 : 1;
 }
+static int nativePolicyProfile() {
+    QTemporaryDir data;
+    if (!data.isValid())
+        return 2;
+    reword::Store store(data.path());
+    const QString app = "/synthetic-browser";
+    constexpr qint64 now = 1000;
+    store.discover(app, "Synthetic browser");
+    store.decide(app, "shortcut");
+    store.setCorrectionOption("browsers", false);
+    store.setCorrectionOption("pauseUntil", now + 1);
+    constexpr int samples = 2000;
+    bool correct = true;
+    const auto measure = [&](auto read) {
+        const auto started = std::clock();
+        for (int i = 0; i < samples; ++i) {
+            const auto policy = read();
+            correct = correct && policy.mode == reword::ApplicationMode::ShortcutOnly &&
+                      policy.paused && !policy.browsers && policy.revision == 3;
+        }
+        return 1000.0 * (std::clock() - started) / CLOCKS_PER_SEC;
+    };
+    const auto separate = measure([&] {
+        return reword::NativePolicy{store.applicationMode(app), store.paused(now),
+                                    store.options().browsers,
+                                    store.value("configRevision", 0).toLongLong()};
+    });
+    const auto combined = measure([&] { return store.nativePolicy(app, now); });
+    const QJsonObject result{{"samples", samples}, {"correct", correct},
+                             {"separateReadsCpuMs", separate}, {"singleReadCpuMs", combined}};
+    std::cout << QJsonDocument(result).toJson(QJsonDocument::Indented).constData();
+    return correct ? 0 : 1;
+}
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
+    if (app.arguments().contains("--native-policy-profile"))
+        return nativePolicyProfile();
     if (app.arguments().contains("--shortcut-read-profile")) {
         QTemporaryDir data;
         if (!data.isValid())

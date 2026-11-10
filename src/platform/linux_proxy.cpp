@@ -122,8 +122,9 @@ class LinuxProxy final : public Adapter {
             return {false, {}, WriteRejection::RequestFailed};
         if (!response["accepted"].toBool()) {
             const int code = response["rejection"].toInt();
-            if (code >= int(WriteRejection::InvalidRequest) &&
-                code <= int(WriteRejection::ProviderRejected))
+            if ((code >= int(WriteRejection::InvalidRequest) &&
+                 code <= int(WriteRejection::ProviderRejected)) ||
+                code == int(WriteRejection::FinalAuthorizationExpired))
                 return {false, {}, WriteRejection(code)};
             if (grants != NativeWriteChecks)
                 return {false, {}, WriteRejection::AuthorizationIncomplete};

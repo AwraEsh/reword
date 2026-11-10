@@ -38,9 +38,8 @@ int Service::observationFailureReason(const Field &expected, int reason) {
     auto metadata = adapter_->inspect(false);
     const bool focused = metadata.focused;
     metadata.focused = true;
-    const Access access{store_->allowed(metadata.app), browserApp(metadata.app), store_->paused()};
     if (metadata.id == expected.id && metadata.app == expected.app &&
-        safe(metadata, access, store_->options()))
+        fieldAllowed(metadata, store_->nativePolicy(metadata.app), ReadPurpose::Live))
         return focused ? 14 : 13;
     return reason;
 }
@@ -112,30 +111,33 @@ Field Service::permitted(const Field *expected, ReadPurpose purpose, bool *metad
         askDate_ = QDate::currentDate();
         emit application(f.app, QFileInfo(f.app).fileName());
     }
-    const auto mode = store_->applicationMode(f.app);
-    Access access{mode != ApplicationMode::Disabled, browserApp(f.app), store_->paused()};
-    if (!safe(f, access, store_->options()))
+    const auto policy = store_->nativePolicy(f.app);
+    if (!fieldAllowed(f, policy, ReadPurpose::Explicit))
         return {};
-    if (purpose == ReadPurpose::Live && (mode == ApplicationMode::ShortcutOnly || wayland_)) {
+    if (purpose == ReadPurpose::Live && (policy.mode == ApplicationMode::ShortcutOnly || wayland_)) {
         if (!metadataOnly)
             return {};
         *metadataOnly = true;
         return f;
     }
     auto read = adapter_->readExpected(f);
-    access = {purpose == ReadPurpose::Live ? store_->allowed(f.app) : store_->selectionAllowed(f.app),
-              browserApp(f.app), store_->paused()};
-    if (read.id != f.id || read.app != f.app || !safe(read, access, store_->options()))
+    if (read.id != f.id || read.app != f.app ||
+        !fieldAllowed(read, store_->nativePolicy(f.app), purpose))
         return {};
     return read;
 }
+bool Service::fieldAllowed(const Field &field, const NativePolicy &policy, ReadPurpose purpose) {
+    const bool allowed = purpose == ReadPurpose::Live ? policy.mode == ApplicationMode::Automatic
+                                                      : policy.mode != ApplicationMode::Disabled;
+    const Access access{allowed, browserApp(field.app), policy.paused};
+    Options options;
+    options.browsers = policy.browsers;
+    return safe(field, access, options);
+}
 bool Service::policyCurrent(const Field &field, qint64 revision, quint64 cancellation,
                             ReadPurpose purpose) {
-    const Access access{purpose == ReadPurpose::Live ? store_->allowed(field.app)
-                                                     : store_->selectionAllowed(field.app),
-                        browserApp(field.app), store_->paused()};
-    return safe(field, access, store_->options()) &&
-           revision == store_->value("configRevision", 0).toLongLong() &&
+    const auto policy = store_->nativePolicy(field.app);
+    return fieldAllowed(field, policy, purpose) && revision == policy.revision &&
            cancellation == cancellationRevision_.load();
 }
 bool Service::pollNativeAction() {
@@ -151,9 +153,8 @@ bool Service::pollNativeAction() {
     // Preserve Undo across that interval, but never read text. All other
     // policy and identity boundaries still erase observation.
     field.focused = true;
-    const Access access{store_->selectionAllowed(field.app), browserApp(field.app),
-                        store_->paused()};
-    const bool permittedField = safe(field, access, store_->options());
+    const bool permittedField =
+        fieldAllowed(field, store_->nativePolicy(field.app), ReadPurpose::Explicit);
     if (jobRunning_ && nativeJob_ &&
         (!permittedField || field.app != nativeJobApp_ || field.id != nativeJobField_))
         cancelNativeJob();

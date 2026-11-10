@@ -70,7 +70,7 @@ Format: `RTRY <monotonic milliseconds> <reason> <word start offset>`.
 | 41 | Linux provider recheck exceeded its deadline |
 | 42 | Linux field event invalidated the provider recheck |
 | 43 | Native events remained queued after the Linux provider recheck |
-| 44 | Final Linux authorization or event check exceeded its deadline |
+| 44 | Final Linux event drain exceeded its deadline after authorization |
 | 45 | Linux field event invalidated the final check |
 | 46 | Native events remained queued after the final Linux check |
 | 47 | Linux provider returned an error from the write call |
@@ -80,14 +80,16 @@ Format: `RTRY <monotonic milliseconds> <reason> <word start offset>`.
 | 51 | Undo write was accepted but the observed text differed |
 | 52 | Undo write was accepted but the caret or selection differed |
 | 53 | Undo write was accepted and observed but the policy check failed |
+| 54 | Final Linux authorization reply arrived after its deadline |
 
 Reasons 13/14 describe a later metadata observation, not proof of the original
 failure's cause. They never authorize text access or replacement.
 
-Reasons 33–49 refine the next write rejection event (16, 17, 20 or 27).
+Reasons 33–49 and 54 refine the next write rejection event (16, 17, 20 or 27).
 The helper returns a fixed code on rejection. Its stderr remains discarded.
 Reasons 50–53 refine reason 21 using the returned observation and the same
 policy check. They do not request a new snapshot or retry the write.
+Reports from before the split used reason 44 for either final deadline failure.
 
 Earlier diagnostic run stopped in `live-undo` at 47.864 seconds after a
 post-write reset (then undifferentiated reason 10). That separate failure is

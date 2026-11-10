@@ -9,6 +9,12 @@ struct ShortcutSettings {
     QStringList keys;
     qint64 revision = 0;
 };
+struct NativePolicy {
+    ApplicationMode mode;
+    bool paused;
+    bool browsers;
+    qint64 revision;
+};
 
 class Store {
     QSqlDatabase db_;
@@ -31,6 +37,8 @@ class Store {
     void decide(const QString &id, const QString &decision, QDate today = QDate::currentDate());
     void removeApplication(const QString &id);
     ApplicationMode applicationMode(const QString &id) const;
+    NativePolicy nativePolicy(const QString &id,
+                              qint64 now = QDateTime::currentSecsSinceEpoch()) const;
     bool allowed(const QString &id) const;
     bool selectionAllowed(const QString &id) const;
     bool shouldAsk(const QString &, QDate today = QDate::currentDate()) const;

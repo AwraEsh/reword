@@ -62,6 +62,36 @@ class CoreTest : public QObject {
         QCOMPARE(restored.keys, initial.keys);
         QCOMPARE(restored.revision, changed.revision + 1);
     }
+    void nativePolicyObservesCrossConnectionChanges() {
+        QTemporaryDir data;
+        Store reader(data.path()), writer(data.path());
+        const QString app = "/synthetic-browser";
+        constexpr qint64 now = 1000;
+        auto policy = reader.nativePolicy(app, now);
+        QCOMPARE(policy.mode, ApplicationMode::Disabled);
+        QCOMPARE(policy.revision, 0);
+        QVERIFY(policy.browsers);
+        QVERIFY(!policy.paused);
+        writer.discover(app, "Synthetic browser");
+        writer.decide(app, "shortcut");
+        writer.setCorrectionOption("browsers", false);
+        writer.setCorrectionOption("pauseUntil", now + 1);
+        policy = reader.nativePolicy(app, now);
+        QCOMPARE(policy.mode, ApplicationMode::ShortcutOnly);
+        QCOMPARE(policy.revision, 3);
+        QVERIFY(!policy.browsers);
+        QVERIFY(policy.paused);
+        QVERIFY(!reader.nativePolicy(app, now + 1).paused);
+        writer.pause(-1);
+        writer.decide(app, "allow");
+        policy = reader.nativePolicy(app, now);
+        QCOMPARE(policy.mode, ApplicationMode::Automatic);
+        QVERIFY(policy.paused);
+        writer.removeApplication(app);
+        policy = reader.nativePolicy(app, now);
+        QCOMPARE(policy.mode, ApplicationMode::Disabled);
+        QCOMPARE(policy.revision, 6);
+    }
     void optionsObserveOtherConnectionChangesWithoutCaching() {
         QTemporaryDir data;
         Store reader(data.path()), writer(data.path());

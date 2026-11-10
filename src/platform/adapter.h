@@ -26,6 +26,7 @@ enum class WriteRejection {
     ProviderError = 47,
     ProviderRejected = 48,
     AuthorizationIncomplete = 49,
+    FinalAuthorizationExpired = 54,
 };
 
 struct WriteResult {

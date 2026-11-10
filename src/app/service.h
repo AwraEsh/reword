@@ -46,6 +46,7 @@ class Service : public QObject {
     bool pollNativeAction();
     void tick();
     enum class ReadPurpose { Explicit, Live };
+    static bool fieldAllowed(const Field &field, const NativePolicy &policy, ReadPurpose purpose);
     Field permitted(const Field *expected = nullptr, ReadPurpose purpose = ReadPurpose::Explicit,
                     bool *metadataOnly = nullptr);
     bool policyCurrent(const Field &field, qint64 revision, quint64 cancellation,

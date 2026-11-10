@@ -470,7 +470,7 @@ class LinuxAdapter final : public Adapter {
         if (!authorize())
             return {false, {}, WriteRejection::AuthorizationDenied};
         if (finalWindow.hasExpired())
-            return {false, {}, WriteRejection::FinalCheckExpired};
+            return {false, {}, WriteRejection::FinalAuthorizationExpired};
         dispatchPendingEvents();
         if (finalWindow.hasExpired())
             return {false, {}, WriteRejection::FinalCheckExpired};

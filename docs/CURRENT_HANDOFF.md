@@ -1,5 +1,45 @@
 # Current handoff — 2026-11-10
 
+## Native policy snapshot and final authorization timing
+
+The desktop service reads per-app mode, Pause, browser policy and configuration
+revision in a single SQLite statement. It takes a fresh snapshot before and
+after a native read and when authorizing a write. Consent, cancellation and
+field eligibility are still checked, including live versus shortcut-only
+mode. The serial build, core, service, retry diagnostics and one controlled
+GTK/X11 cycle passed. The native probe deliberately delays the second
+authorization reply and verifies reason 54 and preservation of the field.
+
+The synthetic profile measured 449.175 ms of CPU for 2,000 separate policy
+reads and 165.749 ms for the grouped reads. This measures only the database
+path. Run `scripts/env.sh ./build/reword_performance_probe --native-policy-profile`.
+Receipt `.deps/native-policy-profile.json`.
+
+The owned AppDir rerun using the 100 ms quota period stopped at
+`selected-result` after 34.088 seconds and 49 selected edits. It completed
+one live retry/Undo sequence and exited before sustained resource sampling.
+The last request logged 54 and 27. The final authorization reply crossed the
+50 ms deadline before the event drain. At the 80% quota, cgroup accounting
+showed 172 throttled periods out of 395 for the scope as a whole. These totals
+do not attribute the particular late reply to throttling.
+Receipts `.deps/linux-native-policy/report/report.json` and
+`.deps/linux-native-policy/cpu-scope.txt`. Cleanup completed without force.
+
+The comparison kept the same 80% quota, changed its period from 100 ms to
+20 ms, and used byte-identical GUI, helper and launcher binaries. It
+completed the 120-second active phase, 39 live retry/Undo sequences, 149
+selected edits, history pruning, and both selection-size checks without a
+text mismatch or timeout. The release gate still failed. App CPU averaged
+10.87% and helper CPU 6.31%. Word p95 was at most 51.7 ms over 78 samples.
+See `.deps/linux-native-policy/report-20ms/report.json` and
+`.deps/linux-native-policy/cpu-scope-20ms.txt`. The shorter period is a
+controlled test setting. The installed Preview is unchanged.
+
+Next, measure whether combining the Linux helper's action and dirty-state
+polls saves CPU. A pending shortcut must still take priority without
+consuming the dirty flag. Keep the late-authorization and event guards
+unchanged while comparing the polling cost.
+
 ## Linux native write witness
 
 Native write rejection now carries a fixed code from the helper through the
@@ -104,6 +144,14 @@ site unchanged. After re-enabling the site, the next page failed to produce
 the correction that starts the focus-change scenario. The log does not
 establish why it failed. [Push run](https://github.com/AwraEsh/reword/actions/runs/42891981811)
 and [PR run](https://github.com/AwraEsh/reword/actions/runs/42891998118).
+
+At `15cb6f2`, Linux passed both hosted runs. The Windows push run timed out
+at `Browser.getVersion`, before Chrome exercised correction. The PR run passed
+the initial correction, Undo and Pause cases, then failed the disabled-site
+assertion. That report does not distinguish a failure to insert the test
+keystrokes from a correction despite revocation. Capture the fixed expected
+outcome and focus flags in the next Windows run. [Push run](https://github.com/AwraEsh/reword/actions/runs/42893203705)
+and [PR run](https://github.com/AwraEsh/reword/actions/runs/42893211529).
 
 ## Windows browser Undo with the desktop app
 
