@@ -203,7 +203,10 @@ class WindowsAdapter final : public Adapter {
     QString description() const override {
         if (undoKey_ && !undoGrabbed_ && !undoPeer_)
             return "Windows · Undo shortcut unavailable";
-        return "Windows · UI Automation and native plain edit fields";
+        return "Windows · native text fields · Chrome and Chromium use the browser extension";
+    }
+    bool supportsNativeLiveCorrection(const QString &application) const override {
+        return !windowsChromiumExtensionApp(application);
     }
     Field inspect(bool read) override {
         return snapshot(read, nullptr);

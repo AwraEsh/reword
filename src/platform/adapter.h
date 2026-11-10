@@ -58,6 +58,10 @@ class Adapter {
     }
     // Metadata witness for a separate X11 input method. Never reads text.
     virtual InputMethodTarget inputMethodTarget() { return {}; }
+    // A separate integration may own automatic edits for this application.
+    virtual bool supportsNativeLiveCorrection(const QString &) const {
+        return true;
+    }
     virtual bool changed() {
         return true;
     }

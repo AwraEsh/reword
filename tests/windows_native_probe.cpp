@@ -11,6 +11,12 @@
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     auto adapter = reword::createAdapter();
+    if (adapter->supportsNativeLiveCorrection("C:\\Program Files\\Google\\Chrome\\Application\\CHROME.EXE") ||
+        adapter->supportsNativeLiveCorrection("C:/Chromium/chromium.exe") ||
+        !adapter->supportsNativeLiveCorrection("C:/Applications/firefox.exe")) {
+        std::cerr << "FAIL: automatic browser routing did not match the supported extension hosts.\n";
+        return 1;
+    }
     QProcess fixture;
     fixture.start(QCoreApplication::applicationDirPath() + "/reword_win_fixture.exe", {});
     if (!fixture.waitForStarted())

@@ -35,6 +35,12 @@ SINGLE_LINE. Rich/multiline fields are not rewritten wholesale. Windows requires
 a non-password Edit control with bounded, verifiable text access, using UI
 Automation or the standard Win32 Edit fallback. Missing capabilities fail closed.
 
+On Windows, automatic correction in Chrome and Chromium uses the Reword
+browser extension. Enable the browser in Reword's Applications settings
+and enable each site through the extension. Browser chrome such as the
+address bar has no automatic correction. The explicit selection shortcut
+continues to use the Windows adapter where the field supports it.
+
 [GTK's AT-SPI text-view implementation](https://raw.githubusercontent.com/GNOME/gtk/4.18.6/gtk/a11y/gtkatspieditabletext.c)
 uses the whole-buffer setter for replacement. [GTK marks that setter as
 irreversible](https://raw.githubusercontent.com/GNOME/gtk/4.18.6/gtk/gtktextbuffer.c).
@@ -171,6 +177,16 @@ command from a new persistent installation to update the host path.
 To remove the native manifest, quit the browser and run
 `reword-browser-host --unregister-browser "/path/to/browser data"`.
 Remove the extension separately in browser settings.
+
+### Register from the Windows installer
+
+Select **Register Chrome connection** or **Register Chromium connection**
+in a Windows installer that bundles browser integration. In the browser's
+extension manager, enable Developer mode and choose **Load unpacked**.
+Select `%LOCALAPPDATA%\Programs\Reword\browser\chromium` or the matching
+folder under your chosen installation directory. Allow the browser in
+Reword's Applications settings, then use the extension button to enable
+each site where you want automatic correction.
 
 ### Register from the Linux packages
 

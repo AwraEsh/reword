@@ -30,4 +30,9 @@ inline DWORD windowProcess(HWND window) {
     GetWindowThreadProcessId(window, &process);
     return process;
 }
+
+inline bool windowsChromiumExtensionApp(const QString &path) {
+    const auto name = QFileInfo(path).fileName().toLower();
+    return name == "chrome.exe" || name == "chromium.exe";
+}
 }

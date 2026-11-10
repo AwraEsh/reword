@@ -74,8 +74,7 @@ BrowserPeer browserApplication() {
     if (!QueryFullProcessImageNameW(process.get(), 0, image, &length))
         return {};
     const auto path = QString::fromWCharArray(image, length);
-    const auto name = QFileInfo(path).fileName().toLower();
-    if (name == "chrome.exe" || name == "chromium.exe")
+    if (reword::windowsChromiumExtensionApp(path))
         return {path, quint32(inputServer)};
 #else
     const auto pid = getppid();

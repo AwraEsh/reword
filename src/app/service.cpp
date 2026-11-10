@@ -114,7 +114,9 @@ Field Service::permitted(const Field *expected, ReadPurpose purpose, bool *metad
     const auto policy = store_->nativePolicy(f.app);
     if (!fieldAllowed(f, policy, ReadPurpose::Explicit))
         return {};
-    if (purpose == ReadPurpose::Live && (policy.mode == ApplicationMode::ShortcutOnly || wayland_)) {
+    if (purpose == ReadPurpose::Live &&
+        (policy.mode == ApplicationMode::ShortcutOnly || wayland_ ||
+         !adapter_->supportsNativeLiveCorrection(f.app))) {
         if (!metadataOnly)
             return {};
         *metadataOnly = true;
@@ -136,6 +138,8 @@ bool Service::fieldAllowed(const Field &field, const NativePolicy &policy, ReadP
 }
 bool Service::policyCurrent(const Field &field, qint64 revision, quint64 cancellation,
                             ReadPurpose purpose) {
+    if (purpose == ReadPurpose::Live && !adapter_->supportsNativeLiveCorrection(field.app))
+        return false;
     const auto policy = store_->nativePolicy(field.app);
     return fieldAllowed(field, policy, purpose) && revision == policy.revision &&
            cancellation == cancellationRevision_.load();

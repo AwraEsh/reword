@@ -1,5 +1,22 @@
 # Current handoff — 2026-11-11
 
+## Site permission and Windows native routing
+
+On Windows, automatic editing for Chrome and Chromium now goes through the
+site-aware extension. The desktop service still discovers both applications
+and offers consent. It does not read their fields during live polling.
+The explicit selection shortcut and its Undo still use the guarded native
+route when the field supports it. The adapter and the browser host share
+the exact executable-name check.
+
+The local service regression confirms consent discovery, zero native reads
+while typing with the browser allowed, and explicit selection correction and
+Undo. The full service target, the extension unit tests and the private
+Helium site-revocation probe passed. The Windows probe checks real executable
+paths and now requires zero native live attempts after site revocation. The
+development and installed Chrome results for this change need hosted
+verification. See [setup and field limits](COMPATIBILITY.md).
+
 ## Optional feedback after live correction
 
 The service sends the original and corrected word to the controller only

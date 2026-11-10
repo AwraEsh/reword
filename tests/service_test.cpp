@@ -40,6 +40,7 @@ class FixtureAdapter final : public Adapter {
         onTakeAction;
     bool metadataBlurred = false;
     bool quiet = false;
+    bool nativeLive = true;
     int changePolls = 0;
     QString pendingAction;
     QString takeAction() override {
@@ -50,6 +51,9 @@ class FixtureAdapter final : public Adapter {
     bool changed() override {
         ++changePolls;
         return !quiet;
+    }
+    bool supportsNativeLiveCorrection(const QString &) const override {
+        return nativeLive;
     }
     FixtureAdapter() {
         field.app = "synthetic-text-fixture";
@@ -226,6 +230,35 @@ class ServiceTest : public QObject {
         const auto reads = h.adapter->reads;
         const auto inspections = h.adapter->inspections;
         QTRY_VERIFY(h.adapter->inspections > inspections + 2);
+        QCOMPARE(h.adapter->reads, reads);
+        h.service.action("undo");
+        QCOMPARE(h.adapter->field.text, QString("teh "));
+        QCOMPARE(h.adapter->writes, 2);
+    }
+    void browserWithExternalLiveRouteIsDiscoveredWithoutNativeTextReads() {
+        Harness h;
+        const QString browser = "C:/Synthetic/Chrome.EXE";
+        QSignalSpy discovered(&h.service, &Service::application);
+        h.adapter->field.app = browser;
+        h.adapter->nativeLive = false;
+        h.adapter->type("teh ");
+        QTRY_COMPARE(discovered.size(), 1);
+        QCOMPARE(discovered.first().first().toString(), browser);
+        QCOMPARE(h.adapter->reads, 0);
+        h.store.decide(browser, "allow");
+        const auto before = h.adapter->inspections;
+        QTRY_VERIFY(h.adapter->inspections > before + 2);
+        QCOMPARE(h.adapter->reads, 0);
+        QCOMPARE(h.adapter->field.text, QString("teh "));
+        QCOMPARE(h.adapter->writes, 0);
+
+        h.adapter->field.selectionStart = 0;
+        h.adapter->field.selectionEnd = 3;
+        h.service.action("fix");
+        QTRY_COMPARE(h.adapter->field.text, QString("the "));
+        const auto reads = h.adapter->reads;
+        const auto after = h.adapter->inspections;
+        QTRY_VERIFY(h.adapter->inspections > after + 2);
         QCOMPARE(h.adapter->reads, reads);
         h.service.action("undo");
         QCOMPARE(h.adapter->field.text, QString("teh "));

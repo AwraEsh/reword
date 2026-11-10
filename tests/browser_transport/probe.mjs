@@ -124,6 +124,7 @@ let browser;
 let gui;
 let nativeEditor;
 let guiUndoRequests = 0;
+let guiLiveAttempts = 0;
 let browserPid;
 let windowsRegistered = false;
 const x11 = (pid, action) => spawnSync(python, [join(fixture, 'x11_input.py'),
@@ -207,6 +208,7 @@ try {
         gui.on('error', error => { result.guiLaunchError = error.code; });
         createInterface({input: gui.stderr}).on('line', line => {
             if (/^RTRY \d+ 18 -?\d+$/.test(line)) ++guiUndoRequests;
+            if (/^RTRY \d+ 1 -?\d+$/.test(line)) ++guiLiveAttempts;
         });
         result.guiForeground = await waitFor(() => gui.pid &&
             (windowsGui ? windowsInput(gui.pid, 'foreground') : x11(gui.pid, 'foreground')), 10000);
@@ -438,12 +440,16 @@ try {
         })()`);
         await focus('undo', 7);
         const frames = result.nativeHostStages.length;
+        const beforeDisabledSiteAttempts = guiLiveAttempts;
         await typeWord();
         await sleep(400);
         const disabledSite = await status('undo');
+        if (windowsGui)
+            result.windowsDisabledSiteNativeAttempts = guiLiveAttempts - beforeDisabledSiteAttempts;
         result.disabledSiteUntouched = disabledSite.value === 'prefix teh suffix' &&
             disabledSite.pageEvents === previousPageEdits &&
-            result.nativeHostStages.length === frames;
+            result.nativeHostStages.length === frames &&
+            (!windowsGui || result.windowsDisabledSiteNativeAttempts === 0);
         if (!result.disabledSiteUntouched) {
             result.disabledSiteObservation = {
                 inputUnchanged: disabledSite.value === 'prefix suffix',
